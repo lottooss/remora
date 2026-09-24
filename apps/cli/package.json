@@ -1,0 +1,18 @@
+{
+  "name": "@remora/cli",
+  "version": "0.0.0",
+  "private": true,
+  "description": "remora command: service install/uninstall/status/logs, host supervisor, doctor (task P5-O1)",
+  "type": "module",
+  "bin": {
+    "remora": "./lib/bin.js"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  }
+}

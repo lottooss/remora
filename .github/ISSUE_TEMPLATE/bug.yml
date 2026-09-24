@@ -1,0 +1,25 @@
+name: Bug
+description: Something behaves differently from the specs or the blueprint
+labels: []
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [host (dsh plugin), relay, android app, protocol/crypto, cli/service, docs]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened vs. what should happen
+      description: Link the spec section or acceptance criterion that is violated
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Steps, versions (app, host, relay, dsh), device/OS. Redact any secrets or conversation content.
+    validations:
+      required: true

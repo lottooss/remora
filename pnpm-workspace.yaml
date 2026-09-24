@@ -1,0 +1,14 @@
+packages:
+  - packages/*
+  - apps/relay
+  - apps/cli
+
+# Install scripts allowed to run (pnpm blocks all others). Both are wrangler's
+# platform binaries: esbuild (bundler) and workerd (Workers runtime).
+allowBuilds:
+  esbuild: true
+  workerd: true
+
+# pnpm holds back very fresh releases; wrangler ships often and is pinned by the lockfile.
+minimumReleaseAgeExclude:
+  - wrangler@4.137.0

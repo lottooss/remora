@@ -1,0 +1,30 @@
+// Remora relay (RLY/1). One Worker + one SQLite-backed Durable Object per owner.
+// Secrets are never in this file; set them with `wrangler secret put`:
+//   REMORA_ENROLL_SECRET       host enrollment bearer secret (RLY/1 §4.1)
+//   FCM_SERVICE_ACCOUNT_JSON   Firebase service account for FCM HTTP v1 (P5-R1)
+// For local development put test values in apps/relay/.dev.vars (git-ignored).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "remora-relay",
+  "main": "src/index.ts",
+  // The oldest workerd in the toolchain (vitest pool) supports dates up to 2026-08-15.
+  "compatibility_date": "2026-08-15",
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "ACCOUNT_HUB", "class_name": "AccountHub" }]
+  },
+  // Free plan: only SQLite-backed Durable Objects are available.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AccountHub"] }],
+  // RLY/1 §10 defaults.
+  "vars": {
+    "MAX_FRAME_BYTES": "65536",
+    "RATE_FRAMES_PER_SEC": "50",
+    "RATE_BURST": "100",
+    "MAX_ENDPOINTS": "32",
+    "TICKET_TTL_MS": "600000",
+    "AUTH_TIMEOUT_MS": "10000",
+    "HOST_OFFLINE_ALERT_MS": "120000",
+    "LAST_SEEN_WRITE_INTERVAL_MS": "60000"
+  },
+  "observability": { "enabled": false }
+}

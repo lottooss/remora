@@ -1,0 +1,38 @@
+# dependencies and build output
+node_modules/
+lib/
+dist/
+coverage/
+*.tsbuildinfo
+*.tgz
+
+# local-only
+.scratch/
+.upstream/
+.env
+.env.*
+.dev.vars
+.wrangler/
+*.log
+
+# secrets that must never be committed
+google-services.json
+*.keystore
+*.jks
+keystore.properties
+
+# Android / Gradle
+.gradle/
+.kotlin/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# IDEs and OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db

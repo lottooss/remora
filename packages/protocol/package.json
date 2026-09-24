@@ -1,0 +1,22 @@
+{
+  "name": "@remora/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "description": "RCP/1 and RLY/1 wire contracts: types, zod schemas, codecs (task P1-P1)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  }
+}

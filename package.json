@@ -1,0 +1,28 @@
+{
+  "name": "remora",
+  "private": true,
+  "description": "Remote control for the DeepSeek Harness from Android, via a self-hosted E2E relay",
+  "type": "module",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"./packages/**\" --filter \"./apps/cli\" run build",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "oxlint packages apps/relay/src apps/cli/src scripts",
+    "test": "pnpm -r run test",
+    "test:e2e": "node -e \"console.error('e2e harness arrives with task P1-T1'); process.exit(1)\"",
+    "test:security": "node -e \"console.error('security suite arrives with task P3-T1'); process.exit(1)\"",
+    "conformance:check": "node scripts/check-conformance.mjs",
+    "upstream:fetch": "node scripts/fetch-upstream.mjs",
+    "issues:sync": "node scripts/sync-issues.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "oxlint": "^1.85.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8",
+    "yaml": "^2.8.0"
+  }
+}

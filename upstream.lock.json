@@ -1,0 +1,25 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+  "npmPackage": "@deepseek-ai/dsh",
+  "npmVersion": "0.1.5-rc.3",
+  "gitTag": "dsh-v0.1.5-rc.3",
+  "gitCommit": "a4c74a91e0",
+  "canaryDistTag": "next",
+  "verifiedAt": "2026-09-24",
+  "sparsePaths": [
+    "docs",
+    "apps/cli",
+    "apps/desktop-host",
+    "packages/api",
+    "packages/bundle",
+    "packages/client",
+    "packages/core",
+    "packages/credentials",
+    "packages/host",
+    "packages/interaction",
+    "packages/session",
+    "packages/settings",
+    "packages/typert",
+    "packages/workspace"
+  ]
+}

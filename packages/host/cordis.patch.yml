@@ -1,0 +1,27 @@
+# @remora/host bundle patch: one plugin row, applied after the profile's other
+# bundles. Override it from the profile's own cordis.patch.yml with
+# `- id: remora` + `config:`; a patch replaces the row's whole config, so
+# restate every key there (see docs/runbooks/operations.md §3).
+#
+# relayUrl is intentionally empty: the plugin refuses to start until the owner
+# points it at their relay.
+
+- insert:
+    - id: remora
+      name: '@remora/host'
+      config:
+        relayUrl: ''
+        enrollSecretKey: REMORA_RELAY_ENROLL_SECRET
+        remoteRoots: []
+        approvalBiometric: high
+        approvalAuth: biometric
+        approvalTimeoutMs: 3600000
+        allowRemoteSessionStart: true
+        keepAwake: while-busy
+        streamCoalesceMs: 150
+        notify:
+          approval: true
+          question: true
+          turnDone: true
+          turnError: true
+          hostOffline: true

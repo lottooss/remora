@@ -1,0 +1,32 @@
+name: Contract change request
+description: Propose a change to a frozen spec, the public protocol/crypto API, or conformance vectors (AGENTS.md §6)
+labels: [contract-change]
+body:
+  - type: input
+    id: contract
+    attributes:
+      label: Contract
+      description: Which spec section or API (e.g. RCP/1 §5 sessions.follow, Crypto/1 §7)
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What cannot be done or is wrong today, with evidence
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Exact wire/API change; additive or breaking; version impact
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Affected tasks, implementations (TS/Kotlin/relay), vectors, security properties
+    validations:
+      required: true

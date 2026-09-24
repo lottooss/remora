@@ -1,0 +1,22 @@
+{
+  "name": "@remora/relay-link",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Relay (RLY/1) WebSocket client for Node, used by the host and the testkit (task P1-L1)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  }
+}
