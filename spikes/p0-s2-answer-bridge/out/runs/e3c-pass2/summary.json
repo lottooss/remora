@@ -1,0 +1,15 @@
+{
+  "experiment": "e3c",
+  "pass": 2,
+  "description": "Remora answers first → do nothing to the PC chain (baseline stale card)",
+  "startedAt": "2026-09-24T16:30:16.561Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": null,
+  "controlLogLines": 9,
+  "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"03b36633-31d6-499f-add9-ec448b7a766c\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"e0984d99-ca66-44ae-b665-7899a1f2948c\",\"agentId\":\"session-p0s2-e3c-prompt-1790267424770\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=-gHwR5Xp-5bNLAoXRk9OSPgPNVB5fjGBTgNyjqTU2GI\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:30:31.845Z",
+  "ok": true
+}

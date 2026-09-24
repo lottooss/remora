@@ -1,0 +1,17 @@
+{
+  "launchUrl": "http://127.0.0.1:7719/?token=<redacted>",
+  "noCookie": {
+    "status": 401,
+    "body": "unauthorized"
+  },
+  "exchange": {
+    "status": 303,
+    "location": "/",
+    "hasSetCookie": true,
+    "cookiePrefix": "dsh-auth-ApXOtQqB-kk"
+  },
+  "withCookie": {
+    "status": 200,
+    "body": "{\"ok\":true,\"plugin\":\"p0-s1\",\"peers\":{\"cordis\":{\"ok\":true,\"url\":\"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s1-dsh-adapter/node_modules/@deepseek-ai/cordis/lib/index.js\"},\"schemastery\":{\"ok\":true,\"url\":\"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s1-dsh-adapter/node_modules/@deepseek-ai/schemastery/lib/index.mjs\"}}}"
+  }
+}

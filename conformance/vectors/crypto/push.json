@@ -1,0 +1,22 @@
+{
+  "suite": "crypto/push",
+  "version": 1,
+  "source": "Crypto/1 §8 push encryption",
+  "notes": "ChaCha20-Poly1305 push notification AEAD payload sealing",
+  "cases": [
+    {
+      "name": "push roundtrip verification",
+      "input": {
+        "pushKeyB64u": "VVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVU",
+        "payload": {
+          "v": 1,
+          "kind": "approval",
+          "at": 1790000000000
+        }
+      },
+      "expect": {
+        "validRoundtrip": true
+      }
+    }
+  ]
+}

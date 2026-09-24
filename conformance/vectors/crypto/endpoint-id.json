@@ -1,0 +1,28 @@
+{
+  "suite": "crypto/endpoint-id",
+  "version": 1,
+  "source": "Crypto/1 §2 normative derivation",
+  "notes": "Deterministic endpoint ID derivations for host and device",
+  "cases": [
+    {
+      "name": "host endpoint id",
+      "input": {
+        "prefix": "h_",
+        "relayPubB64u": "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
+      },
+      "expect": {
+        "endpointId": "h_rsxgpncaiclhd6rh5auf4zmhca"
+      }
+    },
+    {
+      "name": "device endpoint id",
+      "input": {
+        "prefix": "d_",
+        "relayPubB64u": "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
+      },
+      "expect": {
+        "endpointId": "d_rsxgpncaiclhd6rh5auf4zmhca"
+      }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "suite": "crypto/noise-remora",
+  "version": 1,
+  "source": "Scaffolded for P0-A1 / Crypto/1 \u00a76",
+  "notes": "Remora prologues, both purposes, payload encryption",
+  "cases": [
+    {
+      "name": "placeholder scaffold valid baseline",
+      "input": {
+        "status": "scaffold"
+      },
+      "expect": {
+        "ok": true
+      }
+    }
+  ]
+}

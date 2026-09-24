@@ -1,0 +1,10 @@
+{"t":1790267315662,"kind":"boot","mode":"observe","approvalAnswer":"allowed-once","probeTool":"p0s2_probe","self":"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/src/index.js"}
+{"t":1790267316782,"kind":"config","mode":"answer-first","withdrawal":"signal","answerDelayMs":0,"nextTimeoutMs":4000,"approvalAnswer":"allowed-once","questionSelected":"phone"}
+{"t":1790267317711,"kind":"pre-execute/ask","toolName":"p0s2_probe","callId":"mock-call-1"}
+{"t":1790267317713,"id":"62598678-54b1-4d4f-978e-2625d78c3709","kind":"approval/enter","mode":"answer-first","withdrawal":"signal","toolName":"p0s2_probe","callId":"mock-call-1","hasSignal":true,"signalAborted":false,"agentId":"session-p0s2-e3a-prompt-1790267317288"}
+{"t":1790267317714,"id":"62598678-54b1-4d4f-978e-2625d78c3709","kind":"preview/live","found":true,"name":"p0s2_probe","arguments":"{\"note\":\"e3a\"}"}
+{"t":1790267317715,"id":"62598678-54b1-4d4f-978e-2625d78c3709","kind":"preview/inspect","found":true,"name":"p0s2_probe","arguments":"{\"note\":\"e3a\"}","eventCount":19}
+{"t":1790267317716,"id":"62598678-54b1-4d4f-978e-2625d78c3709","kind":"withdraw/signal-substituted"}
+{"t":1790267317717,"id":"62598678-54b1-4d4f-978e-2625d78c3709","kind":"approval/claimed","outcome":"allowed-once","decidedAt":1790267317716}
+{"t":1790267317773,"id":"62598678-54b1-4d4f-978e-2625d78c3709","kind":"withdraw/signal-aborted"}
+{"t":1790267317774,"id":"62598678-54b1-4d4f-978e-2625d78c3709","kind":"approval/pc-chain","ok":false,"error":"Error: p0-s2: bridge answered first; withdrawing PC chain"}

@@ -1,0 +1,134 @@
+{
+  "startedAt": "2026-09-24T16:34:11.809Z",
+  "peers": {
+    "cordis": {
+      "ok": true,
+      "url": "file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s1-dsh-adapter/node_modules/@deepseek-ai/cordis/lib/index.js"
+    },
+    "schemastery": {
+      "ok": true,
+      "url": "file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s1-dsh-adapter/node_modules/@deepseek-ai/schemastery/lib/index.mjs"
+    },
+    "credentials": {
+      "ok": false,
+      "error": "Cannot find package '@deepseek-ai/dsh-credentials' imported from C:\\Users\\olsis\\Desktop\\lotoss\\ds\\spikes\\p0-s1-dsh-adapter\\src\\index.js"
+    },
+    "storageDomain": {
+      "ok": false,
+      "error": "Cannot find package '@deepseek-ai/dsh-storage-domain' imported from C:\\Users\\olsis\\Desktop\\lotoss\\ds\\spikes\\p0-s1-dsh-adapter\\src\\index.js"
+    },
+    "zod": {
+      "ok": false,
+      "error": "Cannot find package 'zod' imported from C:\\Users\\olsis\\Desktop\\lotoss\\ds\\spikes\\p0-s1-dsh-adapter\\src\\index.js"
+    },
+    "self": "file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s1-dsh-adapter/src/index.js"
+  },
+  "probes": {
+    "credentials": {
+      "key": "[redacted]",
+      "via": "manual",
+      "writtenKind": "grant",
+      "readBackKind": "grant",
+      "configured": true,
+      "writable": true
+    },
+    "storageDomain": {
+      "name": "p0_s1_probe",
+      "record": {
+        "note": "p0-s1 storage probe"
+      },
+      "via": "manual (Cannot find package '@deepseek-ai/dsh-storage-domain' imported from C:\\Users\\olsis\\Desktop\\lotoss\\ds\\spikes\\p0-s1-dsh-adapter\\src\\index.js)",
+      "zodVia": "schemastery",
+      "facility": "ctx.storage.domain"
+    },
+    "workspacePath": "C:\\Users\\olsis\\AppData\\Local\\Temp\\remora-p0-s1-pmoSPj",
+    "workspaceCreate": {
+      "workspace": {
+        "workspaceId": "8518b75f-512c-44f3-9f3b-b1852396e10e",
+        "path": "C:\\Users\\olsis\\AppData\\Local\\Temp\\remora-p0-s1-pmoSPj",
+        "title": "remora-p0-s1-pmoSPj",
+        "sessionIds": [],
+        "createdAt": "2026-09-24T16:34:11.931Z",
+        "updatedAt": "2026-09-24T16:34:11.931Z"
+      },
+      "created": true
+    },
+    "sessionCreate": {
+      "sessionId": "session-8d4eacb4-0e4e-4e83-bf6a-00321a631694",
+      "agentPreset": "standard"
+    },
+    "prompt": {
+      "accepted": true
+    },
+    "promptDuplicate": {
+      "accepted": true
+    },
+    "followOpening": {
+      "cursor": 2,
+      "records": 3,
+      "hasMore": false,
+      "hasAssistantStream": true,
+      "frameTypes": [
+        "snapshot",
+        "event",
+        "assistant-stream"
+      ],
+      "eventTypes": [
+        "agent/inbox/spliced",
+        "turn/start",
+        "step/start",
+        "system/message",
+        "user/message",
+        "request/header",
+        "request/context",
+        "session/title",
+        "session/title-llm-request",
+        "assistant/message",
+        "step/end",
+        "turn/end"
+      ],
+      "assistantFrameTypes": [
+        "start",
+        "chunk",
+        "chunk",
+        "chunk",
+        "chunk",
+        "chunk",
+        "chunk",
+        "chunk",
+        "chunk",
+        "chunk",
+        "end"
+      ],
+      "timedOut": false
+    },
+    "followResume": {
+      "afterSeq": 17,
+      "reopenedCursor": 19,
+      "reopenedRecords": 20,
+      "coveredBySnapshot": true,
+      "timedOut": false
+    },
+    "sessionListAfter": {
+      "itemCount": 4,
+      "foundSession": true
+    },
+    "page": {
+      "records": 18,
+      "hasMore": false
+    },
+    "sessionId": "session-8d4eacb4-0e4e-4e83-bf6a-00321a631694",
+    "workspaceId": "8518b75f-512c-44f3-9f3b-b1852396e10e"
+  },
+  "errors": [
+    {
+      "label": "gateway-invoke",
+      "error": {
+        "name": "TypertGatewayError",
+        "message": "typert gateway: session/list: active Service \"sessionController\" is unavailable",
+        "code": "gateway/service-unavailable"
+      }
+    }
+  ],
+  "finishedAt": "2026-09-24T16:34:12.623Z"
+}

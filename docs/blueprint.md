@@ -14,7 +14,7 @@
 | Plan | [Roadmap](roadmap.md) · [Task packets](tasks/README.md) |
 | Upstream facts | [dsh integration notes](upstream/dsh-integration.md) |
 
-Keywords **MUST**, **MUST NOT**, **SHOULD**, **MAY** follow RFC 2119. Anything marked **⟂ SPIKE** is an assumption that a P0 spike must confirm before dependent work starts.
+Keywords **MUST**, **MUST NOT**, **SHOULD**, **MAY** follow RFC 2119. Assumptions marked during early design are documented as resolved notes linking to their findings in `docs/spikes/`.
 
 ---
 
@@ -320,7 +320,7 @@ Rules:
 
 - Adapter functions take and return **RCP types**; they map dsh `RemoteError` codes to RCP errors (`session/not-found` → `not_found` with `details.dsh = 'session/not-found'`).
 - The event mapper (`event-map.ts`) converts dsh durable events to the RCP `SessionEvent` union and keeps unknown types as `{ kind: 'unknown', dshType }`; it is tested against recorded follow fixtures captured per supported dsh version (`packages/host/test/fixtures/dsh-<version>/`).
-- **⟂ SPIKE P0-S1** confirms that an out-of-tree plugin can call `invoke`/`stream` with strict descriptors in a built dsh install, records the exact wire types for the endpoints above, and records follow-frame fixtures.
+- **⟂ SPIKE P0-S1 (RESOLVED):** Confirmed in [docs/spikes/P0-S1.md](spikes/P0-S1.md). Out-of-tree plugins can call `invoke`/`stream` with strict descriptors in a built dsh install, and exact wire types and follow-frame fixtures are recorded in `packages/host/test/fixtures/dsh-0.1.5-rc.3/`.
 
 ### 8.5 Streaming, coalescing and backpressure
 
@@ -335,12 +335,12 @@ The problem (Context §3.7): the web app answers waterfalls per connected browse
 
 Design (D8):
 
-1. Remora registers one listener each for `approval/request` and `user-questions/request` on the root context with `prepend: true` so it sees every Agent's request first. **⟂ SPIKE P0-S2** verifies root listeners receive Agent-scoped dispatches and that `prepend` orders before api-remotes' per-client listeners.
+1. Remora registers one listener each for `approval/request` and `user-questions/request` on the root context with `prepend: true` so it sees every Agent's request first. **⟂ SPIKE P0-S2 (RESOLVED):** Confirmed in [docs/spikes/P0-S2.md](spikes/P0-S2.md). Root listeners receive Agent-scoped dispatches, and `prepend: true` reliably orders before api-remotes' per-client listeners.
 2. On a request the bridge creates a `Pending` record: `approvalId` (UUIDv4, Remora-owned), `sessionId = agent.id`, `toolName`, `callId`, `reason`, a **preview** (tool arguments looked up from the session log by `callId`, truncated), `argsDigest = SHA-256(canonical JSON(preview))`, `risk` (from the Policy Guard), `createdAt`, `expiresAt`.
 3. It publishes the pending item on every device's `interaction.follow` stream and asks the Notifier to push it.
 4. It **races**: (a) the first valid phone answer; (b) `next()` — the PC GUI chain; (c) the request's own `signal` (turn cancelled); (d) `approvalTimeoutMs`.
    - If `next()` resolves `unavailable` (approvals) or rejects `NO_PROVIDER` (questions) **and at least one device is paired**, the bridge ignores that result and keeps waiting for (a), (c) or (d). No PC answerer is not the same as a "no".
-   - First valid answer wins. The bridge returns it; the other side is withdrawn: devices receive `resolved { by }`; for the PC GUI chain the withdrawal mechanism is chosen by P0-S2 (preferred: supply a derived abort signal to the downstream chain; fallback: the GUI observes the logged `approval/decided`; last resort: document the stale-card limitation and propose an upstream "multi-surface answerer" change).
+   - First valid answer wins. The bridge returns it; the other side is withdrawn: devices receive `resolved { by }`; for the PC GUI chain the withdrawal mechanism is chosen by P0-S2 (derived abort signal to the downstream `next()` chain, canceling the browser card cleanly without aborting the parent turn).
 5. A phone answer is valid only if: the device is paired and not revoked; the `approvalId` is pending and matches `sessionId/callId/toolName`; `argsDigest` equals the host's digest (the phone approved what it was shown); for `risk = high` (or `approvalBiometric: all`) a DER ECDSA P-256 signature from the device's biometric-bound approval key verifies over the canonical approval message ([Crypto/1 §7](specs/crypto-v1.md#7-approval-signatures)); `issuedAt` is within ±5 min; the answer has not been used before.
 6. Every decision is logged by dsh itself (`approval/asked` / `approval/decided`); Remora adds a local audit line (device id, approval id, outcome, risk, signature ok) without arguments.
 
@@ -362,7 +362,7 @@ Design (D8):
 ### 8.9 Pairing service and local management page
 
 - Pairing needs PC presence: the QR is shown only on the PC (terminal when attached, and the management page), and the SAS code must be confirmed on the PC.
-- Management page: exact Connection Fetch routes under `/api/remora/` on the dsh web origin, so dsh's own cookie authentication and trust fence protect it for free (only reachable from the PC's loopback). Pages: *Pair phone* (QR + SAS confirm/reject), *Devices* (name, last seen, revoke), *Status* (relay link, dsh version, keep-awake). Server-rendered HTML, no client plugin in v1. **⟂ SPIKE P0-S1** confirms an out-of-tree plugin can register exact Fetch routes and that they inherit browser authentication.
+- Management page: exact Connection Fetch routes under `/api/remora/` on the dsh web origin, so dsh's own cookie authentication and trust fence protect it for free (only reachable from the PC's loopback). Pages: *Pair phone* (QR + SAS confirm/reject), *Devices* (name, last seen, revoke), *Status* (relay link, dsh version, keep-awake). Server-rendered HTML, no client plugin in v1. **⟂ SPIKE P0-S1 (RESOLVED):** Confirmed in [docs/spikes/P0-S1.md](spikes/P0-S1.md). Out-of-tree plugins can register exact Fetch routes under `/api` and inherit browser authentication.
 - v1.1 option: a dsh web Settings card (client plugin) replacing the page.
 
 ### 8.10 Notifier
@@ -375,11 +375,11 @@ Design (D8):
 | `agent/error` | `turn_error` | on |
 | relay-generated when the host is offline > 2 min | `host_offline` | on |
 
-Payloads are compact JSON (≤ 2 KiB) encrypted per device with its push key ([Crypto/1 §8](specs/crypto-v1.md#8-push-payload-encryption)); the relay forwards ciphertext. A device that is connected and foregrounded receives the in-band event instead of a push (the host knows presence). Collapse keys prevent floods (`session:<id>` for turn notifications).
+Paylods are compact JSON (≤ 2 KiB) encrypted per device with its push key ([Crypto/1 §8](specs/crypto-v1.md#8-push-payload-encryption)); the relay forwards ciphertext. A device that is connected and foregrounded receives the in-band event instead of a push (the host knows presence). Collapse keys prevent floods (`session:<id>` for turn notifications).
 
 ### 8.11 Keep-awake
 
-While any root Agent is `running` (from `agent/status`) and for 2 minutes after the last one stops, the host holds a system-required power request: Windows `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`; macOS `caffeinate -i -w <pid>`; Linux `systemd-inhibit --what=idle:sleep`. It prevents idle sleep only; lid close and explicit sleep still win (documented to the user). **⟂ SPIKE P0-S6** chooses the Windows mechanism (koffi FFI from the plugin vs. a helper process).
+While any root Agent is `running` (from `agent/status`) and for 2 minutes after the last one stops, the host holds a system-required power request: Windows `SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED)`; macOS `caffeinate -i -w <pid>`; Linux `systemd-inhibit --what=idle:sleep`. It prevents idle sleep only; lid close and explicit sleep still win (documented to the user). **⟂ SPIKE P0-S6 (RESOLVED):** Confirmed in [docs/spikes/P0-S6.md](spikes/P0-S6.md). In-process `koffi` FFI for `SetThreadExecutionState` is chosen for zero-overhead keep-awake with automatic OS cleanup on process exit.
 
 ---
 

@@ -12,7 +12,7 @@
     "typecheck": "pnpm -r run typecheck",
     "lint": "oxlint packages apps/relay/src apps/cli/src scripts",
     "test": "pnpm -r run test",
-    "test:e2e": "node -e \"console.error('e2e harness arrives with task P1-T1'); process.exit(1)\"",
+    "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
     "test:security": "node -e \"console.error('security suite arrives with task P3-T1'); process.exit(1)\"",
     "conformance:check": "node scripts/check-conformance.mjs",
     "upstream:fetch": "node scripts/fetch-upstream.mjs",

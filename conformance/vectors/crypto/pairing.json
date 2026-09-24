@@ -1,0 +1,18 @@
+{
+  "suite": "crypto/pairing",
+  "version": 1,
+  "source": "Crypto/1 §5 pairing protocol",
+  "notes": "QR code serialization, PSK derivation, and SAS generation",
+  "cases": [
+    {
+      "name": "pairPsk derivation from pairingSecret and ticketId",
+      "input": {
+        "pairingSecretB64u": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+        "ticketId": "tkt_01923456789a"
+      },
+      "expect": {
+        "pairPskHex": "4495c8ccf93f1be72f34e989f9320fadee5d48717b50dff109ab091b4913fc04"
+      }
+    }
+  ]
+}

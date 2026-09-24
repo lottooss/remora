@@ -1,0 +1,7 @@
+{"t":1790267539151,"kind":"boot","mode":"observe","approvalAnswer":"allowed-once","probeTool":"p0s2_probe","self":"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/src/index.js"}
+{"t":1790267539428,"kind":"config","mode":"observe","withdrawal":"none","answerDelayMs":0,"nextTimeoutMs":4000,"approvalAnswer":"allowed-once","questionSelected":"phone"}
+{"t":1790267539810,"kind":"pre-execute/ask","toolName":"p0s2_probe","callId":"mock-call-1"}
+{"t":1790267539812,"id":"f03806ea-9511-4498-b911-167ca560c1b3","kind":"approval/enter","mode":"observe","withdrawal":"none","toolName":"p0s2_probe","callId":"mock-call-1","hasSignal":true,"signalAborted":false,"agentId":"session-p0s2-e6-prompt-1790267539434"}
+{"t":1790267539813,"id":"f03806ea-9511-4498-b911-167ca560c1b3","kind":"preview/live","found":true,"name":"p0s2_probe","arguments":"{\"note\":\"e6-preview\",\"secret\":\"not-really\"}"}
+{"t":1790267539814,"id":"f03806ea-9511-4498-b911-167ca560c1b3","kind":"preview/inspect","found":true,"name":"p0s2_probe","arguments":"{\"note\":\"e6-preview\",\"secret\":\"not-really\"}","eventCount":19}
+{"t":1790267543825,"id":"f03806ea-9511-4498-b911-167ca560c1b3","kind":"approval/next-resolved","outcome":"p0-s2:next-timeout","ms":4010,"timedOut":true}

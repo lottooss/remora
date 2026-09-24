@@ -1,0 +1,11 @@
+# P0-S1 throwaway bundle: one plugin row. Install with
+#   dsh plugin --profile remora-dev add ./spikes/p0-s1-dsh-adapter
+# from the repository root; the profile picks up this patch layer via
+# package.json#dsh.bundle.patch.
+
+- insert:
+    - id: p0-s1
+      name: '@remora/p0-s1-dsh-adapter'
+      config:
+        outDir: ''
+        scenario: full

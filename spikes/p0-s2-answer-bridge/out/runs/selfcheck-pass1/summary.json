@@ -1,0 +1,31 @@
+{
+  "experiment": "selfcheck",
+  "pass": 1,
+  "description": "startup self-check: root prepend listener runs first",
+  "startedAt": "2026-09-24T16:32:53.631Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": {
+    "status": 200,
+    "body": {
+      "kind": "selfcheck",
+      "scenario": "selfcheck",
+      "startedAt": 1790267579881,
+      "finishedAt": 1790267579884,
+      "order": [
+        "bridge-prepend",
+        "sentinel-ordinary",
+        "terminal"
+      ],
+      "prependFirst": true,
+      "result": "unavailable",
+      "error": null,
+      "at": 1790267579883
+    }
+  },
+  "controlLogLines": 5,
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=7bPhhQqUi6RLxZwtcRkmq-jdMfAA33-LrTJdZpzTuKw\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:33:05.901Z",
+  "ok": true
+}

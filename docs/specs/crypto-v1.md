@@ -1,6 +1,6 @@
 # Crypto/1 — Identities, pairing, secure channel, signatures
 
-Status: **v1-draft** (frozen by P0-A1; changes require the contract-change process in [AGENTS.md](../../AGENTS.md#6-contract-change-process)).
+Status: **v1-frozen** (frozen by P0-A2; changes require the contract-change process in [AGENTS.md](../../AGENTS.md#6-contract-change-process)).
 Implementations: TypeScript `@remora/crypto` (host, testkit), Kotlin `:core:crypto` + `:core:security` (Android), relay auth verification in `apps/relay`.
 Every construction below has vectors in `conformance/vectors/crypto/`; both implementations MUST pass them.
 
@@ -194,3 +194,11 @@ Plaintext is JSON ≤ 2,048 bytes:
 | `pairing.json` | QR parsing, `pairPsk`, SAS |
 | `approval.json` | digest, canonical message, DER signatures incl. high-S, negative cases |
 | `push.json` | AEAD with fixed nonces, AAD, tamper cases |
+
+## 12. Changelog
+
+- **v1.0.0 (v1-frozen, P0-A2):**
+  - Confirmed Noise_IKpsk2_25519_ChaChaPoly_SHA256 handshake and 12-byte little-endian cipher nonces (4 zero bytes prefix + 8-byte LE counter) with Cacophony vectors (P0-S4).
+  - Explicitly specified `lowS: false` for ECDSA P-256 DER approval verification to ensure compatibility with high-S signatures from Android Keystore TEE/StrongBox (P0-S5, REVIEW item 8).
+  - Specified RFC 8785 JSON Canonicalization Scheme (lexicographically sorted keys, compact separators) for canonical approval hashing (REVIEW item 1).
+  - Enforced unpadded base64url encoding across all cryptographic keys, signatures, and tokens (REVIEW item 5).

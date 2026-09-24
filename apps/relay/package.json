@@ -16,5 +16,9 @@
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "vitest": "^4.1.8",
     "wrangler": "^4.137.0"
+  },
+  "dependencies": {
+    "@remora/crypto": "workspace:*",
+    "@remora/protocol": "workspace:*"
   }
 }

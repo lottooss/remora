@@ -1,0 +1,11 @@
+{
+  "lines": [
+    "{\"t\":1790267628284,\"kind\":\"boot\",\"mode\":\"observe\",\"approvalAnswer\":\"allowed-once\",\"probeTool\":\"p0s2_probe\",\"self\":\"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/src/index.js\"}",
+    "{\"t\":1790267628557,\"kind\":\"config\",\"mode\":\"observe\",\"withdrawal\":\"none\",\"answerDelayMs\":0,\"nextTimeoutMs\":4000,\"approvalAnswer\":\"allowed-once\",\"questionSelected\":\"phone\"}",
+    "{\"t\":1790267629007,\"kind\":\"pre-execute/ask\",\"toolName\":\"p0s2_probe\",\"callId\":\"mock-call-1\"}",
+    "{\"t\":1790267629009,\"id\":\"bcf632ba-54cb-48e9-9fe9-c510e273110d\",\"kind\":\"approval/enter\",\"mode\":\"observe\",\"withdrawal\":\"none\",\"toolName\":\"p0s2_probe\",\"callId\":\"mock-call-1\",\"hasSignal\":true,\"signalAborted\":false,\"agentId\":\"session-p0s2-e1-prompt-1790267628573\"}",
+    "{\"t\":1790267629010,\"id\":\"bcf632ba-54cb-48e9-9fe9-c510e273110d\",\"kind\":\"preview/live\",\"found\":true,\"name\":\"p0s2_probe\",\"arguments\":\"{\\\"note\\\":\\\"e1\\\"}\"}",
+    "{\"t\":1790267629011,\"id\":\"bcf632ba-54cb-48e9-9fe9-c510e273110d\",\"kind\":\"preview/inspect\",\"found\":true,\"name\":\"p0s2_probe\",\"arguments\":\"{\\\"note\\\":\\\"e1\\\"}\",\"eventCount\":19}",
+    "{\"t\":1790267633022,\"id\":\"bcf632ba-54cb-48e9-9fe9-c510e273110d\",\"kind\":\"approval/next-resolved\",\"outcome\":\"p0-s2:next-timeout\",\"ms\":4008,\"timedOut\":true}"
+  ]
+}

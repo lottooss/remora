@@ -1,0 +1,17 @@
+{
+  "name": "p0-s3-relay-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "P0-S3 spike: RLY/1 relay mechanics on workerd (throwaway, not part of the workspace)",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "types": "wrangler types",
+    "typecheck": "tsc -p tsconfig.json",
+    "clients": "node scripts/two-clients.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "wrangler": "^4.137.0"
+  }
+}

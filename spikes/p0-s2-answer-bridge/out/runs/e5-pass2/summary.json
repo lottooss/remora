@@ -1,0 +1,15 @@
+{
+  "experiment": "e5",
+  "pass": 2,
+  "description": "request signal aborted (turn cancelled) → both sides",
+  "startedAt": "2026-09-24T16:31:50.728Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": null,
+  "controlLogLines": 7,
+  "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"0e2ca80a-d870-4275-b39d-d89523c509ae\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"ce55bb2b-e7c8-4a32-928d-7a24ca1132cd\",\"agentId\":\"session-p0s2-e5-prompt-1790267518309\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"cancel\",\"eventId\":\"ce55bb2b-e7c8-4a32-928d-7a24ca1132cd\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=UGzuS2je9FVa9MJ4XcGKe_NXfpa2FjqwRi28PFRxp8Q\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:32:05.417Z",
+  "ok": true
+}

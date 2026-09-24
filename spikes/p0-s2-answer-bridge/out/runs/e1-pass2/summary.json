@@ -1,0 +1,23 @@
+{
+  "experiment": "e1",
+  "pass": 2,
+  "description": "no browser connected → listener vs terminal default; what next() returns",
+  "startedAt": "2026-09-24T16:34:03.512Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": {
+    "scenario": {
+      "kind": "scenario",
+      "scenario": "approval-wait",
+      "startedAt": 1790267650604,
+      "finishedAt": 1790267650604,
+      "ok": true,
+      "waited": false
+    }
+  },
+  "controlLogLines": 7,
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=e3M4shYdlFxA2GzKe1iX4I0uFqrIaY7UjBipTDwbeS8\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:34:16.918Z",
+  "ok": true
+}

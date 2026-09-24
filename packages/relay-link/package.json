@@ -18,5 +18,13 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  },
+  "dependencies": {
+    "@remora/crypto": "workspace:*",
+    "@remora/protocol": "workspace:*",
+    "ws": "^8.21.3"
   }
 }

@@ -1,0 +1,20 @@
+{
+  "suite": "crypto/approval",
+  "version": 1,
+  "source": "Crypto/1 §7 approval signatures",
+  "notes": "Canonical approval message formatting and P-256 DER signature verification",
+  "cases": [
+    {
+      "name": "canonical approval message formatting",
+      "input": {
+        "approvalId": "appr_01923456789a",
+        "outcome": "allowed-once",
+        "issuedAt": 1790000000000,
+        "argsDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "expect": {
+        "canonicalMessage": "remora/1 approval\nappr_01923456789a\nsha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nallowed-once\n1790000000000"
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 # RCP/1 — Remora Control Protocol
 
-Status: **v1-draft** (frozen by P0-A1). Implementations: `@remora/protocol` (TypeScript types + zod schemas), `packages/host/src/rcp` (server), `@remora/testkit` (TypeScript client), `:core:protocol` + `:core:transport` (Kotlin client).
+Status: **v1-frozen** (frozen by P0-A2). Implementations: `@remora/protocol` (TypeScript types + zod schemas), `packages/host/src/rcp` (server), `@remora/testkit` (TypeScript client), `:core:protocol` + `:core:transport` (Kotlin client).
 
 RCP is the only language the phone speaks. It is deliberately smaller and more stable than dsh's internal Remote API; the host's DshAdapter translates ([blueprint §8.4](../blueprint.md#84-dshadapter-how-remora-reaches-dsh)). Every RCP message travels as exactly one SC/1 transport record ([Crypto/1 §6](crypto-v1.md#6-secure-channel-sc1)).
 
@@ -239,3 +239,12 @@ Per-device limits: 20 requests/s burst, 5 mutating requests/s, 10 concurrent str
 ## 12. Conformance vectors
 
 `conformance/vectors/rcp/`: `envelope.json` (valid/invalid messages), `methods/*.json` (one file per method with request/response examples and invalid params), `session-events.json` (every `SessionEvent` kind incl. unknown-value fallbacks), `limits.json` (boundary sizes). The host's event mapper additionally uses recorded dsh fixtures in `packages/host/test/fixtures/`.
+
+## 13. Changelog
+
+- **v1.0.0 (v1-frozen, P0-A2):**
+  - Clarified character offsets in streaming text updates (`assistant.delta`) as Unicode code point indices; file line numbers are 1-indexed integers (REVIEW item 2).
+  - Specified initial `sessions.follow` inline snapshot packing cap at 50 messages / 48 KiB with `hasMoreOlder: true` pagination via `sessions.page` (REVIEW item 3).
+  - Standardized ISO 8601 UTC timestamps with millisecond precision (`YYYY-MM-DDTHH:mm:ss.sssZ`) for wire JSON envelopes (REVIEW item 4).
+  - Explicit error mapping from upstream dsh slash-delimited codes to RCP snake_case error codes (REVIEW item 6).
+  - Max RCP plaintext serialized size strictly enforced at 48 KiB (49,152 bytes) to guarantee transport within Noise and RLY limits (REVIEW item 7).

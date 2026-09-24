@@ -1,0 +1,336 @@
+[
+  {
+    "experiment": "e1",
+    "pass": 1,
+    "description": "no browser connected → listener vs terminal default; what next() returns",
+    "startedAt": "2026-09-24T16:33:42.125Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": {
+      "scenario": {
+        "kind": "scenario",
+        "scenario": "approval-wait",
+        "startedAt": 1790267628569,
+        "finishedAt": 1790267628569,
+        "ok": true,
+        "waited": false
+      }
+    },
+    "controlLogLines": 7,
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=I9im4hbc8lEAtarLMJh4hyPOjoBEeBUCCnv6_oUedkw\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:33:54.883Z",
+    "ok": true
+  },
+  {
+    "experiment": "e1",
+    "pass": 2,
+    "description": "no browser connected → listener vs terminal default; what next() returns",
+    "startedAt": "2026-09-24T16:34:03.512Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": {
+      "scenario": {
+        "kind": "scenario",
+        "scenario": "approval-wait",
+        "startedAt": 1790267650604,
+        "finishedAt": 1790267650604,
+        "ok": true,
+        "waited": false
+      }
+    },
+    "controlLogLines": 7,
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=e3M4shYdlFxA2GzKe1iX4I0uFqrIaY7UjBipTDwbeS8\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:34:16.918Z",
+    "ok": true
+  },
+  {
+    "experiment": "e2",
+    "pass": 1,
+    "description": "one browser tab open → ordering between Remora listener and api-remotes",
+    "startedAt": "2026-09-24T16:27:23.267Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 7,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"48a1d034-1134-4969-b7f6-bfc40301fc0d\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"e42fc81d-ff00-49ba-a2f3-a513f5f801e2\",\"agentId\":\"session-p0s2-e2-prompt-1790267250946\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=HPMXH3R4ghbL9BQ6kA-q0wnzlX9X5JC3SPYJ2fI-L8k\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:27:38.070Z",
+    "ok": true
+  },
+  {
+    "experiment": "e2",
+    "pass": 2,
+    "description": "one browser tab open → ordering between Remora listener and api-remotes",
+    "startedAt": "2026-09-24T16:27:45.606Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 7,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"3d4985fc-ad9e-488f-9472-8c14808d0e5e\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"573c325b-239a-4215-8e56-2523b4a94cd4\",\"agentId\":\"session-p0s2-e2-prompt-1790267273163\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=Ia9xi7UJ_VBp8HQrDJFyCdzbhgXDChJpNQJ-4UDf5JI\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:28:00.244Z",
+    "ok": true
+  },
+  {
+    "experiment": "e3a",
+    "pass": 1,
+    "description": "Remora answers first → withdraw via derived AbortSignal substitution",
+    "startedAt": "2026-09-24T16:28:07.770Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 10,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"dc8867bd-b3f2-46cd-8398-b2c2c34b10b3\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"a38c5002-31bf-4851-a383-3a8e4e2ac5b3\",\"agentId\":\"session-p0s2-e3a-prompt-1790267295293\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"cancel\",\"eventId\":\"a38c5002-31bf-4851-a383-3a8e4e2ac5b3\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=M6YPxxYbE_LL6684oOFqi8w1xVE-HSZtdyiARCJCWhg\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:28:22.371Z",
+    "ok": true
+  },
+  {
+    "experiment": "e3a",
+    "pass": 2,
+    "description": "Remora answers first → withdraw via derived AbortSignal substitution",
+    "startedAt": "2026-09-24T16:28:29.920Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 10,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"137bf91f-aed0-4304-ba5c-623d216226fe\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"652aa920-c751-4ba0-9bfd-e917771cb425\",\"agentId\":\"session-p0s2-e3a-prompt-1790267317288\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"cancel\",\"eventId\":\"652aa920-c751-4ba0-9bfd-e917771cb425\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=Gtg64nIiIZf1eW4FXfXvtFJ1S-BUWxfHO4SYuYXk4Us\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:28:44.376Z",
+    "ok": true
+  },
+  {
+    "experiment": "e3b",
+    "pass": 1,
+    "description": "Remora answers first → observe whether GUI reacts to approval/decided (expect stale card)",
+    "startedAt": "2026-09-24T16:28:52.101Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 9,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"8107943e-3452-4288-b724-657df1a914a9\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"14bf7763-af2b-4f06-860a-d10dbdefdcff\",\"agentId\":\"session-p0s2-e3b-prompt-1790267339923\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=cgQ3IubiVKoyFl4DPDD0Ui5P8XoFTEqnWtt2vyZHGhg\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:29:07.039Z",
+    "ok": true
+  },
+  {
+    "experiment": "e3b",
+    "pass": 2,
+    "description": "Remora answers first → observe whether GUI reacts to approval/decided (expect stale card)",
+    "startedAt": "2026-09-24T16:29:14.860Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 9,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"324a9b86-b10c-4902-99e1-afecff448c2d\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"2fd68a36-865d-479c-b7e0-ff8ccb1ee48d\",\"agentId\":\"session-p0s2-e3b-prompt-1790267364581\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=oAJn4hoKp925CuK2Q3qWKqJxAiLv-0BVur4Lx1MSrG4\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:29:31.812Z",
+    "ok": true
+  },
+  {
+    "experiment": "e3c",
+    "pass": 1,
+    "description": "Remora answers first → do nothing to the PC chain (baseline stale card)",
+    "startedAt": "2026-09-24T16:29:40.617Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 9,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"fafb57bb-f4e4-4abb-b678-15134bc2a202\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"4f38819b-dfda-4cf6-b8d3-0e7fa1aad963\",\"agentId\":\"session-p0s2-e3c-prompt-1790267389319\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=Va0I-XXvXgUxN_CPjFfFiynqE2P8fIffNbfieNMF4OY\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:29:56.655Z",
+    "ok": true
+  },
+  {
+    "experiment": "e3c",
+    "pass": 2,
+    "description": "Remora answers first → do nothing to the PC chain (baseline stale card)",
+    "startedAt": "2026-09-24T16:30:16.561Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 9,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"03b36633-31d6-499f-add9-ec448b7a766c\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"e0984d99-ca66-44ae-b665-7899a1f2948c\",\"agentId\":\"session-p0s2-e3c-prompt-1790267424770\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=-gHwR5Xp-5bNLAoXRk9OSPgPNVB5fjGBTgNyjqTU2GI\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:30:31.845Z",
+    "ok": true
+  },
+  {
+    "experiment": "e4",
+    "pass": 1,
+    "description": "browser answers first → Remora observes next() resolution",
+    "startedAt": "2026-09-24T16:30:39.638Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 7,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"ecd5ee99-cd5f-4263-8227-cdb9270a7004\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"19a2bfe8-ff44-4c22-a235-7b6196017dd2\",\"agentId\":\"session-p0s2-e4-prompt-1790267447520\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"answer-post\",\"eventId\":\"19a2bfe8-ff44-4c22-a235-7b6196017dd2\",\"status\":200,\"body\":\"{\\\"type\\\":\\\"server-response\\\",\\\"rpcId\\\":\\\"s2-19a2bfe8-ff44-4c22-a235-7b6196017dd2-1790267447954\\\",\\\"result\\\":{\\\"ok\\\":true}}\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=WqMKEiqDALEO4MrvSKHtqJz30SEtPEQzZtouggw_exQ\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:30:54.611Z",
+    "ok": true
+  },
+  {
+    "experiment": "e4",
+    "pass": 2,
+    "description": "browser answers first → Remora observes next() resolution",
+    "startedAt": "2026-09-24T16:31:02.628Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 7,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"cfae8053-0658-4208-a8eb-007f28e40da0\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"d02dea9a-66ca-4cde-a517-27ff4d9628e4\",\"agentId\":\"session-p0s2-e4-prompt-1790267470327\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"answer-post\",\"eventId\":\"d02dea9a-66ca-4cde-a517-27ff4d9628e4\",\"status\":200,\"body\":\"{\\\"type\\\":\\\"server-response\\\",\\\"rpcId\\\":\\\"s2-d02dea9a-66ca-4cde-a517-27ff4d9628e4-1790267470811\\\",\\\"result\\\":{\\\"ok\\\":true}}\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=8Y-HFUbT1Ix4BNjZ3YoudnOjo6hnp09vh-dSMl3m2Pk\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:31:17.464Z",
+    "ok": true
+  },
+  {
+    "experiment": "e5",
+    "pass": 1,
+    "description": "request signal aborted (turn cancelled) → both sides",
+    "startedAt": "2026-09-24T16:31:25.454Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 7,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"92739296-2753-413c-9028-4a7cd6cdade7\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"936404e4-41a3-43cd-8f67-ef72dd0124e0\",\"agentId\":\"session-p0s2-e5-prompt-1790267494218\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"cancel\",\"eventId\":\"936404e4-41a3-43cd-8f67-ef72dd0124e0\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=SK4Zc7p64Ma3RKY0-U_GPQJUaUURSUzAS9HNfttZr0I\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:31:41.460Z",
+    "ok": true
+  },
+  {
+    "experiment": "e5",
+    "pass": 2,
+    "description": "request signal aborted (turn cancelled) → both sides",
+    "startedAt": "2026-09-24T16:31:50.728Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": null,
+    "controlLogLines": 7,
+    "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"0e2ca80a-d870-4275-b39d-d89523c509ae\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"ce55bb2b-e7c8-4a32-928d-7a24ca1132cd\",\"agentId\":\"session-p0s2-e5-prompt-1790267518309\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"cancel\",\"eventId\":\"ce55bb2b-e7c8-4a32-928d-7a24ca1132cd\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=UGzuS2je9FVa9MJ4XcGKe_NXfpa2FjqwRi28PFRxp8Q\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:32:05.417Z",
+    "ok": true
+  },
+  {
+    "experiment": "e6",
+    "pass": 1,
+    "description": "preview: tool call arguments via live Session vs sessionController.inspect",
+    "startedAt": "2026-09-24T16:32:13.125Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": {
+      "previewStatic": {
+        "kind": "scenario",
+        "scenario": "preview-static",
+        "startedAt": 1790267539684,
+        "finishedAt": 1790267539687,
+        "ok": false,
+        "error": "Error: session \"session-missing\" not found"
+      }
+    },
+    "controlLogLines": 7,
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=aY9O9RHz-Xstwfh87mzqvW9PjEgCQhIAt8ux_YM80Qg\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:32:25.695Z",
+    "ok": true
+  },
+  {
+    "experiment": "e6",
+    "pass": 2,
+    "description": "preview: tool call arguments via live Session vs sessionController.inspect",
+    "startedAt": "2026-09-24T16:32:33.350Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": {
+      "previewStatic": {
+        "kind": "scenario",
+        "scenario": "preview-static",
+        "startedAt": 1790267559998,
+        "finishedAt": 1790267559999,
+        "ok": false,
+        "error": "Error: session \"session-missing\" not found"
+      }
+    },
+    "controlLogLines": 7,
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=cgXa4c2Jx9oPEquBCaSr5uXOZXi3GAnyqL3qJcU-OeY\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:32:46.009Z",
+    "ok": true
+  },
+  {
+    "experiment": "selfcheck",
+    "pass": 1,
+    "description": "startup self-check: root prepend listener runs first",
+    "startedAt": "2026-09-24T16:32:53.631Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": {
+      "status": 200,
+      "body": {
+        "kind": "selfcheck",
+        "scenario": "selfcheck",
+        "startedAt": 1790267579881,
+        "finishedAt": 1790267579884,
+        "order": [
+          "bridge-prepend",
+          "sentinel-ordinary",
+          "terminal"
+        ],
+        "prependFirst": true,
+        "result": "unavailable",
+        "error": null,
+        "at": 1790267579883
+      }
+    },
+    "controlLogLines": 5,
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=7bPhhQqUi6RLxZwtcRkmq-jdMfAA33-LrTJdZpzTuKw\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:33:05.901Z",
+    "ok": true
+  },
+  {
+    "experiment": "selfcheck",
+    "pass": 2,
+    "description": "startup self-check: root prepend listener runs first",
+    "startedAt": "2026-09-24T16:33:13.438Z",
+    "tokenPresent": true,
+    "cookiePresent": true,
+    "drive": {
+      "status": 200,
+      "body": {
+        "kind": "selfcheck",
+        "scenario": "selfcheck",
+        "startedAt": 1790267599718,
+        "finishedAt": 1790267599721,
+        "order": [
+          "bridge-prepend",
+          "sentinel-ordinary",
+          "terminal"
+        ],
+        "prependFirst": true,
+        "result": "unavailable",
+        "error": null,
+        "at": 1790267599721
+      }
+    },
+    "controlLogLines": 5,
+    "dshStdout": "dsh web: http://127.0.0.1:7718/?token=nF_24n-pmbJEj2Sut00GoC50yJfMyqwUFnvMuIvH7fo\n",
+    "dshStderr": "",
+    "finishedAt": "2026-09-24T16:33:25.740Z",
+    "ok": true
+  }
+]

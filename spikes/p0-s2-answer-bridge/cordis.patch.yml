@@ -1,0 +1,17 @@
+# P0-S2 throwaway bundle: AnswerBridge race probe. Install with
+#   dsh plugin --profile remora-dev add ./spikes/p0-s2-answer-bridge
+# from the repository root; the profile picks up this patch layer via
+# package.json#dsh.bundle.patch.
+#
+# outDir is filled by scripts/setup.mjs (absolute path under the spike).
+
+- insert:
+    - id: p0-s2
+      name: '@remora/p0-s2-answer-bridge'
+      config:
+        outDir: 'C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/out'
+        mode: observe
+        answerDelayMs: 0
+        approvalAnswer: allowed-once
+        questionSelected: phone
+        probeTool: p0s2_probe

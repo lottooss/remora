@@ -1,0 +1,30 @@
+{
+  "suite": "crypto/relay-auth",
+  "version": 1,
+  "source": "Crypto/1 §4 relay authentication",
+  "notes": "Ed25519 challenge signing and verification",
+  "cases": [
+    {
+      "name": "valid host relay auth challenge signature",
+      "input": {
+        "publicKeyB64u": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc",
+        "challengeToken": "https://relay.remora.local\u0000host\u0000h_test123\u0000nonce_fixed_32_bytes_test_vector",
+        "signatureB64u": "YvrD39JBvlVM2lNXLEmchgo7zhOxVYjy3QdhA68tpX4AXJCER1NgFrr-kG2aIr-xXGt5bTffZz6iAQjiky0PAA"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "name": "invalid signature rejected",
+      "input": {
+        "publicKeyB64u": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc",
+        "challengeToken": "https://relay.remora.local\u0000host\u0000h_test123\u0000nonce_fixed_32_bytes_test_vector",
+        "signatureB64u": "mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmQ"
+      },
+      "expect": {
+        "valid": false
+      }
+    }
+  ]
+}

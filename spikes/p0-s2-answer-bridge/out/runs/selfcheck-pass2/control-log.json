@@ -1,0 +1,9 @@
+{
+  "lines": [
+    "{\"t\":1790267599428,\"kind\":\"boot\",\"mode\":\"observe\",\"approvalAnswer\":\"allowed-once\",\"probeTool\":\"p0s2_probe\",\"self\":\"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/src/index.js\"}",
+    "{\"t\":1790267599710,\"kind\":\"config\",\"mode\":\"observe\",\"withdrawal\":\"none\",\"answerDelayMs\":0,\"nextTimeoutMs\":4000,\"approvalAnswer\":\"allowed-once\",\"questionSelected\":\"phone\"}",
+    "{\"t\":1790267599719,\"id\":\"fca23668-fddc-4bc3-9a2c-a14a1c6eee33\",\"kind\":\"approval/enter\",\"mode\":\"observe\",\"withdrawal\":\"none\",\"toolName\":\"p0-s2-selfcheck\",\"callId\":null,\"hasSignal\":false,\"signalAborted\":false,\"agentId\":\"p0-s2-selfcheck-agent\"}",
+    "{\"t\":1790267599720,\"id\":\"fca23668-fddc-4bc3-9a2c-a14a1c6eee33\",\"kind\":\"approval/next-resolved\",\"outcome\":\"unavailable\",\"ms\":1,\"timedOut\":false}",
+    "{\"t\":1790267599721,\"kind\":\"selfcheck\",\"order\":[\"bridge-prepend\",\"sentinel-ordinary\",\"terminal\"],\"prependFirst\":true,\"result\":\"unavailable\",\"error\":null,\"at\":1790267599721}"
+  ]
+}

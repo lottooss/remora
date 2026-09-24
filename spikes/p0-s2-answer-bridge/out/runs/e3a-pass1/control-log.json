@@ -1,0 +1,14 @@
+{
+  "lines": [
+    "{\"t\":1790267293677,\"kind\":\"boot\",\"mode\":\"observe\",\"approvalAnswer\":\"allowed-once\",\"probeTool\":\"p0s2_probe\",\"self\":\"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/src/index.js\"}",
+    "{\"t\":1790267294786,\"kind\":\"config\",\"mode\":\"answer-first\",\"withdrawal\":\"signal\",\"answerDelayMs\":0,\"nextTimeoutMs\":4000,\"approvalAnswer\":\"allowed-once\",\"questionSelected\":\"phone\"}",
+    "{\"t\":1790267295677,\"kind\":\"pre-execute/ask\",\"toolName\":\"p0s2_probe\",\"callId\":\"mock-call-1\"}",
+    "{\"t\":1790267295678,\"id\":\"ac2f5b8c-9f37-4e68-b4e4-2efc8fe3b2ca\",\"kind\":\"approval/enter\",\"mode\":\"answer-first\",\"withdrawal\":\"signal\",\"toolName\":\"p0s2_probe\",\"callId\":\"mock-call-1\",\"hasSignal\":true,\"signalAborted\":false,\"agentId\":\"session-p0s2-e3a-prompt-1790267295293\"}",
+    "{\"t\":1790267295680,\"id\":\"ac2f5b8c-9f37-4e68-b4e4-2efc8fe3b2ca\",\"kind\":\"preview/live\",\"found\":true,\"name\":\"p0s2_probe\",\"arguments\":\"{\\\"note\\\":\\\"e3a\\\"}\"}",
+    "{\"t\":1790267295681,\"id\":\"ac2f5b8c-9f37-4e68-b4e4-2efc8fe3b2ca\",\"kind\":\"preview/inspect\",\"found\":true,\"name\":\"p0s2_probe\",\"arguments\":\"{\\\"note\\\":\\\"e3a\\\"}\",\"eventCount\":19}",
+    "{\"t\":1790267295682,\"id\":\"ac2f5b8c-9f37-4e68-b4e4-2efc8fe3b2ca\",\"kind\":\"withdraw/signal-substituted\"}",
+    "{\"t\":1790267295682,\"id\":\"ac2f5b8c-9f37-4e68-b4e4-2efc8fe3b2ca\",\"kind\":\"approval/claimed\",\"outcome\":\"allowed-once\",\"decidedAt\":1790267295682}",
+    "{\"t\":1790267295745,\"id\":\"ac2f5b8c-9f37-4e68-b4e4-2efc8fe3b2ca\",\"kind\":\"withdraw/signal-aborted\"}",
+    "{\"t\":1790267295746,\"id\":\"ac2f5b8c-9f37-4e68-b4e4-2efc8fe3b2ca\",\"kind\":\"approval/pc-chain\",\"ok\":false,\"error\":\"Error: p0-s2: bridge answered first; withdrawing PC chain\"}"
+  ]
+}

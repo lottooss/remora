@@ -1,0 +1,17 @@
+{
+  "suite": "relay/data-frame",
+  "version": 1,
+  "source": "Scaffolded for P0-A1 / RLY/1 \u00a73.1",
+  "notes": "Data frame header encode/decode and size validation",
+  "cases": [
+    {
+      "name": "placeholder scaffold valid baseline",
+      "input": {
+        "status": "scaffold"
+      },
+      "expect": {
+        "ok": true
+      }
+    }
+  ]
+}

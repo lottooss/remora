@@ -37,4 +37,10 @@ Then add to `~/.dsh/profiles/remora-dev/cordis.patch.yml` (a patch replaces the 
     notify: { approval: true, question: true, turnDone: true, turnError: true, hostOffline: true }
 ```
 
-`dsh --profile remora-dev --dump-config` shows the row; `dsh --profile remora-dev --no-open --port 7718` loads it. Whether a linked local install or a packed tarball (`pnpm -F @remora/host pack`) is the right install form — because of peer-dependency duplication for `@deepseek-ai/cordis` and `@deepseek-ai/schemastery` — is decided by spike P0-S1.
+`dsh --profile remora-dev --dump-config` shows the row; `dsh --profile remora-dev --no-open --port 7718` loads it.
+
+### Install Form (P0-S1 Decision)
+
+Spike P0-S1 answered Q10 regarding installation packaging:
+- **Production / Standard Install:** Packed tarball (`pnpm -F @remora/host pack` followed by `dsh plugin --profile remora-dev add ./packages/host/remora-host-*.tgz`). This isolates dependencies strictly to the profile's hoisted environment, guaranteeing that `@deepseek-ai/cordis` and `@deepseek-ai/schemastery` remain singletons and avoiding duplicate loader/symbol collisions.
+- **Fast Local Iteration:** `dsh plugin --profile remora-dev add ./packages/host` is supported during development provided the monorepo root does not install mismatched versions of the peer dependencies.

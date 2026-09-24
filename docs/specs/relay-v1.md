@@ -1,6 +1,6 @@
 # RLY/1 — Relay protocol
 
-Status: **v1-draft** (frozen by P0-A1). Implementations: `apps/relay` (server), `@remora/relay-link` (TypeScript client for host and testkit), `:core:transport` (Kotlin client).
+Status: **v1-frozen** (frozen by P0-A2). Implementations: `apps/relay` (server), `@remora/relay-link` (TypeScript client for host and testkit), `:core:transport` (Kotlin client).
 The relay is **content-blind**: it authenticates endpoints, routes opaque frames between linked endpoints, reports presence, and dispatches push notifications. It never parses SC/1 or RCP.
 
 ## 1. Deployment model
@@ -134,3 +134,11 @@ The path carries the major version (`/v1/…`), frames carry `v` (control) or th
 ## 12. Conformance vectors
 
 `conformance/vectors/relay/`: `data-frame.json` (encode/decode incl. boundary sizes), `control-frames.json` (valid and invalid examples per type), `auth.json` (shared with Crypto/1 §4).
+
+## 13. Changelog
+
+- **v1.0.0 (v1-frozen, P0-A2):**
+  - Confirmed WebSocket auto-response keepalive mechanics in Cloudflare DO hibernation without waking execution context (P0-S3).
+  - Explicit newest-wins replacement semantics on rapid reconnection using close code `4409` (`Client Replaced`) (REVIEW item 9).
+  - Enforced unpadded base64url encoding for relay tickets and challenge tokens (REVIEW item 5).
+  - Re-verified 64 KiB (65,536 bytes) maximum relay frame limit against 48 KiB RCP limit + Noise AEAD header (REVIEW item 7).

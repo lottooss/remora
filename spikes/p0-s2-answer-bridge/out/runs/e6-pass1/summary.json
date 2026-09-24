@@ -1,0 +1,23 @@
+{
+  "experiment": "e6",
+  "pass": 1,
+  "description": "preview: tool call arguments via live Session vs sessionController.inspect",
+  "startedAt": "2026-09-24T16:32:13.125Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": {
+    "previewStatic": {
+      "kind": "scenario",
+      "scenario": "preview-static",
+      "startedAt": 1790267539684,
+      "finishedAt": 1790267539687,
+      "ok": false,
+      "error": "Error: session \"session-missing\" not found"
+    }
+  },
+  "controlLogLines": 7,
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=aY9O9RHz-Xstwfh87mzqvW9PjEgCQhIAt8ux_YM80Qg\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:32:25.695Z",
+  "ok": true
+}

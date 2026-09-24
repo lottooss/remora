@@ -1,0 +1,15 @@
+{
+  "experiment": "e2",
+  "pass": 1,
+  "description": "one browser tab open → ordering between Remora listener and api-remotes",
+  "startedAt": "2026-09-24T16:27:23.267Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": null,
+  "controlLogLines": 7,
+  "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"48a1d034-1134-4969-b7f6-bfc40301fc0d\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"e42fc81d-ff00-49ba-a2f3-a513f5f801e2\",\"agentId\":\"session-p0s2-e2-prompt-1790267250946\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=HPMXH3R4ghbL9BQ6kA-q0wnzlX9X5JC3SPYJ2fI-L8k\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:27:38.070Z",
+  "ok": true
+}

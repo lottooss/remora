@@ -1,0 +1,23 @@
+# P0-S3 spike — throwaway RLY/1 relay mechanics prototype on workerd.
+# Not the production relay (that is apps/relay). No secrets live in this file:
+# SPIKE_AUTH_KEY is an obviously fake demo key for the spike's HMAC auth stand-in.
+name = "p0-s3-relay-spike"
+main = "src/index.ts"
+compatibility_date = "2026-08-15"
+
+[durable_objects]
+bindings = [{ name = "ACCOUNT_HUB", class_name = "AccountHub" }]
+
+# Free plan: only SQLite-backed Durable Objects are available.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AccountHub"]
+
+[vars]
+# RLY/1 §10 defaults.
+MAX_FRAME_BYTES = "65536"
+AUTH_TIMEOUT_MS = "10000"
+# Short (production: 120000) so two-clients.mjs can watch the alarm fire in-run.
+HOST_OFFLINE_ALERT_MS = "5000"
+# Demo HMAC key — spike auth only; production uses Ed25519 (Crypto/1 §4).
+SPIKE_AUTH_KEY = "remora-p0-s3-demo-not-a-secret"

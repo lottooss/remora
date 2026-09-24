@@ -1,0 +1,11 @@
+{
+  "lines": [
+    "{\"t\":1790267492627,\"kind\":\"boot\",\"mode\":\"observe\",\"approvalAnswer\":\"allowed-once\",\"probeTool\":\"p0s2_probe\",\"self\":\"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/src/index.js\"}",
+    "{\"t\":1790267493699,\"kind\":\"config\",\"mode\":\"observe\",\"withdrawal\":\"none\",\"answerDelayMs\":0,\"nextTimeoutMs\":4000,\"approvalAnswer\":\"allowed-once\",\"questionSelected\":\"phone\"}",
+    "{\"t\":1790267494814,\"kind\":\"pre-execute/ask\",\"toolName\":\"p0s2_probe\",\"callId\":\"mock-call-1\"}",
+    "{\"t\":1790267494817,\"id\":\"984983bd-b625-4074-8cc7-d6fc0852014f\",\"kind\":\"approval/enter\",\"mode\":\"observe\",\"withdrawal\":\"none\",\"toolName\":\"p0s2_probe\",\"callId\":\"mock-call-1\",\"hasSignal\":true,\"signalAborted\":false,\"agentId\":\"session-p0s2-e5-prompt-1790267494218\"}",
+    "{\"t\":1790267494818,\"id\":\"984983bd-b625-4074-8cc7-d6fc0852014f\",\"kind\":\"preview/live\",\"found\":true,\"name\":\"p0s2_probe\",\"arguments\":\"{\\\"note\\\":\\\"e5\\\"}\"}",
+    "{\"t\":1790267494819,\"id\":\"984983bd-b625-4074-8cc7-d6fc0852014f\",\"kind\":\"preview/inspect\",\"found\":true,\"name\":\"p0s2_probe\",\"arguments\":\"{\\\"note\\\":\\\"e5\\\"}\",\"eventCount\":19}",
+    "{\"t\":1790267495451,\"id\":\"984983bd-b625-4074-8cc7-d6fc0852014f\",\"kind\":\"approval/next-rejected\",\"ms\":625,\"error\":\"Error: typert gateway: Remote event was cancelled\"}"
+  ]
+}

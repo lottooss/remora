@@ -1,0 +1,17 @@
+{
+  "suite": "rcp/session-events",
+  "version": 1,
+  "source": "Scaffolded for P0-A1 / RCP/1 \u00a75",
+  "notes": "Session events stream frame variants",
+  "cases": [
+    {
+      "name": "placeholder scaffold valid baseline",
+      "input": {
+        "status": "scaffold"
+      },
+      "expect": {
+        "ok": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "p0-s4-noise-ts",
+  "private": true,
+  "description": "P0-S4 spike: Noise_IKpsk2_25519_ChaChaPoly_SHA256 over @noble/* 2.x (throwaway, not a workspace package)",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.4.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

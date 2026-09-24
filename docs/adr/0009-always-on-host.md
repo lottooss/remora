@@ -1,6 +1,6 @@
 # ADR-0009: Always-on host via per-user logon supervisor and keep-awake
 
-- Status: Accepted — mechanism details pending P0-S6
+- Status: Accepted (mechanisms validated in P0-S6: Task Scheduler / HKCU Run via `conhost.exe --headless`, in-process `koffi` for `SetThreadExecutionState`)
 - Date: 2026-09-24
 - Deciders: Owner, Host, Integrator
 

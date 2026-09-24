@@ -1,0 +1,10 @@
+{
+  "name": "p0-s2-dsh-install",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@deepseek-ai/dsh": "^0.1.5-rc.3",
+    "@deepseek-ai/dsh-llm-mock-server": "^0.1.5-rc.3",
+    "tsx": "^4.23.15"
+  }
+}

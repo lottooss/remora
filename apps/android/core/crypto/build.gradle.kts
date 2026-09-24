@@ -12,6 +12,8 @@ kotlin {
 }
 
 dependencies {
+    implementation(libs.bouncycastle)
+    testImplementation(libs.kotlinx.serialization.json)
     testImplementation(libs.junit)
     testImplementation(libs.truth)
 }

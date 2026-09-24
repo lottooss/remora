@@ -1,0 +1,15 @@
+{
+  "experiment": "e3a",
+  "pass": 2,
+  "description": "Remora answers first → withdraw via derived AbortSignal substitution",
+  "startedAt": "2026-09-24T16:28:29.920Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": null,
+  "controlLogLines": 10,
+  "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"137bf91f-aed0-4304-ba5c-623d216226fe\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"652aa920-c751-4ba0-9bfd-e917771cb425\",\"agentId\":\"session-p0s2-e3a-prompt-1790267317288\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"cancel\",\"eventId\":\"652aa920-c751-4ba0-9bfd-e917771cb425\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=Gtg64nIiIZf1eW4FXfXvtFJ1S-BUWxfHO4SYuYXk4Us\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:28:44.376Z",
+  "ok": true
+}

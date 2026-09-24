@@ -1,0 +1,9 @@
+{"t":1790267338286,"kind":"boot","mode":"observe","approvalAnswer":"allowed-once","probeTool":"p0s2_probe","self":"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/src/index.js"}
+{"t":1790267339415,"kind":"config","mode":"answer-first","withdrawal":"decided-observe","answerDelayMs":0,"nextTimeoutMs":4000,"approvalAnswer":"allowed-once","questionSelected":"phone"}
+{"t":1790267340367,"kind":"pre-execute/ask","toolName":"p0s2_probe","callId":"mock-call-1"}
+{"t":1790267340370,"id":"a7d6199e-7e20-4630-ba9c-3b8b7f75ddf8","kind":"approval/enter","mode":"answer-first","withdrawal":"decided-observe","toolName":"p0s2_probe","callId":"mock-call-1","hasSignal":true,"signalAborted":false,"agentId":"session-p0s2-e3b-prompt-1790267339923"}
+{"t":1790267340371,"id":"a7d6199e-7e20-4630-ba9c-3b8b7f75ddf8","kind":"preview/live","found":true,"name":"p0s2_probe","arguments":"{\"note\":\"e3b\"}"}
+{"t":1790267340372,"id":"a7d6199e-7e20-4630-ba9c-3b8b7f75ddf8","kind":"preview/inspect","found":true,"name":"p0s2_probe","arguments":"{\"note\":\"e3b\"}","eventCount":19}
+{"t":1790267340373,"id":"a7d6199e-7e20-4630-ba9c-3b8b7f75ddf8","kind":"approval/claimed","outcome":"allowed-once","decidedAt":1790267340373}
+{"t":1790267340436,"id":"a7d6199e-7e20-4630-ba9c-3b8b7f75ddf8","kind":"withdraw/decided-observe","note":"ui-approval does not subscribe approval/decided; expect stale card unless cancel arrives"}
+{"t":1790267342448,"id":"a7d6199e-7e20-4630-ba9c-3b8b7f75ddf8","kind":"approval/pc-chain","ok":false,"error":"timeout waiting for PC chain"}

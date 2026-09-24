@@ -1,0 +1,16 @@
+{
+  "name": "remora-p0-s5-verifier",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "P0-S5 spike: verify Android Keystore biometric-bound approval signatures (Crypto/1 §7) in Node",
+  "scripts": {
+    "selftest": "node selftest.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "2.4.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

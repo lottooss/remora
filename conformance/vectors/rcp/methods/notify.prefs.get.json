@@ -1,0 +1,17 @@
+{
+  "suite": "rcp/methods/notify.prefs.get",
+  "version": 1,
+  "source": "Scaffolded for P0-A1",
+  "notes": "notify.prefs.get request/response",
+  "cases": [
+    {
+      "name": "placeholder scaffold valid baseline",
+      "input": {
+        "status": "scaffold"
+      },
+      "expect": {
+        "ok": true
+      }
+    }
+  ]
+}

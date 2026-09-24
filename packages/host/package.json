@@ -27,6 +27,11 @@
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },
+  "dependencies": {
+    "@remora/crypto": "workspace:*",
+    "@remora/protocol": "workspace:*",
+    "@remora/relay-link": "workspace:*"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
     "@deepseek-ai/schemastery": "^3.18.2"

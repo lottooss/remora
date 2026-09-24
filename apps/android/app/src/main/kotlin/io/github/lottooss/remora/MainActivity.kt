@@ -4,51 +4,42 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import io.github.lottooss.remora.core.security.AppLockGate
+import io.github.lottooss.remora.core.security.LockState
 import io.github.lottooss.remora.core.ui.RemoraTheme
-import io.github.lottooss.remora.feature.conversation.ConversationScreen
-import io.github.lottooss.remora.feature.files.FilesScreen
-import io.github.lottooss.remora.feature.pairing.PairingScreen
-import io.github.lottooss.remora.feature.sessions.SessionsScreen
-import io.github.lottooss.remora.feature.settings.SettingsScreen
-import io.github.lottooss.remora.feature.workspace.WorkspaceScreen
+import javax.inject.Inject
 
-/** Skeleton entry point; task P1-K2 replaces the list with the navigation graph. */
+/** Composition root: theme, app-lock gate and the navigation graph (task P1-K2). */
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var appLockGate: AppLockGate
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             RemoraTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { padding ->
-                    Column(
-                        Modifier
-                            .padding(padding)
-                            .padding(16.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
-                        Text("Remora", style = MaterialTheme.typography.headlineMedium)
-                        Text("P0 skeleton — remote control for the DeepSeek Harness")
-                        PairingScreen()
-                        SessionsScreen()
-                        ConversationScreen()
-                        WorkspaceScreen()
-                        FilesScreen()
-                        SettingsScreen()
-                    }
+                val lockState by appLockGate.state.collectAsStateWithLifecycle()
+                when (lockState) {
+                    LockState.LOCKED -> AppLockScreen(onUnlock = appLockGate::unlock)
+                    LockState.UNLOCKED -> RemoraRoot(navController = rememberNavController())
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        appLockGate.onAppForegrounded()
+    }
+
+    override fun onStop() {
+        appLockGate.onAppBackgrounded()
+        super.onStop()
     }
 }

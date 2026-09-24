@@ -1,0 +1,15 @@
+{
+  "experiment": "e5",
+  "pass": 1,
+  "description": "request signal aborted (turn cancelled) → both sides",
+  "startedAt": "2026-09-24T16:31:25.454Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": null,
+  "controlLogLines": 7,
+  "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"92739296-2753-413c-9028-4a7cd6cdade7\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"936404e4-41a3-43cd-8f67-ef72dd0124e0\",\"agentId\":\"session-p0s2-e5-prompt-1790267494218\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"cancel\",\"eventId\":\"936404e4-41a3-43cd-8f67-ef72dd0124e0\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=SK4Zc7p64Ma3RKY0-U_GPQJUaUURSUzAS9HNfttZr0I\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:31:41.460Z",
+  "ok": true
+}

@@ -7,5 +7,7 @@
  * Implementation: task P1-T1. Never shipped to users.
  */
 
-/** Profile name the e2e environment creates inside its temporary `DSH_HOME`. */
-export const E2E_PROFILE = 'remora-e2e'
+export * from './device.ts'
+export * from './adversary.ts'
+export * from './mock-llm.ts'
+export * from './env.ts'

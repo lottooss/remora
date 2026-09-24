@@ -1,0 +1,485 @@
+{
+  "items": [
+    {
+      "sessionId": "session-8d4eacb4-0e4e-4e83-bf6a-00321a631694",
+      "updatedAt": 1790267652531,
+      "running": true,
+      "blank": false,
+      "cwd": "C:\\Users\\olsis\\AppData\\Local\\Temp\\remora-p0-s1-pmoSPj",
+      "projections": {
+        "asOfSeq": 19,
+        "values": {
+          "title": "Call todo_write once with a",
+          "goal": "null",
+          "tokenUsage": {
+            "uncachedInputTokens": 3,
+            "outputTokens": 36,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "contextPressure": {
+            "pressureTokens": 3,
+            "projectedTokens": 20,
+            "contextWindow": 1000000
+          },
+          "contextBreakdown": {
+            "systemTokens": 1777,
+            "toolsTokens": 7127,
+            "messageTokens": 174
+          },
+          "sessionStats": {
+            "turns": 1,
+            "steps": 1,
+            "llmMs": 51,
+            "toolMs": 0,
+            "ttftMs": 47,
+            "ttftSteps": 1,
+            "decodeMs": 4,
+            "decodeTokens": 36
+          },
+          "turnOutline": [
+            {
+              "turn": 1,
+              "seq": 4,
+              "prompt": "Call todo_write once with a single completed item…",
+              "response": "Done. Called todo_write and stopped."
+            },
+            {
+              "turn": 2,
+              "seq": 18,
+              "prompt": "",
+              "response": ""
+            }
+          ],
+          "agentPreset": "standard",
+          "subagentCatalog": [],
+          "subagentTiming": {
+            "settledMs": 0
+          },
+          "subagent": "null",
+          "permissions": {
+            "options": [
+              {
+                "value": "read-only",
+                "name": "read-only"
+              },
+              {
+                "value": "workspace-write",
+                "name": "workspace-write"
+              },
+              {
+                "value": "danger-full-access",
+                "name": "danger-full-access"
+              }
+            ],
+            "currentValue": "workspace-write"
+          },
+          "modelSelection": {
+            "lastUsed": {
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "reasoningEffort": "high"
+            },
+            "next": {
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "reasoningEffort": "high"
+            }
+          },
+          "sessionListMetadata": {
+            "blank": false,
+            "lastPromptAt": 1790267652531
+          },
+          "imageLimits": {
+            "maxImageBytes": 20971520,
+            "maxImagesPerMessage": 20,
+            "maxMessageImageBytes": 209715200,
+            "maxImagePixels": 64000000,
+            "maxImageDimension": 8192,
+            "mediaTypes": [
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "image/gif"
+            ]
+          },
+          "inbox": {
+            "next-turn": [],
+            "next-step": []
+          },
+          "todos": "null",
+          "plan": {
+            "active": false,
+            "pending": false
+          }
+        }
+      }
+    },
+    {
+      "sessionId": "session-e59ab53c-404e-45ed-b6ff-664d982e4abb",
+      "updatedAt": 1790267182786,
+      "running": false,
+      "blank": false,
+      "cwd": "C:\\Users\\olsis\\AppData\\Local\\Temp\\remora-p0-s1-hNNbwC",
+      "projections": {
+        "asOfSeq": 17,
+        "values": {
+          "title": "Call todo_write once with a",
+          "goal": "null",
+          "tokenUsage": {
+            "uncachedInputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "contextPressure": {
+            "contextWindow": 1000000
+          },
+          "contextBreakdown": {
+            "systemTokens": 1777,
+            "toolsTokens": 7127,
+            "messageTokens": 157
+          },
+          "sessionStats": {
+            "turns": 1,
+            "steps": 1,
+            "llmMs": 0,
+            "toolMs": 0,
+            "ttftMs": 0,
+            "ttftSteps": 0,
+            "decodeMs": 0,
+            "decodeTokens": 0
+          },
+          "turnOutline": [
+            {
+              "turn": 1,
+              "seq": 4,
+              "prompt": "Call todo_write once with a single completed item…",
+              "response": ""
+            }
+          ],
+          "agentPreset": "standard",
+          "subagentCatalog": [],
+          "subagentTiming": {
+            "settledMs": 0
+          },
+          "subagent": "null",
+          "permissions": {
+            "options": [
+              {
+                "value": "read-only",
+                "name": "read-only"
+              },
+              {
+                "value": "workspace-write",
+                "name": "workspace-write"
+              },
+              {
+                "value": "danger-full-access",
+                "name": "danger-full-access"
+              }
+            ],
+            "currentValue": "workspace-write"
+          },
+          "modelSelection": {
+            "lastUsed": {
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "reasoningEffort": "high"
+            },
+            "next": {
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "reasoningEffort": "high"
+            }
+          },
+          "sessionListMetadata": {
+            "blank": false,
+            "lastPromptAt": 1790267182786
+          },
+          "imageLimits": {
+            "maxImageBytes": 20971520,
+            "maxImagesPerMessage": 20,
+            "maxMessageImageBytes": 209715200,
+            "maxImagePixels": 64000000,
+            "maxImageDimension": 8192,
+            "mediaTypes": [
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "image/gif"
+            ]
+          },
+          "inbox": {
+            "next-turn": [
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Call todo_write once with a single completed item, then stop."
+                  }
+                ],
+                "source": {
+                  "kind": "user",
+                  "rpcId": "p0-s1-2692a72c-fb08-4dea-a919-c5ff353e5673"
+                },
+                "role": "user",
+                "id": "0b0ec8dc-a261-4988-9422-d382e8e442d0"
+              }
+            ],
+            "next-step": []
+          },
+          "todos": "null",
+          "plan": {
+            "active": false,
+            "pending": false
+          }
+        }
+      }
+    },
+    {
+      "sessionId": "session-9cb383c7-5537-4166-90cb-5774c72045ae",
+      "updatedAt": 1790266981170,
+      "running": false,
+      "blank": false,
+      "cwd": "C:\\Users\\olsis\\AppData\\Local\\Temp\\remora-p0-s1-HtMV23",
+      "projections": {
+        "asOfSeq": 17,
+        "values": {
+          "title": "Call todo_write once with a",
+          "goal": "null",
+          "tokenUsage": {
+            "uncachedInputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "contextPressure": {
+            "contextWindow": 1000000
+          },
+          "contextBreakdown": {
+            "systemTokens": 1777,
+            "toolsTokens": 7127,
+            "messageTokens": 157
+          },
+          "sessionStats": {
+            "turns": 1,
+            "steps": 1,
+            "llmMs": 0,
+            "toolMs": 0,
+            "ttftMs": 0,
+            "ttftSteps": 0,
+            "decodeMs": 0,
+            "decodeTokens": 0
+          },
+          "turnOutline": [
+            {
+              "turn": 1,
+              "seq": 4,
+              "prompt": "Call todo_write once with a single completed item…",
+              "response": ""
+            }
+          ],
+          "agentPreset": "standard",
+          "subagentCatalog": [],
+          "subagentTiming": {
+            "settledMs": 0
+          },
+          "subagent": "null",
+          "permissions": {
+            "options": [
+              {
+                "value": "read-only",
+                "name": "read-only"
+              },
+              {
+                "value": "workspace-write",
+                "name": "workspace-write"
+              },
+              {
+                "value": "danger-full-access",
+                "name": "danger-full-access"
+              }
+            ],
+            "currentValue": "workspace-write"
+          },
+          "modelSelection": {
+            "lastUsed": {
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "reasoningEffort": "high"
+            },
+            "next": {
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "reasoningEffort": "high"
+            }
+          },
+          "sessionListMetadata": {
+            "blank": false,
+            "lastPromptAt": 1790266981170
+          },
+          "imageLimits": {
+            "maxImageBytes": 20971520,
+            "maxImagesPerMessage": 20,
+            "maxMessageImageBytes": 209715200,
+            "maxImagePixels": 64000000,
+            "maxImageDimension": 8192,
+            "mediaTypes": [
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "image/gif"
+            ]
+          },
+          "inbox": {
+            "next-turn": [
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Call todo_write once with a single completed item, then stop."
+                  }
+                ],
+                "source": {
+                  "kind": "user",
+                  "rpcId": "p0-s1-2b438e3a-6384-47c4-a048-c1aeb1de197e"
+                },
+                "role": "user",
+                "id": "901d9592-6007-428a-8869-79cdc7996711"
+              }
+            ],
+            "next-step": []
+          },
+          "todos": "null",
+          "plan": {
+            "active": false,
+            "pending": false
+          }
+        }
+      }
+    },
+    {
+      "sessionId": "session-6cbb2511-b5f1-4478-9a6e-266d3feb3c53",
+      "updatedAt": 1790266350250,
+      "running": false,
+      "blank": false,
+      "cwd": "C:\\Users\\olsis\\AppData\\Local\\Temp\\remora-p0-s1-RFE3zv",
+      "projections": {
+        "asOfSeq": 17,
+        "values": {
+          "title": "Call todo_write once with a",
+          "goal": "null",
+          "tokenUsage": {
+            "uncachedInputTokens": 0,
+            "outputTokens": 0,
+            "cacheReadTokens": 0,
+            "cacheWriteTokens": 0
+          },
+          "contextPressure": {
+            "contextWindow": 1000000
+          },
+          "contextBreakdown": {
+            "systemTokens": 1777,
+            "toolsTokens": 7127,
+            "messageTokens": 157
+          },
+          "sessionStats": {
+            "turns": 1,
+            "steps": 1,
+            "llmMs": 0,
+            "toolMs": 0,
+            "ttftMs": 0,
+            "ttftSteps": 0,
+            "decodeMs": 0,
+            "decodeTokens": 0
+          },
+          "turnOutline": [
+            {
+              "turn": 1,
+              "seq": 4,
+              "prompt": "Call todo_write once with a single completed item…",
+              "response": ""
+            }
+          ],
+          "agentPreset": "standard",
+          "subagentCatalog": [],
+          "subagentTiming": {
+            "settledMs": 0
+          },
+          "subagent": "null",
+          "permissions": {
+            "options": [
+              {
+                "value": "read-only",
+                "name": "read-only"
+              },
+              {
+                "value": "workspace-write",
+                "name": "workspace-write"
+              },
+              {
+                "value": "danger-full-access",
+                "name": "danger-full-access"
+              }
+            ],
+            "currentValue": "workspace-write"
+          },
+          "modelSelection": {
+            "lastUsed": {
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "reasoningEffort": "high"
+            },
+            "next": {
+              "provider": "deepseek-official",
+              "model": "deepseek-flash",
+              "reasoningEffort": "high"
+            }
+          },
+          "sessionListMetadata": {
+            "blank": false,
+            "lastPromptAt": 1790266350250
+          },
+          "imageLimits": {
+            "maxImageBytes": 20971520,
+            "maxImagesPerMessage": 20,
+            "maxMessageImageBytes": 209715200,
+            "maxImagePixels": 64000000,
+            "maxImageDimension": 8192,
+            "mediaTypes": [
+              "image/png",
+              "image/jpeg",
+              "image/webp",
+              "image/gif"
+            ]
+          },
+          "inbox": {
+            "next-turn": [
+              {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Call todo_write once with a single completed item, then stop."
+                  }
+                ],
+                "source": {
+                  "kind": "user",
+                  "rpcId": "p0-s1-ef16de1c-727c-4b2f-b35a-a220aadd1f94"
+                },
+                "role": "user",
+                "id": "45337da4-4e5c-42e3-a074-99571756a6ef"
+              }
+            ],
+            "next-step": []
+          },
+          "todos": "null",
+          "plan": {
+            "active": false,
+            "pending": false
+          }
+        }
+      }
+    }
+  ]
+}

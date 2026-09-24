@@ -1,0 +1,7 @@
+{"t":1790267271534,"kind":"boot","mode":"observe","approvalAnswer":"allowed-once","probeTool":"p0s2_probe","self":"file:///C:/Users/olsis/Desktop/lotoss/ds/spikes/p0-s2-answer-bridge/src/index.js"}
+{"t":1790267272646,"kind":"config","mode":"observe","withdrawal":"none","answerDelayMs":0,"nextTimeoutMs":4000,"approvalAnswer":"allowed-once","questionSelected":"phone"}
+{"t":1790267273550,"kind":"pre-execute/ask","toolName":"p0s2_probe","callId":"mock-call-1"}
+{"t":1790267273552,"id":"33ebd210-863f-4276-b6ed-f7eb7789eb99","kind":"approval/enter","mode":"observe","withdrawal":"none","toolName":"p0s2_probe","callId":"mock-call-1","hasSignal":true,"signalAborted":false,"agentId":"session-p0s2-e2-prompt-1790267273163"}
+{"t":1790267273553,"id":"33ebd210-863f-4276-b6ed-f7eb7789eb99","kind":"preview/live","found":true,"name":"p0s2_probe","arguments":"{\"note\":\"e2\"}"}
+{"t":1790267273554,"id":"33ebd210-863f-4276-b6ed-f7eb7789eb99","kind":"preview/inspect","found":true,"name":"p0s2_probe","arguments":"{\"note\":\"e2\"}","eventCount":19}
+{"t":1790267277560,"id":"33ebd210-863f-4276-b6ed-f7eb7789eb99","kind":"approval/next-resolved","outcome":"p0-s2:next-timeout","ms":4004,"timedOut":true}

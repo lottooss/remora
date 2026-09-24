@@ -1,0 +1,15 @@
+{
+  "experiment": "e4",
+  "pass": 1,
+  "description": "browser answers first → Remora observes next() resolution",
+  "startedAt": "2026-09-24T16:30:39.638Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": null,
+  "controlLogLines": 7,
+  "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"ecd5ee99-cd5f-4263-8227-cdb9270a7004\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"19a2bfe8-ff44-4c22-a235-7b6196017dd2\",\"agentId\":\"session-p0s2-e4-prompt-1790267447520\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"answer-post\",\"eventId\":\"19a2bfe8-ff44-4c22-a235-7b6196017dd2\",\"status\":200,\"body\":\"{\\\"type\\\":\\\"server-response\\\",\\\"rpcId\\\":\\\"s2-19a2bfe8-ff44-4c22-a235-7b6196017dd2-1790267447954\\\",\\\"result\\\":{\\\"ok\\\":true}}\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=WqMKEiqDALEO4MrvSKHtqJz30SEtPEQzZtouggw_exQ\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:30:54.611Z",
+  "ok": true
+}

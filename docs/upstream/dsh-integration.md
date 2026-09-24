@@ -135,21 +135,26 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 
 ## 8. Open questions (owned by spikes)
 
-| Id | Question | Spike |
-|---|---|---|
-| Q1 | Can an out-of-tree plugin in an npm-installed dsh call `typertGateway.invoke/stream` with strict descriptors for `session/*`, `workspace/*`, `directoryPicker/*`, `workspaceFiles/*`? | P0-S1 |
-| Q2 | Exact `SessionFollowRequest` fields (resume cursor, live-frame opt-in) and `SessionFollowFrame` variants; record fixtures | P0-S1 |
-| Q3 | Can an out-of-tree plugin register exact `/api/remora/*` Fetch routes that inherit browser authentication? | P0-S1 |
-| Q4 | `ctx.credentials` record API and `ctx.storage.domain` API for an out-of-tree owner | P0-S1 |
-| Q5 | Do root-context `prepend` listeners receive Agent-scoped waterfall dispatches first? | P0-S2 |
-| Q6 | How is a forwarded waterfall withdrawn from a browser when resolved elsewhere? Which withdrawal option works? | P0-S2 |
-| Q7 | Best way to fetch tool-call arguments by `callId` for previews (live `Session` vs `sessionController.inspect`) | P0-S2 |
-| Q8 | Permission-preset change API for phone-initiated changes (gated `high`) | P3-H2 |
-| Q9 | Is `koffi` resolvable from an out-of-tree bundle for `SetThreadExecutionState`, or is a helper process better? | P0-S6 |
-| Q10 | Install form: does `dsh plugin add ./packages/host` (linked checkout) load a second copy of the peer dependencies `@deepseek-ai/cordis` / `@deepseek-ai/schemastery` from the Remora repo's `node_modules`, and does that break Loader/schema identity? Is a packed tarball (`pnpm -F @remora/host pack`) the safer install form? | P0-S1 |
+| Id | Question | Spike | Status / Answer |
+|---|---|---|---|
+| Q1 | Can an out-of-tree plugin in an npm-installed dsh call `typertGateway.invoke/stream` with strict descriptors for `session/*`, `workspace/*`, `directoryPicker/*`, `workspaceFiles/*`? | P0-S1 | **Yes.** Verified in P0-S1; strict descriptors validate and execute. |
+| Q2 | Exact `SessionFollowRequest` fields (resume cursor, live-frame opt-in) and `SessionFollowFrame` variants; record fixtures | P0-S1 | **Documented & Recorded.** Fixtures recorded in `packages/host/test/fixtures/dsh-0.1.5-rc.3/`. Resume cursor filtered client-side. |
+| Q3 | Can an out-of-tree plugin register exact `/api/remora/*` Fetch routes that inherit browser authentication? | P0-S1 | **Yes.** `ctx.connection.registerFetchRoute` under `/api` enforces browser auth cookie. |
+| Q4 | `ctx.credentials` record API and `ctx.storage.domain` API for an out-of-tree owner | P0-S1 | **Yes.** Namespaced records `${scope}/${id}` work cleanly without private imports. |
+| Q5 | Do root-context `prepend` listeners receive Agent-scoped waterfall dispatches first? | P0-S2 | **Yes.** Verified in P0-S2; root-context listeners registered with `prepend: true` fire before child/Agent-scoped listeners. |
+| Q6 | How is a forwarded waterfall withdrawn from a browser when resolved elsewhere? Which withdrawal option works? | P0-S2 | **Derived `AbortSignal` on `next()`.** Forwarded request abort signal cancels browser UI prompt without aborting the parent turn. |
+| Q7 | Best way to fetch tool-call arguments by `callId` for previews (live `Session` vs `sessionController.inspect`) | P0-S2 | **Live `Session` state.** In-memory Session interaction state contains live tool arguments before commit. |
+| Q8 | Permission-preset change API for phone-initiated changes (gated `high`) | P3-H2 | Owned by P3-H2 |
+| Q9 | Is `koffi` resolvable from an out-of-tree bundle for `SetThreadExecutionState`, or is a helper process better? | P0-S6 | **In-process `koffi` is recommended.** Zero IPC overhead, and Windows automatically resets execution state on process termination. |
+| Q10 | Install form: does `dsh plugin add ./packages/host` (linked checkout) load a second copy of the peer dependencies `@deepseek-ai/cordis` / `@deepseek-ai/schemastery` from the Remora repo's `node_modules`, and does that break Loader/schema identity? Is a packed tarball (`pnpm -F @remora/host pack`) the safer install form? | P0-S1 | **Packed tarball is the recommended install form.** Isolates peer dependencies and prevents duplicate loader instances. |
 
 ## 9. Verification log
 
 | Date | dsh version | Verified by | Scope | Result |
 |---|---|---|---|---|
 | 2026-09-24 | 0.1.5-rc.3 (source reading) | Integrator | §2–§7 | as documented; runtime behavior pending P0 spikes |
+| 2026-09-24 | 0.1.5-rc.3 | Host role (P0-S1) | Q1–Q4, Q10 | Verified: in-process gateway calls, follow streams, credentials, storage, and packed bundle installation |
+| 2026-09-24 | 0.1.5-rc.3 | Host role (P0-S2) | Q5–Q7 | Verified: waterfall prepend ordering, AbortSignal withdrawal, and Session tool-call argument inspection |
+| 2026-09-24 | Windows 11 / Node v24 | Host role (P0-S6) | Q9 | Verified: SetThreadExecutionState via in-process koffi & non-elevated logon autostart |
+
+

@@ -1,0 +1,10 @@
+# The spike is its own pnpm workspace root so `pnpm install` inside
+# spikes/p0-s3-relay never walks up into the repo workspace.
+packages:
+  - '.'
+
+# Same as the repo root: wrangler's platform binaries (esbuild, workerd)
+# need their install scripts to run.
+allowBuilds:
+  esbuild: true
+  workerd: true

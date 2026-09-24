@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">P0-S5 Approval Key</string>
+    <string name="title">P0-S5 · Keystore approval-key spike</string>
+    <string name="preview_text">Run command: git push --force origin main</string>
+    <string name="preview_json">{"command":"git push --force origin main","cwd":"/home/owner/repo"}</string>
+
+    <string name="btn_create_key">Create key (StrongBox → TEE)</string>
+    <string name="btn_sign_once">Sign once (biometric)</string>
+    <string name="btn_sign_batch">Sign batch ×20 (biometric)</string>
+    <string name="btn_sign_no_auth">Attempt sign WITHOUT biometric (expect failure)</string>
+    <string name="btn_credential">Attempt sign via device credential (fallback assessment)</string>
+    <string name="btn_probe">Probe key validity / biometric invalidation</string>
+    <string name="btn_export">Export results JSON (file + clipboard)</string>
+
+    <string name="biometric_title">Approve spike signature</string>
+    <string name="biometric_subtitle">P0-S5 · fingerprint required for every signature</string>
+    <string name="biometric_description">Signs a fixed sample approval message with the non-exportable Keystore key.</string>
+    <string name="biometric_cancel">Cancel</string>
+    <string name="credential_title">Device credential attempt (spike)</string>
+</resources>

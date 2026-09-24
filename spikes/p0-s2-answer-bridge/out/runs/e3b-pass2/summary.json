@@ -1,0 +1,15 @@
+{
+  "experiment": "e3b",
+  "pass": 2,
+  "description": "Remora answers first → observe whether GUI reacts to approval/decided (expect stale card)",
+  "startedAt": "2026-09-24T16:29:14.860Z",
+  "tokenPresent": true,
+  "cookiePresent": true,
+  "drive": null,
+  "controlLogLines": 9,
+  "browserOutput": "[browser] {\"kind\":\"auth\",\"status\":303,\"cookieNames\":[\"dsh-auth-vPaiMc1fyDUwqWtglkLWoksa7K9zvNN09R6mzMGC5xo\"]}\n[browser] {\"kind\":\"ws-open\"}\n[browser] {\"kind\":\"ready\",\"clientId\":\"324a9b86-b10c-4902-99e1-afecff448c2d\",\"host\":{\"home\":\"C:\\\\Users\\\\olsis\"}}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"commands/change\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/added\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/activity\"}\n[browser] {\"kind\":\"waterfall\",\"event\":\"approval/request\",\"eventId\":\"2fd68a36-865d-479c-b7e0-ff8ccb1ee48d\",\"agentId\":\"session-p0s2-e3b-prompt-1790267364581\",\"requestKeys\":[\"toolName\",\"callId\",\"reason\"],\"toolName\":\"p0s2_probe\",\"questionCount\":null}\n[browser] {\"kind\":\"emit\",\"event\":\"api-session/status\"}\n",
+  "dshStdout": "dsh web: http://127.0.0.1:7718/?token=oAJn4hoKp925CuK2Q3qWKqJxAiLv-0BVur4Lx1MSrG4\n",
+  "dshStderr": "",
+  "finishedAt": "2026-09-24T16:29:31.812Z",
+  "ok": true
+}
