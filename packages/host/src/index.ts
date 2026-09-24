@@ -22,6 +22,8 @@ export * from './channel/index.ts'
 export * from './relay/index.ts'
 export * from './pairing/index.ts'
 export * from './web/index.ts'
+export * from './adapter/index.ts'
+export * from './rcp/methods/sessions.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'remora'

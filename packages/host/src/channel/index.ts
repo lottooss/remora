@@ -79,7 +79,35 @@ export class ChannelManager {
   private totalHalfOpen = 0
   private authFailures = 0
 
-  constructor(private readonly options: ChannelManagerOptions) {}
+  constructor(private readonly options: ChannelManagerOptions) {
+    options.rcpServer.setTransportSender?.((deviceId, channelId, msg) =>
+      this.sendTransport(deviceId, channelId, msg),
+    )
+  }
+
+  /** Sends an encrypted RCP transport frame to a device over an open channel. */
+  async sendTransport(deviceId: string, channelId: number, messageJson: string): Promise<boolean> {
+    const session = this.sessions.get(this.sessionKey(deviceId, channelId))
+    if (!session) return false
+
+    try {
+      const responseCiphertext = session.sendCipher.encryptWithAd(
+        new Uint8Array(0),
+        utf8ToBytes(messageJson),
+      )
+      const frameBytes = encodeDataFrame({
+        channel: channelId,
+        peerKind: PeerKind.DEVICE,
+        peerId: session.peerRawId,
+        payload: concatBytes(Uint8Array.of(RECORD_TYPE.TRANSPORT), responseCiphertext),
+      })
+      await this.options.sendFrame(frameBytes)
+      return true
+    } catch {
+      this.closeSession(deviceId, channelId)
+      return false
+    }
+  }
 
   /** Close all active sessions for a specific device (e.g. upon revocation). */
   closeDeviceChannels(deviceId: string): void {

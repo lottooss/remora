@@ -51,6 +51,10 @@ export class FakeDeviceChannel {
     reject: (err: Error) => void
     timer: NodeJS.Timeout
   }>()
+  private streamListeners = new Map<number, (item: any) => void>()
+  private streamEndListeners = new Map<number, (ok: boolean, err?: any) => void>()
+  private streamBuffers = new Map<number, any[]>()
+  private streamEndBuffers = new Map<number, { ok: boolean; err?: any }>()
 
   constructor(
     readonly channelId: number,
@@ -77,24 +81,76 @@ export class FakeDeviceChannel {
 
     try {
       const envelope = JSON.parse(jsonStr)
-      if (envelope && typeof envelope === 'object' && typeof envelope.id === 'number') {
-        const pending = this.pendingRequests.get(envelope.id)
-        if (pending) {
-          clearTimeout(pending.timer)
-          this.pendingRequests.delete(envelope.id)
-          if (envelope.ok === false && envelope.e) {
-            const err = new Error(envelope.e.message ?? 'RCP error')
-            ;(err as any).code = envelope.e.code
-            ;(err as any).details = envelope.e.details
-            pending.reject(err)
+      if (envelope && typeof envelope === 'object') {
+        if (typeof envelope.id === 'number') {
+          const pending = this.pendingRequests.get(envelope.id)
+          if (pending) {
+            clearTimeout(pending.timer)
+            this.pendingRequests.delete(envelope.id)
+            if (envelope.ok === false && envelope.e) {
+              const err = new Error(envelope.e.message ?? 'RCP error')
+              ;(err as any).code = envelope.e.code
+              ;(err as any).details = envelope.e.details
+              pending.reject(err)
+            } else {
+              pending.resolve(envelope.r)
+            }
+          }
+        }
+        if (envelope.k === 'item' && typeof envelope.sid === 'number') {
+          const listener = this.streamListeners.get(envelope.sid)
+          if (listener) {
+            listener(envelope.d)
           } else {
-            pending.resolve(envelope.r)
+            const buf = this.streamBuffers.get(envelope.sid) ?? []
+            buf.push(envelope.d)
+            this.streamBuffers.set(envelope.sid, buf)
+          }
+        }
+        if (envelope.k === 'end' && typeof envelope.sid === 'number') {
+          const endListener = this.streamEndListeners.get(envelope.sid)
+          if (endListener) {
+            endListener(envelope.ok, envelope.e)
+          } else {
+            this.streamEndBuffers.set(envelope.sid, { ok: envelope.ok, err: envelope.e })
           }
         }
       }
     } catch {
       // Invalid JSON
     }
+  }
+
+  onStreamItem(sid: number, listener: (item: any) => void): void {
+    this.streamListeners.set(sid, listener)
+    const buffered = this.streamBuffers.get(sid)
+    if (buffered) {
+      this.streamBuffers.delete(sid)
+      for (const item of buffered) {
+        listener(item)
+      }
+    }
+  }
+
+  onStreamEnd(sid: number, listener: (ok: boolean, err?: any) => void): void {
+    this.streamEndListeners.set(sid, listener)
+    const endBuf = this.streamEndBuffers.get(sid)
+    if (endBuf) {
+      this.streamEndBuffers.delete(sid)
+      listener(endBuf.ok, endBuf.err)
+    }
+  }
+
+  cancelStream(sid: number): void {
+    const cancelMsg = { k: 'cancel', sid }
+    const plaintext = utf8ToBytes(JSON.stringify(cancelMsg))
+    const ciphertext = this.sendCipher.encryptWithAd(EMPTY_AAD, plaintext)
+    const record = concatBytes(new Uint8Array([RECORD_TYPE.TRANSPORT]), ciphertext)
+    this.sendFrame(record)
+    this.streamListeners.delete(sid)
+    this.streamEndListeners.delete(sid)
+    this.streamBuffers.delete(sid)
+    this.streamEndBuffers.delete(sid)
   }
 
   async call<T = unknown>(

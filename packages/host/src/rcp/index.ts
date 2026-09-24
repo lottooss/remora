@@ -33,10 +33,22 @@ const HOST_VERSION = '1.0.0'
 /** Largest u32 id accepted in an envelope (RCP/1 §2). */
 const U32_MAX = 0xffffffff
 
+/** A sink for pushing items to an active RCP stream. */
+export interface RcpStreamSink {
+  readonly sid: number
+  readonly deviceId: string
+  readonly channelId: number
+  readonly signal: AbortSignal
+  sendItem(data: Record<string, unknown>): Promise<boolean>
+  end(ok?: boolean, error?: RcpError): Promise<boolean>
+}
+
 /** Per-request context handed to handlers; produced by the secure channel. */
 export interface RcpContext {
   deviceId: string
   channelId: number
+  sid?: number | undefined
+  stream?: RcpStreamSink | undefined
 }
 
 /** A method handler. `params` is the raw, unvalidated `p` of the request. */
@@ -48,10 +60,18 @@ export interface HostStatusProvider {
   getPairedDevicesCount: () => number
 }
 
+/** Outbound transport sender function for SC/1 frames. */
+export type RcpTransportSender = (
+  deviceId: string,
+  channelId: number,
+  messageJson: string,
+) => Promise<boolean | void> | boolean | void
+
 export interface RcpServerOptions {
   hostId: string
   hostName: string
   statusProvider?: HostStatusProvider
+  transportSender?: RcpTransportSender
   /** Clock injection point so limits and uptime stay deterministic in tests. */
   now?: () => number
 }
@@ -90,6 +110,7 @@ interface RateLimitBucket {
 
 interface TrackedStream extends RcpStream {
   readonly controller: AbortController
+  nextItemIndex: number
 }
 
 export class RcpServer {
@@ -99,12 +120,51 @@ export class RcpServer {
   private readonly streamsByDevice = new Map<string, Set<number>>()
   private readonly now: () => number
   private readonly startTime: number
+  private transportSender?: RcpTransportSender | undefined
   private nextSid = 1
 
   constructor(private readonly options: RcpServerOptions) {
     this.now = options.now ?? Date.now
     this.startTime = this.now()
+    this.transportSender = options.transportSender
     this.registerCoreMethods()
+  }
+
+  setTransportSender(sender: RcpTransportSender): void {
+    this.transportSender = sender
+  }
+
+  async sendStreamItem(sid: number, data: Record<string, unknown>): Promise<boolean> {
+    const stream = this.streams.get(sid)
+    if (!stream || stream.signal.aborted || !this.transportSender) return false
+    const n = stream.nextItemIndex++
+    const msg = JSON.stringify({ k: 'item', sid, n, d: data })
+    if (utf8ByteLength(msg) > MAX_RCP_MESSAGE_BYTES) return false
+    try {
+      await this.transportSender(stream.deviceId, stream.channelId, msg)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async sendStreamEnd(sid: number, ok?: boolean, error?: RcpError): Promise<boolean> {
+    const stream = this.streams.get(sid)
+    if (!stream) return false
+    const msg = JSON.stringify({
+      k: 'end',
+      sid,
+      ok: ok ?? true,
+      ...(error ? { e: error } : {}),
+    })
+    try {
+      if (this.transportSender) {
+        await this.transportSender(stream.deviceId, stream.channelId, msg)
+      }
+    } finally {
+      this.releaseStream(stream)
+    }
+    return true
   }
 
   /**
@@ -221,6 +281,10 @@ export class RcpServer {
       )
     }
 
+    if (isStream) {
+      return await this.openStreamWithHandler(req, ctx, handler)
+    }
+
     let result: unknown
     try {
       result = await handler(req.p, ctx)
@@ -228,17 +292,15 @@ export class RcpServer {
       return this.encodeError(req.id, toRcpError(err))
     }
 
-    if (!isStream) return this.encodeUnarySuccess(req.id, result)
-    return this.openStream(req, ctx, result)
+    return this.encodeUnarySuccess(req.id, result)
   }
 
-  private openStream(req: RequestMessage, ctx: RcpContext, result: unknown): string {
+  private async openStreamWithHandler(
+    req: RequestMessage,
+    ctx: RcpContext,
+    handler: RcpHandler,
+  ): Promise<string> {
     const sid = this.allocateSid()
-    const payload = { ...(isRecord(result) ? result : {}), sid }
-    const encoded = this.encodeSuccess(req.id, payload)
-    // Only track a stream the phone actually learned about.
-    if (typeof encoded !== 'string') return this.encodeError(req.id, encoded)
-
     const controller = new AbortController()
     const stream: TrackedStream = {
       sid,
@@ -248,11 +310,36 @@ export class RcpServer {
       openedAt: this.now(),
       controller,
       signal: controller.signal,
+      nextItemIndex: 0,
     }
     this.streams.set(sid, stream)
     const deviceStreams = this.streamsByDevice.get(stream.deviceId) ?? new Set<number>()
     deviceStreams.add(sid)
     this.streamsByDevice.set(stream.deviceId, deviceStreams)
+
+    const sink: RcpStreamSink = {
+      sid,
+      deviceId: ctx.deviceId,
+      channelId: ctx.channelId,
+      signal: controller.signal,
+      sendItem: (data) => this.sendStreamItem(sid, data),
+      end: (ok, error) => this.sendStreamEnd(sid, ok, error),
+    }
+
+    let result: unknown
+    try {
+      result = await handler(req.p, { ...ctx, sid, stream: sink })
+    } catch (err: unknown) {
+      this.releaseStream(stream)
+      return this.encodeError(req.id, toRcpError(err))
+    }
+
+    const payload = { ...(isRecord(result) ? result : {}), sid }
+    const encoded = this.encodeSuccess(req.id, payload)
+    if (typeof encoded !== 'string') {
+      this.releaseStream(stream)
+      return this.encodeError(req.id, encoded)
+    }
     return encoded
   }
 
