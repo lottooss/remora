@@ -61,6 +61,16 @@ export interface ChannelManagerOptions {
   rcpServer: RcpServer
   /** Where encoded outbound frames go (the relay connection in production). */
   sendFrame: SendFrameCallback
+  /** Optional pairing service for new device pairings. */
+  pairingService?: {
+    hasActiveAttempt(): boolean
+    handlePairingHandshake(
+      deviceId: string,
+      channelId: number,
+      peerRawId: Uint8Array,
+      msg1Bytes: Uint8Array,
+    ): Promise<boolean>
+  }
 }
 
 export class ChannelManager {
@@ -70,6 +80,15 @@ export class ChannelManager {
   private authFailures = 0
 
   constructor(private readonly options: ChannelManagerOptions) {}
+
+  /** Close all active sessions for a specific device (e.g. upon revocation). */
+  closeDeviceChannels(deviceId: string): void {
+    for (const [key, session] of this.sessions.entries()) {
+      if (session.deviceId === deviceId) {
+        this.sessions.delete(key)
+      }
+    }
+  }
 
   /** Sessions are addressed by device *and* channel: a channel id is single-use. */
   private sessionKey(deviceId: string, channelId: number): string {
@@ -118,9 +137,18 @@ export class ChannelManager {
     // A msg1 may never replace an established session on the same channel.
     if (this.sessions.has(sessionKey)) return
 
-    // Session admission (Crypto/1 §6): paired and not revoked, else drop silently.
+    // Session admission (Crypto/1 §6): paired and not revoked, else check pairing attempt.
     const device = this.options.registry.getDeviceById(deviceId)
     if (!device || device.revoked) {
+      if (this.options.pairingService?.hasActiveAttempt()) {
+        const handled = await this.options.pairingService.handlePairingHandshake(
+          deviceId,
+          channelId,
+          peerRawId,
+          msg1Bytes,
+        )
+        if (handled) return
+      }
       this.authFailures += 1
       return
     }

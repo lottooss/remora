@@ -7,8 +7,9 @@ import os from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
 import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
-import { InMemoryDeviceRegistry } from './devices/index.ts'
+import { PersistentDeviceRegistry, type DeviceRecord } from './devices/index.ts'
 import { createHostIdentity } from './identity/index.ts'
+import { PairingService } from './pairing/index.ts'
 import { RcpServer } from './rcp/index.ts'
 import { HostRelayConnection } from './relay/index.ts'
 
@@ -19,6 +20,8 @@ export * from './devices/index.ts'
 export * from './rcp/index.ts'
 export * from './channel/index.ts'
 export * from './relay/index.ts'
+export * from './pairing/index.ts'
+export * from './web/index.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'remora'
@@ -33,7 +36,7 @@ export const inject: string[] = []
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
   const identity = createHostIdentity()
-  const registry = new InMemoryDeviceRegistry()
+  const registry = new PersistentDeviceRegistry()
 
   const relay = new HostRelayConnection({
     relayUrl: resolved.relayOrigin,
@@ -46,12 +49,26 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 
+  const pairingService = new PairingService({
+    identity,
+    hostName: os.hostname(),
+    relayOrigin: resolved.relayOrigin,
+    registry,
+    sendFrame: (bytes: Uint8Array) => {
+      relay.sendFrameBytes(bytes)
+    },
+  })
+
+  registry.setOnRevoke((deviceId: string) => {
+    channelManager.closeDeviceChannels(deviceId)
+  })
+
   const rcpServer = new RcpServer({
     hostId: identity.hostId,
     hostName: os.hostname(),
     statusProvider: {
       isRelayConnected: () => relay.isConnected,
-      getPairedDevicesCount: () => registry.listDevices().filter((d) => !d.revoked).length,
+      getPairedDevicesCount: () => registry.listDevices().filter((d: DeviceRecord) => !d.revoked).length,
     },
   })
 
@@ -62,6 +79,7 @@ export function apply(ctx: Context, config: Config): void {
     sendFrame: (bytes) => {
       relay.sendFrameBytes(bytes)
     },
+    pairingService,
   })
 
   relay.attachChannelManager(channelManager)
