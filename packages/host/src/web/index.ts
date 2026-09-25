@@ -1,43 +1,101 @@
 import QRCode from 'qrcode'
 import type { DeviceRegistry } from '../devices/index.ts'
 import type { HostIdentity } from '../identity/index.ts'
-import type { PairingService } from '../pairing/index.ts'
+import type { PairingAttempt } from '../pairing/index.ts'
 import type { HostRelayConnection } from '../relay/index.ts'
 
+/**
+ * Pairing operations the management page drives. `PairingService` satisfies
+ * it structurally, so callers are not tied to the class (and tests may
+ * substitute a fake).
+ */
+export interface ManagementPairingService {
+  /** The open attempt, or null once it expired, completed, or was rejected. */
+  getActiveAttempt(): PairingAttempt | null
+  /** Whether an attempt is still open. */
+  hasActiveAttempt(): boolean
+  /** Opens a fresh attempt: relay ticket, pairing secret, QR payload. */
+  beginPairing(): Promise<PairingAttempt>
+  /** Completes the open attempt only when `sasCode` matches the displayed SAS. */
+  confirmPairing(sasCode: string): Promise<boolean>
+  /** Drops the open attempt, notifying the phone when a channel exists. */
+  rejectPairing(reason: 'rejected' | 'timeout'): Promise<void>
+}
+
+/** Host state the management page renders; the concrete services satisfy it. */
 export interface ManagementContext {
-  pairingService: PairingService
+  pairingService: ManagementPairingService
   registry: DeviceRegistry
-  relayConnection: HostRelayConnection
-  identity: HostIdentity
+  relayConnection: Pick<HostRelayConnection, 'isConnected' | 'status'>
+  identity: Pick<HostIdentity, 'hostId'>
   hostName: string
 }
 
-export function printTerminalQr(qrText: string): void {
-  if (process.stdout.isTTY) {
-    QRCode.toString(qrText, { type: 'terminal', small: true }, (err, str) => {
-      if (!err && str) {
-        process.stdout.write('\nScan this QR code with Remora on Android:\n\n')
-        process.stdout.write(str)
-        process.stdout.write('\n\n')
-      }
-    })
+/** Writable terminal surface the QR printer needs; tests inject a fake. */
+export interface TerminalQrStream {
+  readonly isTTY?: boolean | undefined
+  /** Writes one chunk to the terminal. */
+  write(chunk: string): unknown
+}
+
+/** Options for {@link printTerminalQr}. */
+export interface TerminalQrOptions {
+  /** Non-revoked devices already paired; any count above zero suppresses printing. */
+  pairedDeviceCount: number
+  /** Destination stream; defaults to `process.stdout`. */
+  stdout?: TerminalQrStream
+}
+
+/**
+ * Prints the pairing QR to the PC terminal, but only when a terminal is
+ * attached and no device is paired yet — the fallback path for pairing without
+ * the management page.
+ * @param qrText - the `remora://pair` payload the QR encodes.
+ * @param options - already-paired device count and terminal sink.
+ * @returns whether the QR was written to the terminal.
+ */
+export async function printTerminalQr(qrText: string, options: TerminalQrOptions): Promise<boolean> {
+  const stdout = options.stdout ?? process.stdout
+  if (stdout.isTTY !== true) return false
+  if (options.pairedDeviceCount > 0) return false
+  if (qrText.length === 0) return false
+  try {
+    const rendered = await QRCode.toString(qrText, { type: 'terminal', small: true })
+    stdout.write('\nScan this QR code with Remora on Android:\n\n')
+    stdout.write(rendered)
+    stdout.write('\n\n')
+    return true
+  } catch {
+    return false
   }
 }
 
+/**
+ * Renders one QR code as a self-contained SVG document (no external assets).
+ * @param qrText - the payload the QR encodes.
+ * @returns the SVG markup.
+ */
 export async function generateQrSvg(qrText: string): Promise<string> {
   return await QRCode.toString(qrText, { type: 'svg', margin: 2 })
 }
 
-export function renderDashboardHtml(
-  data: {
-    hostId: string
-    hostName: string
-    relayStatus: string
-    devices: Array<{ deviceId: string; name: string; pairedAt: number; revoked: boolean }>
-    activePairing: { sasCode?: string; expiresAt: number; state: string } | null
-    qrSvg?: string
-  },
-): string {
+/** Data the management dashboard renders; assembled by the `/api/remora` route. */
+export interface ManagementDashboardData {
+  hostId: string
+  hostName: string
+  relayStatus: string
+  devices: Array<{ deviceId: string; name: string; pairedAt: number; revoked: boolean }>
+  activePairing: { sasCode?: string; expiresAt: number; state: string } | null
+  qrSvg?: string
+}
+
+/**
+ * Renders the self-contained management page: no external assets, the QR as
+ * inline SVG, and the inline script that POSTs back to `/api/remora/*`.
+ * @param data - host, relay, device, and pairing state to display.
+ * @returns the complete HTML document.
+ */
+export function renderDashboardHtml(data: ManagementDashboardData): string {
   const devicesList =
     data.devices.length === 0
       ? '<p class="empty">No devices paired yet.</p>'

@@ -3,6 +3,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   RCP_ERROR_CODES,
+  SessionEventSchema,
   type SessionEvent,
 } from '@remora/protocol'
 import {
@@ -14,10 +15,16 @@ import {
   type TypertGateway,
 } from '../src/adapter/gateway.ts'
 import {
+  MAX_ASSISTANT_TEXT_BYTES,
+  MAX_TOOL_ARGS_BYTES,
+  MAX_TOOL_OUTPUT_BYTES,
+  TOOL_OUTPUT_HEAD_BYTES,
+  TOOL_OUTPUT_TAIL_BYTES,
   createArgsPreview,
   createOutputPreview,
   mapDshEventToRcp,
   truncateUtf8,
+  truncateUtf8HeadTail,
   type DshWireEvent,
 } from '../src/adapter/event-map.ts'
 import { LiveCoalescer } from '../src/adapter/live.ts'
@@ -27,59 +34,245 @@ import { registerSessionMethods } from '../src/rcp/methods/sessions.ts'
 
 const FIXTURES_DIR = path.resolve(__dirname, 'fixtures/dsh-0.1.5-rc.3')
 
-describe('Adapter: event-map', () => {
-  it('maps events from follow-opening.jsonl', () => {
-    const raw = fs.readFileSync(path.join(FIXTURES_DIR, 'follow-opening.jsonl'), 'utf8')
-    const lines = raw.trim().split('\n').map((l) => JSON.parse(l))
-    const snapshotFrame = lines[0]
-    expect(snapshotFrame.type).toBe('snapshot')
-
-    const mappedEvents = []
-    for (const rec of snapshotFrame.records) {
-      if (rec.type === 'event') {
-        const mapped = mapDshEventToRcp(rec.event)
-        if (mapped) mappedEvents.push(mapped)
+/** Every `event` record of a recorded follow fixture, in wire order. */
+function wireEventsFromJsonl(file: string): DshWireEvent[] {
+  const raw = fs.readFileSync(path.join(FIXTURES_DIR, file), 'utf8')
+  const events: DshWireEvent[] = []
+  for (const line of raw.trim().split('\n')) {
+    const frame = JSON.parse(line) as { type?: unknown; records?: unknown; event?: unknown }
+    if (frame.type === 'snapshot' && Array.isArray(frame.records)) {
+      for (const record of frame.records) {
+        const rec = record as { type?: unknown; event?: unknown }
+        if (rec.type === 'event' && rec.event !== undefined) events.push(rec.event as DshWireEvent)
       }
+    } else if (frame.type === 'event' && frame.event !== undefined) {
+      events.push(frame.event as DshWireEvent)
     }
+  }
+  return events
+}
 
-    expect(mappedEvents.length).toBeGreaterThan(0)
+/** Wire events of the recorded history page fixture. */
+function wireEventsFromPage(): DshWireEvent[] {
+  const page = JSON.parse(fs.readFileSync(path.join(FIXTURES_DIR, 'page.json'), 'utf8')) as {
+    records?: unknown[]
+  }
+  const events: DshWireEvent[] = []
+  for (const record of page.records ?? []) {
+    const rec = record as { type?: unknown; event?: unknown }
+    if (rec.type === 'event' && rec.event !== undefined) events.push(rec.event as DshWireEvent)
+  }
+  return events
+}
+
+function wire(
+  type: string,
+  data: unknown,
+  overrides: { seq?: number; time?: number; ignorable?: boolean } = {},
+): DshWireEvent {
+  return {
+    type,
+    seq: overrides.seq ?? 1,
+    time: overrides.time ?? 1_700_000_000_000,
+    data,
+    ...(overrides.ignorable !== undefined ? { ignorable: overrides.ignorable } : {}),
+  }
+}
+
+describe('Adapter: event-map', () => {
+  it('maps follow fixture events and keeps every mapped event decodable', () => {
+    const wireEvents = wireEventsFromJsonl('follow-opening.jsonl')
+    expect(wireEvents.length).toBeGreaterThan(0)
+
+    const mappedEvents = wireEvents
+      .map((event) => mapDshEventToRcp(event))
+      .filter((event): event is SessionEvent => event !== null)
+
     expect(mappedEvents.some((e) => e.kind === 'turn.start')).toBe(true)
     expect(mappedEvents.some((e) => e.kind === 'assistant.message')).toBe(true)
     expect(mappedEvents.some((e) => e.kind === 'turn.end')).toBe(true)
+    for (const event of mappedEvents) {
+      expect(SessionEventSchema.safeParse(event).success).toBe(true)
+    }
 
     const asst = mappedEvents.find((e) => e.kind === 'assistant.message')
-    if (asst && asst.kind === 'assistant.message') {
-      expect(asst.text).toContain('Done. Called todo_write and stopped.')
-      expect(asst.model?.model).toBe('deepseek-flash')
+    if (asst === undefined || asst.kind !== 'assistant.message') {
+      throw new Error('assistant.message missing from fixture')
+    }
+    expect(asst.text).toContain('Done. Called todo_write and stopped.')
+    expect(asst.model?.model).toBe('deepseek-flash')
+  })
+
+  it('forwards conversation content that has no RCP kind as unknown', () => {
+    const userWire = wireEventsFromJsonl('follow-live.jsonl').find((e) => e.type === 'user/message')
+    expect(userWire).toBeDefined()
+    const mapped = userWire === undefined ? null : mapDshEventToRcp(userWire)
+    expect(mapped).not.toBeNull()
+    expect(mapped?.kind).toBe('unknown')
+    if (mapped?.kind === 'unknown') {
+      expect(mapped.dshType).toBe('user/message')
+      expect(mapped.seq).toBe(userWire?.seq)
     }
   })
 
   it('maps events from page.json fixture', () => {
-    const raw = fs.readFileSync(path.join(FIXTURES_DIR, 'page.json'), 'utf8')
-    const pageData = JSON.parse(raw)
-    const mapped = []
-
-    for (const rec of pageData.records) {
-      if (rec.type === 'event') {
-        const ev = mapDshEventToRcp(rec.event)
-        if (ev) mapped.push(ev)
-      }
-    }
+    const mapped = wireEventsFromPage()
+      .map((event) => mapDshEventToRcp(event))
+      .filter((event): event is SessionEvent => event !== null)
 
     expect(mapped.length).toBeGreaterThan(0)
-    // Check unknown events fallback
-    const unknownWire: DshWireEvent = {
-      type: 'novel/dsh-extension-event',
-      seq: 999,
-      time: 123456,
-      data: { foo: 'bar' },
+    for (const event of mapped) {
+      expect(SessionEventSchema.safeParse(event).success).toBe(true)
     }
-    const mappedUnknown = mapDshEventToRcp(unknownWire)
+  })
+
+  it('maps unknown dsh events to the unknown fallback carrying dshType', () => {
+    const mappedUnknown = mapDshEventToRcp(wire('novel/dsh-extension-event', { foo: 'bar' }, { seq: 999, time: 123456 }))
     expect(mappedUnknown).not.toBeNull()
     expect(mappedUnknown?.kind).toBe('unknown')
     if (mappedUnknown && mappedUnknown.kind === 'unknown') {
       expect(mappedUnknown.dshType).toBe('novel/dsh-extension-event')
+      expect(mappedUnknown.seq).toBe(999)
+      expect(mappedUnknown.at).toBe(123456)
     }
+  })
+
+  it('returns null for ignorable and internal dsh events', () => {
+    expect(mapDshEventToRcp(wire('tool/call', { callId: 'c', name: 'bash' }, { ignorable: true }))).toBeNull()
+    for (const type of [
+      'request/header',
+      'request/context',
+      'step/start',
+      'step/end',
+      'system/message',
+      'session/title',
+      'session/title-llm-request',
+      'agent/inbox/spliced',
+      'permission/preset',
+      'sandbox/mode',
+      'approval/policy',
+      'session/end-seed',
+    ]) {
+      expect(mapDshEventToRcp(wire(type, { anything: true })), type).toBeNull()
+    }
+  })
+
+  it('returns null for a malformed envelope', () => {
+    expect(mapDshEventToRcp({ type: 'turn/start', seq: -1, time: 1 })).toBeNull()
+    expect(mapDshEventToRcp({ type: '', seq: 1, time: 1 })).toBeNull()
+    expect(mapDshEventToRcp({ type: 'turn/start', seq: 1.5, time: 1 })).toBeNull()
+  })
+
+  it('maps dsh turn end reasons to RCP turn end statuses', () => {
+    const end = (data: unknown) => mapDshEventToRcp(wire('turn/end', data, { seq: 7, time: 1_000 }))
+    expect(end({ turn: 1, reason: { kind: 'completed' } })).toMatchObject({
+      kind: 'turn.end',
+      seq: 7,
+      at: 1_000,
+      status: 'completed',
+    })
+    expect(end({ turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })).toMatchObject({
+      status: 'cancelled',
+    })
+    expect(
+      end({ turn: 1, reason: { kind: 'error', error: { message: 'provider down', code: 'PROVIDER' } } }),
+    ).toMatchObject({ status: 'error', error: 'provider down' })
+    expect(end({ turn: 1, reason: { kind: 'interrupted' } })).toMatchObject({ status: 'interrupted' })
+    expect(end({ turn: 1, reason: { kind: 'blocked' } })).toMatchObject({ status: 'unknown' })
+    expect(end({ turn: 1, reason: { kind: 'max-tokens' } })).toMatchObject({ status: 'unknown' })
+  })
+
+  it('maps a dsh tool/call record', () => {
+    const mapped = mapDshEventToRcp(
+      wire('tool/call', {
+        turn: 1,
+        step: 2,
+        callId: 'call_abc',
+        name: 'bash',
+        arguments: '{"command":"ls -la"}',
+      }),
+    )
+    expect(mapped).toMatchObject({
+      kind: 'tool.call',
+      callId: 'call_abc',
+      tool: 'bash',
+      title: 'bash',
+      args: { text: '{"command":"ls -la"}', truncated: false },
+    })
+    expect(SessionEventSchema.safeParse(mapped).success).toBe(true)
+  })
+
+  it('maps a dsh tool/result record from its message block', () => {
+    const data = (isError: boolean) => ({
+      turn: 1,
+      step: 2,
+      message: {
+        role: 'user',
+        source: { kind: 'tool', callId: 'call_abc' },
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_abc',
+            isError,
+            content: [{ type: 'text', text: 'line1\nline2' }],
+          },
+        ],
+      },
+    })
+    expect(mapDshEventToRcp(wire('tool/result', data(false)))).toMatchObject({
+      kind: 'tool.result',
+      callId: 'call_abc',
+      status: 'ok',
+      output: { text: 'line1\nline2', truncated: false },
+    })
+    expect(mapDshEventToRcp(wire('tool/result', data(true)))).toMatchObject({ status: 'error' })
+    const noBlock = mapDshEventToRcp(wire('tool/result', { message: { content: [], source: { callId: 'call_x' } } }))
+    expect(noBlock).toMatchObject({ kind: 'tool.result', callId: 'call_x', status: 'unknown' })
+    expect(SessionEventSchema.safeParse(noBlock).success).toBe(true)
+  })
+
+  it('maps assistant messages with reasoning, model, and the combined output budget', () => {
+    const mapped = mapDshEventToRcp(
+      wire('assistant/message', {
+        turn: 1,
+        step: 1,
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'thinking…' },
+            { type: 'text', text: 'the answer' },
+          ],
+          source: { kind: 'model', provider: 'deepseek-official', model: 'deepseek-flash' },
+        },
+        usage: { inputTokens: 3, outputTokens: 4 },
+      }),
+    )
+    expect(mapped).toMatchObject({
+      kind: 'assistant.message',
+      text: 'the answer',
+      reasoning: 'thinking…',
+      model: { provider: 'deepseek-official', model: 'deepseek-flash' },
+    })
+
+    const encoder = new TextEncoder()
+    const long = mapDshEventToRcp(
+      wire('assistant/message', {
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'reasoning', text: 'r'.repeat(30_000) },
+            { type: 'text', text: 'a'.repeat(30_000) },
+          ],
+          source: { kind: 'model', provider: 'p', model: 'm' },
+        },
+      }),
+    )
+    if (long === null || long.kind !== 'assistant.message') throw new Error('assistant.message missing')
+    expect(encoder.encode(long.text).length).toBe(30_000)
+    expect(encoder.encode(long.reasoning ?? '').length).toBe(2_768)
+    expect(encoder.encode(long.text).length + encoder.encode(long.reasoning ?? '').length).toBeLessThanOrEqual(
+      MAX_ASSISTANT_TEXT_BYTES,
+    )
   })
 
   it('enforces truncation on tool call args (<= 2 KiB)', () => {
@@ -90,7 +283,11 @@ describe('Adapter: event-map', () => {
     const bigString = 'x'.repeat(4000)
     const bigPreview = createArgsPreview({ data: bigString })
     expect(bigPreview.truncated).toBe(true)
-    expect(new TextEncoder().encode(bigPreview.text).length).toBeLessThanOrEqual(2048)
+    expect(new TextEncoder().encode(bigPreview.text).length).toBeLessThanOrEqual(MAX_TOOL_ARGS_BYTES)
+    expect(bigPreview.bytes).toBe(new TextEncoder().encode(JSON.stringify({ data: bigString })).length)
+
+    expect(createArgsPreview('x'.repeat(MAX_TOOL_ARGS_BYTES)).truncated).toBe(false)
+    expect(createArgsPreview('x'.repeat(MAX_TOOL_ARGS_BYTES + 1)).truncated).toBe(true)
   })
 
   it('enforces head-2k / tail-1k truncation on tool result output (> 3 KiB)', () => {
@@ -105,12 +302,62 @@ describe('Adapter: event-map', () => {
     expect(bigPrev.text).toContain('START_')
     expect(bigPrev.text).toContain('_END')
     expect(bigPrev.text).toContain('…')
+
+    expect(createOutputPreview('x'.repeat(MAX_TOOL_OUTPUT_BYTES)).truncated).toBe(false)
+    const overLimit = createOutputPreview('x'.repeat(MAX_TOOL_OUTPUT_BYTES + 1))
+    expect(overLimit.truncated).toBe(true)
+    expect(overLimit.text).toBe(
+      'x'.repeat(TOOL_OUTPUT_HEAD_BYTES) + '…' + 'x'.repeat(TOOL_OUTPUT_TAIL_BYTES),
+    )
+  })
+
+  it('truncates on UTF-8 code point boundaries without replacement characters', () => {
+    const euroPreview = createOutputPreview('€'.repeat(2_000))
+    expect(euroPreview.truncated).toBe(true)
+    expect(euroPreview.bytes).toBe(6_000)
+    expect(euroPreview.text).not.toContain('\uFFFD')
+
+    const cut = truncateUtf8('€'.repeat(3_000), 1_000)
+    expect(new TextEncoder().encode(cut).length).toBe(999)
+    expect(cut).toBe('€'.repeat(333))
+    expect(cut).not.toContain('\uFFFD')
+
+    expect(truncateUtf8HeadTail('€'.repeat(2_000), TOOL_OUTPUT_HEAD_BYTES, TOOL_OUTPUT_TAIL_BYTES)).not.toContain(
+      '\uFFFD',
+    )
   })
 
   it('enforces assistant text limit of 32 KiB', () => {
     const longText = 'y'.repeat(50_000)
-    const truncated = truncateUtf8(longText, 32768)
-    expect(new TextEncoder().encode(truncated).length).toBe(32768)
+    const truncated = truncateUtf8(longText, MAX_ASSISTANT_TEXT_BYTES)
+    expect(new TextEncoder().encode(truncated).length).toBe(MAX_ASSISTANT_TEXT_BYTES)
+  })
+
+  it('maps approval audit events and degrades unfaithful ones to unknown', () => {
+    const approvalId = '2b5f6a8e-5c1d-4a2b-9c3e-8f1a2b3c4d5e'
+    const asked = mapDshEventToRcp(
+      wire('approval/asked', { id: approvalId, toolName: 'bash', callId: 'call_1', reason: 'needs shell' }),
+    )
+    expect(asked).toMatchObject({
+      kind: 'approval.asked',
+      id: approvalId,
+      toolName: 'bash',
+      callId: 'call_1',
+    })
+    expect(asked).not.toHaveProperty('risk')
+    expect(SessionEventSchema.safeParse(asked).success).toBe(true)
+
+    expect(mapDshEventToRcp(wire('approval/asked', { id: 'approval_1', toolName: 'bash' }))?.kind).toBe('unknown')
+
+    const decided = mapDshEventToRcp(
+      wire('approval/decided', { id: approvalId, toolName: 'bash', outcome: 'allowed-once' }),
+    )
+    expect(decided).toMatchObject({ kind: 'approval.decided', toolName: 'bash', outcome: 'allowed-once' })
+
+    // The journal's own decision record has no toolName, so it cannot be represented.
+    const journalDecision = mapDshEventToRcp(wire('approval/decided', { id: approvalId, outcome: 'rejected' }))
+    expect(journalDecision?.kind).toBe('unknown')
+    if (journalDecision?.kind === 'unknown') expect(journalDecision.dshType).toBe('approval/decided')
   })
 })
 
