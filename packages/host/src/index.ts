@@ -17,6 +17,7 @@ import { printTerminalQr } from './web/index.ts'
 import { registerManagementRoutes } from './web/routes.ts'
 import { PendingRegistry, registerAnswerBridge, runAnswerBridgeSelfCheck } from './interaction/index.ts'
 import { registerInteractionMethods } from './rcp/methods/interaction.ts'
+import { DefaultPolicyGuard } from './policy/index.ts'
 
 export { Config, RemoraConfigError, resolveConfig } from './config.ts'
 export type { NotifyConfig, ResolvedConfig } from './config.ts'
@@ -32,6 +33,7 @@ export * from './adapter/index.ts'
 export * from './rcp/methods/sessions.ts'
 export * from './interaction/index.ts'
 export * from './rcp/methods/interaction.ts'
+export * from './policy/index.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'remora'
@@ -143,7 +145,14 @@ export function apply(ctx: Context, config: Config): void {
 
   void runAnswerBridgeSelfCheck(ctx)
 
-  registerInteractionMethods(rcpServer, pendingRegistry, registry)
+  const policyGuard = new DefaultPolicyGuard({
+    remoteRoots: resolved.remoteRoots,
+    approvalBiometric: resolved.approvalBiometric,
+    approvalAuth: resolved.approvalAuth,
+    allowRemoteSessionStart: resolved.allowRemoteSessionStart,
+  })
+
+  registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)
 
   const channelManager = new ChannelManager({
     identity,
