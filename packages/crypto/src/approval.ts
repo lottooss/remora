@@ -149,3 +149,31 @@ export function verifyApprovalSignature(
     return false
   }
 }
+
+/**
+ * Generates an EC P-256 keypair formatted with SubjectPublicKeyInfo DER
+ * for device approval keys (Crypto/1 §7).
+ */
+export function generateApprovalKeypair(): {
+  privateKey: Uint8Array
+  publicKeySpkiDer: Uint8Array
+} {
+  const privateKey = p256.utils.randomSecretKey()
+  const pubPoint = p256.getPublicKey(privateKey, false)
+  const spkiPrefix = new Uint8Array([
+    0x30, 0x59, 0x30, 0x13, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01, 0x06, 0x08, 0x2a, 0x86, 0x48,
+    0xce, 0x3d, 0x03, 0x01, 0x07, 0x03, 0x42, 0x00,
+  ])
+  const publicKeySpkiDer = new Uint8Array(spkiPrefix.length + pubPoint.length)
+  publicKeySpkiDer.set(spkiPrefix, 0)
+  publicKeySpkiDer.set(pubPoint, spkiPrefix.length)
+  return { privateKey, publicKeySpkiDer }
+}
+
+/**
+ * Signs an approval message with P-256 ECDSA in DER format (Crypto/1 §7).
+ */
+export function signApprovalMessage(privateKey: Uint8Array, message: Uint8Array): Uint8Array {
+  return p256.sign(message, privateKey, { lowS: false, format: 'der' })
+}
+

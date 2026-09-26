@@ -15,6 +15,8 @@ import { RcpServer } from './rcp/index.ts'
 import { HostRelayConnection } from './relay/index.ts'
 import { printTerminalQr } from './web/index.ts'
 import { registerManagementRoutes } from './web/routes.ts'
+import { PendingRegistry, registerAnswerBridge, runAnswerBridgeSelfCheck } from './interaction/index.ts'
+import { registerInteractionMethods } from './rcp/methods/interaction.ts'
 
 export { Config, RemoraConfigError, resolveConfig } from './config.ts'
 export type { NotifyConfig, ResolvedConfig } from './config.ts'
@@ -28,6 +30,8 @@ export * from './web/index.ts'
 export * from './web/routes.ts'
 export * from './adapter/index.ts'
 export * from './rcp/methods/sessions.ts'
+export * from './interaction/index.ts'
+export * from './rcp/methods/interaction.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'remora'
@@ -131,6 +135,16 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 
+  const pendingRegistry = new PendingRegistry()
+  const disposeBridge = registerAnswerBridge(ctx, {
+    registry,
+    pendingRegistry,
+  })
+
+  void runAnswerBridgeSelfCheck(ctx)
+
+  registerInteractionMethods(rcpServer, pendingRegistry, registry)
+
   const channelManager = new ChannelManager({
     identity,
     registry,
@@ -148,6 +162,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.effect(
     () => () => {
       ctx.logger.info('remora: disposing host plugin')
+      disposeBridge()
       channelManager.closeAll()
       return relay.stop()
     },
