@@ -18,6 +18,11 @@ import { registerManagementRoutes } from './web/routes.ts'
 import { PendingRegistry, registerAnswerBridge, runAnswerBridgeSelfCheck } from './interaction/index.ts'
 import { registerInteractionMethods } from './rcp/methods/interaction.ts'
 import { DefaultPolicyGuard } from './policy/index.ts'
+import { WorkspaceAdapter } from './adapter/workspaces.ts'
+import { registerWorkspaceMethods } from './rcp/methods/workspaces.ts'
+import { FsAdapter, registerFsMethods } from './rcp/methods/fs.ts'
+import { SessionAdapter } from './adapter/sessions.ts'
+import { registerSessionMethods } from './rcp/methods/sessions.ts'
 
 export { Config, RemoraConfigError, resolveConfig } from './config.ts'
 export type { NotifyConfig, ResolvedConfig } from './config.ts'
@@ -30,7 +35,10 @@ export * from './pairing/index.ts'
 export * from './web/index.ts'
 export * from './web/routes.ts'
 export * from './adapter/index.ts'
+export * from './adapter/workspaces.ts'
 export * from './rcp/methods/sessions.ts'
+export * from './rcp/methods/workspaces.ts'
+export * from './rcp/methods/fs.ts'
 export * from './interaction/index.ts'
 export * from './rcp/methods/interaction.ts'
 export * from './policy/index.ts'
@@ -153,6 +161,22 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)
+
+  const gateway = (ctx as any).typertGateway
+  if (gateway) {
+    const workspaceAdapter = new WorkspaceAdapter({ gateway, policyGuard })
+    registerWorkspaceMethods(rcpServer, workspaceAdapter)
+
+    const fsAdapter = new FsAdapter({ gateway, policyGuard })
+    registerFsMethods(rcpServer, fsAdapter)
+
+    const sessionAdapter = new SessionAdapter({
+      gateway,
+      policyGuard,
+      workspaceAdapter,
+    })
+    registerSessionMethods(rcpServer, sessionAdapter)
+  }
 
   const channelManager = new ChannelManager({
     identity,

@@ -28,6 +28,7 @@ import {
   gatewayModelCatalog,
   gatewaySessionCancel,
   gatewaySessionControl,
+  gatewaySessionCreate,
   gatewaySessionFollow,
   gatewaySessionList,
   gatewaySessionPage,
@@ -39,6 +40,8 @@ import {
   type TypertGateway,
 } from './gateway.ts'
 import { LiveCoalescer } from './live.ts'
+import type { PolicyGuard } from '../policy/index.ts'
+import type { WorkspaceAdapter } from './workspaces.ts'
 
 /** Target max serialized byte budget for a snapshot FollowItem frame (40 KiB). */
 const SNAPSHOT_BUDGET_BYTES = 40_000
@@ -53,13 +56,18 @@ export interface SessionAdapterOptions {
   gateway: TypertGateway
   streamCoalesceMs?: number
   now?: () => number
+  policyGuard?: PolicyGuard | undefined
+  workspaceAdapter?: WorkspaceAdapter | undefined
 }
 
 export class SessionAdapter {
   private readonly gateway: TypertGateway
   private readonly coalesceMs: number
   private readonly now: () => number
+  private readonly policyGuard?: PolicyGuard | undefined
+  private readonly workspaceAdapter?: WorkspaceAdapter | undefined
   private readonly promptDedupeCache = new Map<string, PromptDedupeEntry>()
+  private readonly sessionCreateDedupeCache = new Map<string, { result: { sessionId: string; workspaceId: string }; time: number }>()
   /** Cache of text events by sessionId:seq for eventText reads. */
   private readonly eventTextCache = new Map<string, string>()
   /** Cache of tool output by sessionId:callId for toolOutput reads. */
@@ -69,6 +77,8 @@ export class SessionAdapter {
     this.gateway = options.gateway
     this.coalesceMs = options.streamCoalesceMs ?? 50
     this.now = options.now ?? Date.now
+    this.policyGuard = options.policyGuard
+    this.workspaceAdapter = options.workspaceAdapter
   }
 
   /**
@@ -428,6 +438,78 @@ export class SessionAdapter {
     const eof = offset + sliceBytes.length >= total
 
     return { text, offset, total, eof }
+  }
+
+  /**
+   * sessions.create (RCP/1 §6)
+   * Guarded:
+   * - allowRemoteSessionStart must be true
+   * - if workspace is { path }, must be inside roots and canonicalized
+   * - if workspace is { id }, must exist (even if outside roots)
+   * Idempotent by requestId.
+   */
+  async create(params: {
+    requestId: string
+    workspace: { id: string } | { path: string }
+    model?: ModelRef | undefined
+    preset?: string | undefined
+  }): Promise<{ sessionId: string; workspaceId: string }> {
+    if (this.policyGuard && !this.policyGuard.allowRemoteSessionStart) {
+      throw new RcpMethodError(
+        createRcpError(RCP_ERROR_CODES.forbidden, 'remote session start is disabled'),
+      )
+    }
+
+    const cached = this.sessionCreateDedupeCache.get(params.requestId)
+    if (cached) {
+      return cached.result
+    }
+
+    let workspaceId: string
+    if ('path' in params.workspace) {
+      const rawPath = params.workspace.path
+      if (this.policyGuard) {
+        const canonical = this.policyGuard.canonicalizePath(rawPath)
+        if (!this.policyGuard.checkPathAccess(canonical)) {
+          throw new RcpMethodError(
+            createRcpError(RCP_ERROR_CODES.forbidden, 'path outside roots'),
+          )
+        }
+      }
+      if (!this.workspaceAdapter) {
+        throw new RcpMethodError(
+          createRcpError(RCP_ERROR_CODES.internal_error, 'workspace adapter unavailable'),
+        )
+      }
+      const wsRes = await this.workspaceAdapter.create({
+        path: rawPath,
+        requestId: `${params.requestId}:ws`,
+      })
+      workspaceId = wsRes.workspace.id
+    } else {
+      workspaceId = params.workspace.id
+      if (this.workspaceAdapter) {
+        const existing = await this.workspaceAdapter.get(workspaceId)
+        if (!existing) {
+          throw new RcpMethodError(
+            createRcpError(RCP_ERROR_CODES.not_found, `workspace '${workspaceId}' not found`),
+          )
+        }
+      }
+    }
+
+    const sessionRes = await gatewaySessionCreate(this.gateway, {
+      workspaceId,
+      agentPreset: params.preset,
+    })
+
+    const result = {
+      sessionId: sessionRes.sessionId,
+      workspaceId,
+    }
+
+    this.sessionCreateDedupeCache.set(params.requestId, { result, time: this.now() })
+    return result
   }
 
   /**

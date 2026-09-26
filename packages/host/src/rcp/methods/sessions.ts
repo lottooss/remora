@@ -1,6 +1,7 @@
 import {
   RCP_ERROR_CODES,
   SessionsCancelParamsSchema,
+  SessionsCreateParamsSchema,
   SessionsEventTextParamsSchema,
   SessionsFollowParamsSchema,
   SessionsGetParamsSchema,
@@ -28,6 +29,14 @@ function parseSessionsSearchParams(p: unknown): { query: string } {
 }
 
 export function registerSessionMethods(rcpServer: RcpServer, adapter: SessionAdapter): void {
+  rcpServer.registerMethod('sessions.create', async (p) => {
+    const parsed = SessionsCreateParamsSchema.safeParse(p)
+    if (!parsed.success) {
+      throw new RcpMethodError(createRcpError(RCP_ERROR_CODES.invalid_params, 'invalid sessions.create params'))
+    }
+    return await adapter.create(parsed.data)
+  })
+
   rcpServer.registerMethod('sessions.list', async (p) => {
     const parsed = SessionsListParamsSchema.safeParse(p ?? {})
     if (!parsed.success) {

@@ -35,6 +35,12 @@ export const DSH_ERROR_CODE_MAP: Readonly<Record<string, string>> = Object.freez
   'session/fork-unavailable': RCP_ERROR_CODES.conflict,
   'session/invalid-time-zone': RCP_ERROR_CODES.invalid_params,
   'session/workspace-attach-failed': RCP_ERROR_CODES.conflict,
+  'workspace/invalid-path': RCP_ERROR_CODES.invalid_params,
+  'workspace/name-conflict': RCP_ERROR_CODES.conflict,
+  'directory-picker/unavailable': RCP_ERROR_CODES.internal_error,
+  'directory-picker/unreadable': RCP_ERROR_CODES.forbidden,
+  'directory-picker/exists': RCP_ERROR_CODES.conflict,
+  'directory-picker/create-failed': RCP_ERROR_CODES.internal_error,
   'gateway/cancelled': RCP_ERROR_CODES.cancelled,
   'gateway/not-found': RCP_ERROR_CODES.method_not_found,
   'gateway/signature-invalid': RCP_ERROR_CODES.invalid_params,
@@ -322,5 +328,79 @@ export async function gatewaySessionControl(
       args: {},
       ...(signal !== undefined ? { signal } : {}),
     })
+  })
+}
+
+export async function gatewayWorkspaceFollow(
+  gateway: TypertGateway,
+  signal?: AbortSignal,
+): Promise<AsyncIterable<unknown>> {
+  return withGatewayError(async () => {
+    return await gateway.stream({
+      namespace: 'workspace',
+      method: 'follow',
+      args: {},
+      ...(signal !== undefined ? { signal } : {}),
+    })
+  })
+}
+
+export async function gatewayWorkspaceCreate(
+  gateway: TypertGateway,
+  args: { path: string },
+  signal?: AbortSignal,
+): Promise<{ workspace: { workspaceId: string; title: string; path: string }; created: boolean }> {
+  return withGatewayError(async () => {
+    const res = await gateway.invoke({
+      namespace: 'workspace',
+      method: 'create',
+      args: { path: args.path },
+      ...(signal !== undefined ? { signal } : {}),
+    })
+    return res as { workspace: { workspaceId: string; title: string; path: string }; created: boolean }
+  })
+}
+
+export async function gatewayDirectoryPickerList(
+  gateway: TypertGateway,
+  args: { path?: string | undefined },
+  signal?: AbortSignal,
+): Promise<{
+  path: string
+  crumbs: { name: string; path: string }[]
+  entries: { name: string; path: string; hidden: boolean }[]
+  truncated: boolean
+}> {
+  return withGatewayError(async () => {
+    const payload: Record<string, unknown> = {}
+    if (args.path !== undefined) payload['path'] = args.path
+    const res = await gateway.invoke({
+      namespace: 'directoryPicker',
+      method: 'list',
+      args: payload,
+      ...(signal !== undefined ? { signal } : {}),
+    })
+    return res as {
+      path: string
+      crumbs: { name: string; path: string }[]
+      entries: { name: string; path: string; hidden: boolean }[]
+      truncated: boolean
+    }
+  })
+}
+
+export async function gatewayDirectoryPickerCreateDirectory(
+  gateway: TypertGateway,
+  args: { path: string; name: string },
+  signal?: AbortSignal,
+): Promise<string> {
+  return withGatewayError(async () => {
+    const res = await gateway.invoke({
+      namespace: 'directoryPicker',
+      method: 'createDirectory',
+      args: { path: args.path, name: args.name },
+      ...(signal !== undefined ? { signal } : {}),
+    })
+    return res as string
   })
 }
