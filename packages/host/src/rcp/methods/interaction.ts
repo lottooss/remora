@@ -13,7 +13,7 @@ import {
 } from '@remora/crypto'
 import type { DeviceRegistry } from '../../devices/index.ts'
 import type { PendingRegistry } from '../../interaction/pending.ts'
-import type { PolicyGuard } from '../../interaction/race.ts'
+import type { PolicyGuard } from '../../policy/index.ts'
 import { RcpMethodError, type RcpServer } from '../index.ts'
 
 export function registerInteractionMethods(
@@ -114,11 +114,14 @@ export function registerInteractionMethods(
           approvalId: parsed.data.id,
           outcome: parsed.data.outcome,
           argsDigest: parsed.data.argsDigest,
+          expectedArgsDigest: item.argsDigest,
           issuedAt: parsed.data.issuedAt,
-          signature: parsed.data.sig,
-          deviceId: ctx.deviceId,
+          sig: parsed.data.sig,
+          approvalPublicKey: device.approvalPublicKey,
+          risk: item.risk,
+          now,
         })
-        if (!verifyRes.valid) {
+        if (!verifyRes.ok) {
           throw new RcpMethodError(createRcpError('signature_invalid', verifyRes.reason ?? 'signature verification failed'))
         }
       } else {

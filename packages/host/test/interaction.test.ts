@@ -73,7 +73,7 @@ describe('P3-H1: AnswerBridge — Approvals and Questions', () => {
     }
 
     const next = () =>
-      new Promise<string>((resolve, reject) => {
+      new Promise<string>((_resolve, reject) => {
         // PC chain waits, but should be aborted when phone answers
         req.signal.addEventListener('abort', () => {
           pcChainAborted = true
@@ -218,8 +218,10 @@ describe('P3-H1: AnswerBridge — Approvals and Questions', () => {
       name: 'Phone',
       noisePublicKey: new Uint8Array(32),
       devicePsk: new Uint8Array(32),
-      approvalPublicKey: publicKeySpkiDer,
+      pushKey: new Uint8Array(32),
       createdAt: Date.now(),
+      lastSeenAt: Date.now(),
+      approvalPublicKey: publicKeySpkiDer,
       revoked: false,
     })
 

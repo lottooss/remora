@@ -52,8 +52,14 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import io.github.lottooss.remora.core.data.InteractionRepository
 import io.github.lottooss.remora.core.data.LiveDeltaOverlay
 import io.github.lottooss.remora.core.data.ModelRef
+import io.github.lottooss.remora.core.data.PendingApproval
+import io.github.lottooss.remora.core.data.PendingInteraction
+import io.github.lottooss.remora.core.data.PendingQuestion
 import io.github.lottooss.remora.core.data.SessionEvent
 import io.github.lottooss.remora.core.data.SessionRepository
 import io.github.lottooss.remora.core.data.SyncEngine
@@ -85,12 +91,31 @@ fun ConversationScreen(
     onSendPrompt: ((text: String, delivery: String) -> Unit)? = null,
     onCancelTurn: (() -> Unit)? = null,
     onLoadOlder: (() -> Unit)? = null,
+    interactionRepository: InteractionRepository? = null,
+    onApprove: ((PendingApproval) -> Unit)? = null,
+    onReject: ((PendingApproval) -> Unit)? = null,
+    onSubmitQuestion: ((questionId: String, answers: List<String>, text: String?) -> Unit)? = null,
 ) {
     val repoEvents by sessionRepository?.getEventsFlow(sessionId)?.collectAsState()
         ?: remember { mutableStateOf(initialEvents ?: emptyList()) }
 
     val liveOverlay by syncEngine?.getLiveOverlay(sessionId)?.collectAsState()
         ?: remember { mutableStateOf(null) }
+
+    val pendingInteractions by interactionRepository?.getPendingForSession(sessionId)?.collectAsState(initial = emptyList())
+        ?: remember { mutableStateOf(emptyList()) }
+    val pendingApproval = pendingInteractions.filterIsInstance<PendingInteraction.Approval>().firstOrNull()?.approval
+    val pendingQuestion = pendingInteractions.filterIsInstance<PendingInteraction.Question>().firstOrNull()?.question
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(interactionRepository) {
+        interactionRepository?.resolvedEvents?.collect { notice ->
+            if (notice.by != "phone") {
+                snackbarHostState.showSnackbar("Resolved on ${notice.by}")
+            }
+        }
+    }
 
     val hasOlder = sessionRepository?.hasOlder(sessionId) ?: false
 
@@ -114,6 +139,7 @@ fun ConversationScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             Column {
                 TopAppBar(
@@ -232,27 +258,42 @@ fun ConversationScreen(
                 }
             }
 
-            // Composer bar
-            ComposerBar(
-                text = inputText,
-                onTextChange = { inputText = it },
-                delivery = deliveryMode,
-                onDeliveryChange = { deliveryMode = it },
-                isEnabled = isOnline,
-                isRunning = isRunning,
-                onSend = {
-                    val prompt = inputText.trim()
-                    if (prompt.isNotBlank() && isOnline) {
-                        onSendPrompt?.invoke(prompt, deliveryMode)
-                        inputText = ""
-                    }
-                },
-                onStop = {
-                    if (isOnline) {
-                        onCancelTurn?.invoke()
-                    }
-                },
-            )
+            // Approval / Question Takeover or Composer bar
+            if (pendingApproval != null) {
+                ApprovalTakeoverCard(
+                    approval = pendingApproval,
+                    onApprove = { onApprove?.invoke(it) },
+                    onReject = { onReject?.invoke(it) },
+                )
+            } else if (pendingQuestion != null) {
+                QuestionTakeoverCard(
+                    question = pendingQuestion,
+                    onSubmit = { options, customText ->
+                        onSubmitQuestion?.invoke(pendingQuestion.id, options, customText)
+                    },
+                )
+            } else {
+                ComposerBar(
+                    text = inputText,
+                    onTextChange = { inputText = it },
+                    delivery = deliveryMode,
+                    onDeliveryChange = { deliveryMode = it },
+                    isEnabled = isOnline,
+                    isRunning = isRunning,
+                    onSend = {
+                        val prompt = inputText.trim()
+                        if (prompt.isNotBlank() && isOnline) {
+                            onSendPrompt?.invoke(prompt, deliveryMode)
+                            inputText = ""
+                        }
+                    },
+                    onStop = {
+                        if (isOnline) {
+                            onCancelTurn?.invoke()
+                        }
+                    },
+                )
+            }
         }
     }
 }

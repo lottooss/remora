@@ -10,10 +10,10 @@ import { contains } from './paths.ts'
 export type ApprovalRisk = 'normal' | 'high'
 
 export interface RiskClassificationContext {
-  sessionWorkspaceRoot?: string
-  lowRiskTools?: ReadonlySet<string>
-  knownTools?: ReadonlySet<string>
-  destructivePatterns?: readonly RegExp[]
+  sessionWorkspaceRoot?: string | undefined
+  lowRiskTools?: ReadonlySet<string> | undefined
+  knownTools?: ReadonlySet<string> | undefined
+  destructivePatterns?: readonly RegExp[] | undefined
 }
 
 /** Standard safe read-only tools that are always normal risk. */

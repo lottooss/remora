@@ -1,22 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { computeArgsDigest } from '@remora/crypto'
 import type { PendingRegistry } from './pending.ts'
-
-export interface PolicyGuard {
-  evaluateApprovalRisk?(params: {
-    toolName: string
-    command?: string | undefined
-    path?: string | undefined
-  }): { risk: 'normal' | 'high'; requiresSignature: boolean }
-  verifyApprovalSignature?(params: {
-    approvalId: string
-    outcome: 'allowed-once' | 'rejected'
-    argsDigest: string
-    issuedAt: number
-    signature?: string | undefined
-    deviceId: string
-  }): { valid: boolean; reason?: string | undefined }
-}
+import type { PolicyGuard } from '../policy/index.ts'
 
 export interface RaceApprovalOptions {
   approvalTimeoutMs?: number | undefined
@@ -101,9 +86,13 @@ export async function raceApproval(
   const preview = extractPreview(req, options.findPreview)
   const argsDigest = computeArgsDigest(preview)
 
-  const riskEval = options.policyGuard?.evaluateApprovalRisk?.({
-    toolName: req.toolName,
-  }) ?? { risk: 'normal', requiresSignature: false }
+  const riskEval = options.policyGuard
+    ? options.policyGuard.classifyRisk(req.toolName, req.arguments ?? req.params)
+    : 'normal'
+  const risk = riskEval
+  const requiresSignature = options.policyGuard
+    ? (options.policyGuard.approvalBiometric === 'all' || (options.policyGuard.approvalBiometric === 'high' && risk === 'high'))
+    : false
 
   const now = Date.now()
   pendingRegistry.add({
@@ -116,8 +105,8 @@ export async function raceApproval(
     reason: req.reason,
     preview,
     argsDigest,
-    risk: riskEval.risk,
-    requiresSignature: riskEval.requiresSignature,
+    risk,
+    requiresSignature,
     createdAt: now,
     expiresAt: now + timeoutMs,
   })

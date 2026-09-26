@@ -1,7 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { DeviceRegistry } from '../devices/index.ts'
 import type { PendingRegistry } from './pending.ts'
-import { raceApproval, raceQuestion, type PolicyGuard } from './race.ts'
+import { raceApproval, raceQuestion } from './race.ts'
+import type { PolicyGuard } from '../policy/index.ts'
 
 export interface AnswerBridgeOptions {
   registry: DeviceRegistry

@@ -2,7 +2,7 @@
  * Signature verification and single-use enforcement for Policy Guard (ADR-0007, Crypto/1 §7).
  */
 import {
-  ApprovalOutcome,
+  type ApprovalOutcome,
   buildCanonicalApprovalMessage,
   decodeBase64Url,
   utf8ToBytes,
@@ -21,15 +21,15 @@ export interface VerifyApprovalParams {
   issuedAt: number
   risk: ApprovalRisk
   approvalBiometric: 'high' | 'all' | 'never'
-  approvalPublicKey?: Uint8Array | null
-  sig?: string
-  now?: number
+  approvalPublicKey?: Uint8Array | null | undefined
+  sig?: string | undefined
+  now?: number | undefined
 }
 
 export interface SignatureVerificationResult {
   ok: boolean
-  error?: 'signature_required' | 'signature_invalid' | 'expired' | 'digest_mismatch' | 'already_used'
-  reason?: string
+  error?: 'signature_required' | 'signature_invalid' | 'expired' | 'digest_mismatch' | 'already_used' | undefined
+  reason?: string | undefined
 }
 
 /**
