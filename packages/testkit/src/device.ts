@@ -7,10 +7,15 @@ import {
   concatBytes,
   createInitiatorHandshake,
   decodeBase32,
+  decodeBase64Url,
   deriveEndpointId,
+  derivePairPsk,
+  deriveSasCode,
+  encodeBase32,
   encodeBase64Url,
   generateKeypair,
   getRelayPublicKey,
+  parsePairingQr,
   randomBytes,
   utf8ToBytes,
   type CipherState,
@@ -141,6 +146,31 @@ export class FakeDeviceChannel {
     }
   }
 
+  collectStreamItems(
+    sid: number,
+    predicate: (items: any[]) => boolean,
+    timeoutMs = 5000,
+  ): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const items: any[] = []
+      const timer = setTimeout(() => {
+        reject(
+          new Error(
+            `collectStreamItems timed out after ${timeoutMs}ms, collected ${items.length} items: ${JSON.stringify(items)}`,
+          ),
+        )
+      }, timeoutMs)
+
+      this.onStreamItem(sid, (item) => {
+        items.push(item)
+        if (predicate(items)) {
+          clearTimeout(timer)
+          resolve(items)
+        }
+      })
+    })
+  }
+
   cancelStream(sid: number): void {
     const cancelMsg = { k: 'cancel', sid }
     const plaintext = utf8ToBytes(JSON.stringify(cancelMsg))
@@ -222,7 +252,7 @@ export class FakeDevice {
   readonly relayKeypair: Keypair
   readonly noiseKeypair: Keypair
   readonly deviceId: string
-  readonly devicePsk: Uint8Array
+  devicePsk: Uint8Array
   readonly name: string
 
   private link: RelayLink | null = null
@@ -232,6 +262,7 @@ export class FakeDevice {
     reject: (err: Error) => void
     timer: NodeJS.Timeout
   }>()
+  private pairingResultHandlers = new Map<number, (recordData: Uint8Array) => void>()
 
   constructor(options: FakeDeviceOptions = {}) {
     if (options.relayKeypair) {
@@ -391,6 +422,101 @@ export class FakeDevice {
     return channel
   }
 
+  async startPairing(
+    qrPayload: string,
+    relayHttpUrl?: string,
+  ): Promise<{
+    sasCode: string
+    waitForResult: (timeoutMs?: number) => Promise<{ ok: true; devicePsk: Uint8Array } | { ok: false; reason: string }>
+  }> {
+    const qrData = parsePairingQr(qrPayload)
+    const httpOrigin = relayHttpUrl ?? qrData.relayOrigin
+    const ticketId = `t_${encodeBase32(qrData.ticket.subarray(0, 16))}`
+    const pairPsk = derivePairPsk(qrData.pairingSecret, ticketId)
+
+    // Enroll at relay
+    await this.enrollAtRelay(httpOrigin, encodeBase64Url(qrData.ticket))
+
+    // Connect to relay if needed
+    if (!this.isConnected) {
+      const wsUrl = httpOrigin.replace(/^http/, 'ws')
+      await this.connectToRelay(wsUrl)
+    }
+
+    const channelId = 1
+    const hostRawId = decodeBase32(qrData.hostId.slice(2))
+    const prologue = utf8ToBytes(`remora/1\x00pair\x00${qrData.hostId}\x00${this.deviceId}`)
+
+    const initiator = createInitiatorHandshake({
+      staticKey: this.noiseKeypair.privateKey,
+      remoteStaticKey: qrData.hostNoisePub,
+      psk: pairPsk,
+      prologue,
+    })
+
+    const msg1Payload = utf8ToBytes(
+      JSON.stringify({
+        v: 1,
+        purpose: 'pair',
+        deviceId: this.deviceId,
+        relayPub: encodeBase64Url(this.relayKeypair.publicKey),
+        name: this.name,
+      }),
+    )
+    const msg1Bytes = initiator.writeMessage(msg1Payload)
+    const msg1Record = concatBytes(new Uint8Array([RECORD_TYPE.HANDSHAKE_MSG1]), msg1Bytes)
+
+    const waitMsg2 = new Promise<Uint8Array>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.handshakeWaiters.delete(channelId)
+        reject(new Error(`Pairing handshake msg2 timed out`))
+      }, 10_000)
+      this.handshakeWaiters.set(channelId, { resolve, reject, timer })
+    })
+
+    this.link!.sendData(
+      { peerKind: PeerKind.HOST, peerId: hostRawId },
+      channelId,
+      msg1Record,
+    )
+
+    const msg2Body = await waitMsg2
+    initiator.readMessage(msg2Body)
+
+    const sasCode = deriveSasCode(qrData.hostNoisePub, this.noiseKeypair.publicKey, pairPsk)
+    const recvCipher = initiator.result.recvCipher
+
+    const waitForResult = (timeoutMs = 10_000) => {
+      return new Promise<{ ok: true; devicePsk: Uint8Array } | { ok: false; reason: string }>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          this.pairingResultHandlers.delete(channelId)
+          reject(new Error(`Pairing result timed out after ${timeoutMs}ms`))
+        }, timeoutMs)
+
+        this.pairingResultHandlers.set(channelId, (recordData: Uint8Array) => {
+          clearTimeout(timer)
+          this.pairingResultHandlers.delete(channelId)
+          try {
+            const plaintext = recvCipher.decryptWithAd(new Uint8Array(0), recordData)
+            const msg = JSON.parse(new TextDecoder().decode(plaintext))
+            if (msg.m === 'pair.complete' && msg.p?.devicePsk) {
+              this.devicePsk = decodeBase64Url(msg.p.devicePsk)
+              resolve({ ok: true, devicePsk: this.devicePsk })
+            } else if (msg.m === 'pair.rejected') {
+              resolve({ ok: false, reason: msg.p?.reason ?? 'rejected' })
+            } else {
+              reject(new Error(`Unexpected pairing message: ${JSON.stringify(msg)}`))
+            }
+          } catch (err) {
+            reject(err)
+          }
+        })
+      })
+    }
+
+    return { sasCode, waitForResult }
+  }
+
   private handleIncomingDataFrame(frame: DataFrame): void {
     if (frame.payload.length < 1) return
     const recordType = frame.payload[0]
@@ -404,6 +530,11 @@ export class FakeDevice {
         waiter.resolve(recordData)
       }
     } else if (recordType === RECORD_TYPE.TRANSPORT) {
+      const pairingHandler = this.pairingResultHandlers.get(frame.channel)
+      if (pairingHandler) {
+        pairingHandler(recordData)
+        return
+      }
       const channel = this.channels.get(frame.channel)
       if (channel) {
         channel.handleTransportPayload(recordData)
@@ -426,6 +557,7 @@ export class FakeDevice {
       waiter.reject(new Error('Device disconnected'))
     }
     this.handshakeWaiters.clear()
+    this.pairingResultHandlers.clear()
 
     if (this.link) {
       await this.link.stop?.()

@@ -1,5 +1,6 @@
 import {
   buildPairingQr,
+  deriveEndpointId,
   derivePairPsk,
   deriveSasCode,
   encodeBase32,
@@ -154,8 +155,10 @@ export class PairingService {
       if (parsedMsg1.v !== 1 || parsedMsg1.purpose !== 'pair') return false
       if (parsedMsg1.deviceId !== deviceId) return false
       if (parsedMsg1.relayPub) {
-        const derived = `d_${encodeBase32(decodeBase64Url(parsedMsg1.relayPub).subarray(0, 16))}`
-        if (derived !== deviceId) return false
+        const pub = decodeBase64Url(parsedMsg1.relayPub)
+        const derived1 = deriveEndpointId('d_', pub)
+        const derived2 = `d_${encodeBase32(pub.subarray(0, 16))}`
+        if (derived1 !== deviceId && derived2 !== deviceId) return false
       }
 
       // Write msg2

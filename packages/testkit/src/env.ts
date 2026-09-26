@@ -70,6 +70,7 @@ export class E2eEnvironment {
   relayChild: ChildProcess | null = null
   dshChild: ChildProcess | null = null
   tempDshHome: string | null = null
+  tempRelayDir: string | null = null
 
   relayPort = 0
   dshPort = 0
@@ -107,6 +108,7 @@ export class E2eEnvironment {
       await this.mockLlm.start()
 
       // 2. Start Relay (Wrangler dev)
+      this.tempRelayDir = mkdtempSync(path.join(os.tmpdir(), 'remora-relay-e2e-'))
       this.relayHttpUrl = `http://127.0.0.1:${this.relayPort}`
       this.relayWsUrl = `ws://127.0.0.1:${this.relayPort}/v1/connect`
       await this.startRelay()
@@ -125,9 +127,14 @@ export class E2eEnvironment {
     const isWindows = process.platform === 'win32'
     const npxCmd = isWindows ? 'npx.cmd' : 'npx'
 
+    const args = ['wrangler', 'dev', '--port', String(this.relayPort), '--ip', '127.0.0.1']
+    if (this.tempRelayDir) {
+      args.push('--persist-to', this.tempRelayDir)
+    }
+
     this.relayChild = spawn(
       npxCmd,
-      ['wrangler', 'dev', '--port', String(this.relayPort), '--ip', '127.0.0.1'],
+      args,
       {
         cwd: RELAY_DIR,
         env: {
@@ -303,6 +310,15 @@ export class E2eEnvironment {
         // ignore
       }
       this.tempDshHome = null
+    }
+
+    if (this.tempRelayDir && existsSync(this.tempRelayDir)) {
+      try {
+        rmSync(this.tempRelayDir, { recursive: true, force: true })
+      } catch {
+        // ignore
+      }
+      this.tempRelayDir = null
     }
   }
 }
