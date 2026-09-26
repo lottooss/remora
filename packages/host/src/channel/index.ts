@@ -324,6 +324,10 @@ export class ChannelManager {
     this.totalHalfOpen = 0
   }
 
+  hasSession(deviceId: string, channelId: number): boolean {
+    return this.sessions.has(this.sessionKey(deviceId, channelId))
+  }
+
   getActiveSessionsCount(): number {
     return this.sessions.size
   }
