@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
@@ -22,6 +23,7 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
         versionName = "0.0.0"
+        buildConfigField("boolean", "HAS_GOOGLE_SERVICES", hasGoogleServices.toString())
     }
 
     buildTypes {
@@ -34,11 +36,15 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:crypto"))
     implementation(project(":core:data"))
     implementation(project(":core:security"))
     implementation(project(":core:ui"))
@@ -62,10 +68,12 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    if (hasGoogleServices) {
-        implementation(platform(libs.firebase.bom))
-        implementation(libs.firebase.messaging)
-    }
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
+    testImplementation(libs.truth)
 }

@@ -47,14 +47,14 @@ function createNotifier(options: {
   devices?: DeviceRecord[]
   isDeviceConnected?: (deviceId: string) => boolean
   isDeviceForegrounded?: (deviceId: string, sessionId?: string) => boolean
-}): { notifier: HostNotifier; pushes: CapturedPush[]; registry: InMemoryDeviceRegistry; prefsStore: InMemoryNotifyPrefsStore } {
+} = {}): { notifier: HostNotifier; pushes: CapturedPush[]; registry: InMemoryDeviceRegistry; prefsStore: InMemoryNotifyPrefsStore } {
+  const devices = options.devices ?? [createDevice()]
   const registry = new InMemoryDeviceRegistry()
-  for (const device of options.devices ?? [createDevice()]) {
+  for (const device of devices) {
     registry.addDevice(device)
   }
   const prefsStore = new InMemoryNotifyPrefsStore()
   const pushes: CapturedPush[] = []
-  const devices = options.devices ?? [createDevice()]
   const notifier = new HostNotifier({
     registry,
     prefsStore,

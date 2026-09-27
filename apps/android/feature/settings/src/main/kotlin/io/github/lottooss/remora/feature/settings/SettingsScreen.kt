@@ -47,6 +47,17 @@ fun SettingsScreen(
     isApprovalKeyValid: Boolean = true,
     isRotatingKey: Boolean = false,
     onRotateApprovalKey: (() -> Unit)? = null,
+    isPushConfigured: Boolean = true,
+    isApprovalsEnabled: Boolean = true,
+    onToggleApprovals: ((Boolean) -> Unit)? = null,
+    isQuestionsEnabled: Boolean = true,
+    onToggleQuestions: ((Boolean) -> Unit)? = null,
+    isTurnEventsEnabled: Boolean = true,
+    onToggleTurnEvents: ((Boolean) -> Unit)? = null,
+    isErrorsEnabled: Boolean = true,
+    onToggleErrors: ((Boolean) -> Unit)? = null,
+    isHostOfflineEnabled: Boolean = true,
+    onToggleHostOffline: ((Boolean) -> Unit)? = null,
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -184,6 +195,66 @@ fun SettingsScreen(
                 }
             }
 
+            // Notifications Card
+            if (!isPushConfigured) {
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Push notifications disabled: google-services.json missing",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text(
+                        text = "Notifications",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+
+                    NotificationToggleRow(
+                        label = "Approvals",
+                        checked = isApprovalsEnabled,
+                        onCheckedChange = { onToggleApprovals?.invoke(it) },
+                    )
+                    NotificationToggleRow(
+                        label = "Questions",
+                        checked = isQuestionsEnabled,
+                        onCheckedChange = { onToggleQuestions?.invoke(it) },
+                    )
+                    NotificationToggleRow(
+                        label = "Turn Events",
+                        checked = isTurnEventsEnabled,
+                        onCheckedChange = { onToggleTurnEvents?.invoke(it) },
+                    )
+                    NotificationToggleRow(
+                        label = "Errors",
+                        checked = isErrorsEnabled,
+                        onCheckedChange = { onToggleErrors?.invoke(it) },
+                    )
+                    NotificationToggleRow(
+                        label = "Host Offline",
+                        checked = isHostOfflineEnabled,
+                        onCheckedChange = { onToggleHostOffline?.invoke(it) },
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.weight(1f))
 
             // Diagnostics Button
@@ -194,5 +265,21 @@ fun SettingsScreen(
                 Text("Diagnostics & Logs")
             }
         }
+    }
+}
+
+@Composable
+private fun NotificationToggleRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
