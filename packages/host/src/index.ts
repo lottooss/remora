@@ -50,6 +50,9 @@ export * from './rcp/methods/diffs.ts'
 export * from './interaction/index.ts'
 export * from './rcp/methods/interaction.ts'
 export * from './policy/index.ts'
+export * from './platform/index.ts'
+
+import { KeepAwakeManager } from './platform/index.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'remora'
@@ -210,11 +213,28 @@ export function apply(ctx: Context, config: Config): void {
 
   relay.attachChannelManager(channelManager)
 
+  const keepAwakeManager = new KeepAwakeManager({
+    enabled: resolved.keepAwake === 'while-busy',
+    gracePeriodMs: 120_000,
+  })
+
+  const untypedCtx = ctx as unknown as { on(event: string, callback: (event: unknown) => void): () => void }
+  untypedCtx.on('agent/status', (event: unknown) => {
+    if (typeof event === 'object' && event !== null) {
+      const { agent, status } = event as { agent?: { id?: string } | string; status?: string }
+      const agentId = typeof agent === 'object' && agent !== null ? agent.id ?? 'default' : typeof agent === 'string' ? agent : 'default'
+      if (typeof status === 'string') {
+        keepAwakeManager.handleAgentStatus(agentId, status)
+      }
+    }
+  })
+
   // Disposer: zeroize channel keys, then close the relay socket. Runs when the
   // fiber unloads; dsh waits up to 2 s for it (AGENTS §7.3).
   ctx.effect(
     () => () => {
       ctx.logger.info('remora: disposing host plugin')
+      keepAwakeManager.dispose()
       disposeBridge()
       channelManager.closeAll()
       return relay.stop()

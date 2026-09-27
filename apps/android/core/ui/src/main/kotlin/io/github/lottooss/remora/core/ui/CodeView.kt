@@ -48,13 +48,14 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.text.MatchResult
 
+private const val PREFETCH_LINES = 5
 private val CODE_FONT_SIZE = 12.sp
 private val CODE_LINE_HEIGHT = 16.sp
 
@@ -240,6 +241,8 @@ fun CodeView(
 private fun CodeViewToolbar(
     wrapOn: Boolean,
     onToggleWrap: () -> Unit,
+    searchVisible: Boolean,
+    onToggleSearch: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -248,6 +251,12 @@ private fun CodeViewToolbar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(modifier = Modifier.weight(1f))
+        IconButton(onClick = onToggleSearch) {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = if (searchVisible) "Hide search" else "Search code",
+            )
+        }
         TextButton(onClick = onToggleWrap) {
             Text(
                 text = if (wrapOn) "Wrap: on" else "Wrap: off",
@@ -437,7 +446,8 @@ private fun CodeViewSearchPreview() {
         CodeView(
             text = SAMPLE_CODE,
             softWrap = true,
-            searchQuery = "fun",
+            searchOpen = true,
+            initialSearchQuery = "fun",
         )
     }
 }

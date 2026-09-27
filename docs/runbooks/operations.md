@@ -65,6 +65,13 @@ Run it: `dsh --profile remora --no-open --port 7717` and open the printed `dsh w
 pnpm -F @remora/cli run build
 node apps/cli/lib/bin.js service install --port 7717 --profile remora
 node apps/cli/lib/bin.js service status
+node apps/cli/lib/bin.js service logs -f
+node apps/cli/lib/bin.js doctor --profile remora
+```
+
+To uninstall or stop the logon background service:
+```sh
+node apps/cli/lib/bin.js service uninstall
 ```
 
 For 24/7 availability set *Sleep when plugged in* to *Never* (Settings → System → Power) or accept that the phone will show the PC offline while it sleeps. Remora keeps the PC awake only while an agent is working.
