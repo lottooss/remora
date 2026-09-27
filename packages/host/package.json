@@ -1,6 +1,6 @@
 {
   "name": "@remora/host",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Remora host: DeepSeek Harness bundle + Cordis plugin (the PC side of Remora)",
   "type": "module",

@@ -1,96 +1,217 @@
-# Operations runbook
+# Operations Runbook — Remora v1.0.0
 
-Owner-facing guide from zero to "my phone controls dsh on my PC". Sections become executable as their tasks land (noted per section); P6-O1 completes and verifies the whole guide.
+Owner-facing guide from zero to "my phone controls dsh on my PC".
 
-## 0. What you need
+---
 
-- Windows 11 PC where you use dsh, Node ≥ 24, pnpm, Git.
-- An Android phone (Android 9+) with a fingerprint or face unlock enrolled.
-- A free Cloudflare account (enable 2FA).
-- A free Firebase project (for push notifications).
-- This repository cloned on the PC.
+## 0. Prerequisites
 
-## 1. Deploy the relay (from P1-R1; push from P5-R1)
+- **PC:** Windows 11 where you use dsh, Node ≥ 24 (pinned in `.node-version`), pnpm, Git.
+- **Phone:** Android 9+ (API 28+) device with screen lock and biometric unlock (fingerprint or face) configured.
+- **Relay:** A free Cloudflare account with two-factor authentication (2FA) enabled.
+- **Push:** A free Firebase project (Firebase Cloud Messaging).
+- **Code:** This repository cloned to your PC (`git clone https://github.com/lottooss/remora.git`).
+
+---
+
+## 1. Deploy the Relay (Cloudflare Worker + Durable Object)
+
+The relay is an end-to-end encrypted router. It inspects only 28-byte binary frame headers and never reads, stores, or logs plaintext conversation data.
 
 ```sh
 pnpm install
-pnpm -F @remora/relay exec wrangler login            # opens a browser; you approve
-pnpm -F @remora/relay exec wrangler secret put REMORA_ENROLL_SECRET     # paste 32+ random bytes, e.g. from: node -e "console.log(crypto.randomBytes(32).toString('base64url'))"
+
+# Authenticate with Cloudflare
+pnpm -F @remora/relay exec wrangler login
+
+# Generate a strong 32-byte enrollment secret and store it in Cloudflare Secret storage
+pnpm -F @remora/relay exec wrangler secret put REMORA_ENROLL_SECRET
+# When prompted, paste a random 32-byte base64url string, for example generated via:
+# node -e "console.log(crypto.randomBytes(32).toString('base64url'))"
+
+# Deploy to Cloudflare Workers
 pnpm -F @remora/relay run deploy
 ```
 
-Note the printed `https://remora-relay.<your-subdomain>.workers.dev` URL. Keep the enroll secret; the PC needs it once.
+Record the deployed worker URL:
+`https://remora-relay.<your-subdomain>.workers.dev`
 
-## 2. Firebase for notifications (from P5-K1)
+---
 
-1. Create a Firebase project; add an Android app with package `io.github.lottooss.remora` (and `.debug` for debug builds).
-2. Download `google-services.json` to `apps/android/app/` (git-ignored).
-3. Create a service account with the *Firebase Cloud Messaging API Admin* role, download its JSON key, then:
+## 2. Configure Firebase Cloud Messaging (Push Notifications)
 
+1. Open the [Firebase Console](https://console.firebase.google.com/) and create a project (e.g., `remora-push`).
+2. Add an Android app with package name `io.github.lottooss.remora` (and `io.github.lottooss.remora.debug` if using debug builds).
+3. Download the generated `google-services.json` and place it in `apps/android/app/google-services.json` (this file is git-ignored).
+4. In Project Settings → **Service Accounts**, select **Firebase Cloud Messaging API Admin**, click **Generate new private key**, and download the JSON keyfile.
+5. Upload the service account JSON to your Cloudflare Relay Worker:
 ```sh
-pnpm -F @remora/relay exec wrangler secret put FCM_SERVICE_ACCOUNT_JSON   # paste the JSON
+pnpm -F @remora/relay exec wrangler secret put FCM_SERVICE_ACCOUNT_JSON
+# Paste the entire contents of the downloaded service account JSON file
 ```
 
-## 3. Install the host into dsh (from P1-H1; pairing from P2-H1)
+---
+
+## 3. Install Remora Host into DeepSeek Harness (`dsh`)
+
+The Remora Host runs as a Cordis plugin inside `dsh`, operating strictly within an isolated profile (`remora`).
 
 ```sh
-npm install -g @deepseek-ai/dsh@0.1.5-rc.3          # or the version in upstream.lock.json
-pnpm -F @remora/host run build
-dsh --profile remora --from-default-profile web     # once
+# 1. Install pinned dsh version
+npm install -g @deepseek-ai/dsh@0.1.5-rc.3
+
+# 2. Build host plugin and CLI
+pnpm run build
+
+# 3. Create dedicated remora profile from web default
+dsh --profile remora --from-default-profile web
+
+# 4. Link Remora host plugin to profile
 dsh plugin --profile remora add ./packages/host
 ```
 
-Store the enroll secret in dsh credentials under the key `REMORA_RELAY_ENROLL_SECRET` (exact command documented by P1-H1), then add your settings to `%USERPROFILE%\.dsh\profiles\remora\cordis.patch.yml`:
+Store your `REMORA_ENROLL_SECRET` in dsh credentials under `REMORA_RELAY_ENROLL_SECRET`:
+```sh
+dsh credentials --profile remora set REMORA_RELAY_ENROLL_SECRET "<your-enroll-secret>"
+```
+
+Edit your profile configuration patch at `%USERPROFILE%\.dsh\profiles\remora\cordis.patch.yml`:
 
 ```yaml
 - id: remora
   config:
     relayUrl: https://remora-relay.<your-subdomain>.workers.dev
     enrollSecretKey: REMORA_RELAY_ENROLL_SECRET
-    remoteRoots: ['C:\Users\<you>\Desktop\lotoss']
+    remoteRoots:
+      - 'C:\Users\<your-user>\Desktop\workspace'
     approvalBiometric: high
     approvalAuth: biometric
     approvalTimeoutMs: 3600000
     allowRemoteSessionStart: true
     keepAwake: while-busy
     streamCoalesceMs: 150
-    notify: { approval: true, question: true, turnDone: true, turnError: true, hostOffline: true }
+    notify:
+      approval: true
+      question: true
+      turnDone: true
+      turnError: true
+      hostOffline: true
 ```
 
-Run it: `dsh --profile remora --no-open --port 7717` and open the printed `dsh web:` URL once in your PC browser.
+Run dsh once interactively to verify startup:
+```sh
+dsh --profile remora --no-open --port 7717
+```
+Open the printed `dsh web:` URL in your PC browser to establish the management session cookie.
 
-## 4. Keep it running (from P5-O1)
+---
+
+## 4. Install Background Host Service (Always-On Supervision)
+
+Use the Remora CLI to manage the Windows logon supervisor:
 
 ```sh
+# Build CLI
 pnpm -F @remora/cli run build
+
+# Install Windows Task Scheduler logon service
 node apps/cli/lib/bin.js service install --port 7717 --profile remora
+
+# Check service health and live logs
 node apps/cli/lib/bin.js service status
 node apps/cli/lib/bin.js service logs -f
+
+# Run comprehensive system diagnostics
 node apps/cli/lib/bin.js doctor --profile remora
 ```
 
-To uninstall or stop the logon background service:
+To stop or uninstall the service at any time:
 ```sh
 node apps/cli/lib/bin.js service uninstall
 ```
 
-For 24/7 availability set *Sleep when plugged in* to *Never* (Settings → System → Power) or accept that the phone will show the PC offline while it sleeps. Remora keeps the PC awake only while an agent is working.
+> **Power settings recommendation:** Set *Sleep when plugged in* to *Never* in Windows Settings (System → Power). Remora automatically uses Windows thread execution state flags (`ES_SYSTEM_REQUIRED`) to keep the PC awake during active AI agent turns.
 
-## 5. Install the app and pair (from P2-K1)
+---
 
-1. Build and install: `cd apps/android && ./gradlew installDebug` (USB debugging on) or copy the APK.
-2. On the PC open `http://127.0.0.1:7717/api/remora/` (after opening the `dsh web:` URL once) → **Pair phone**.
-3. In the app: **Pair** → scan the QR → compare the 6 digits → click **Confirm** on the PC.
+## 5. Build and Sign the Android App
 
-## 6. Revoke a device
+### 5.1 Debug Build (Local Testing)
+With USB debugging enabled on your phone:
+```sh
+cd apps/android
+./gradlew.bat installDebug
+```
 
-PC: `http://127.0.0.1:7717/api/remora/` → Devices → Revoke. Takes effect immediately. The phone can also unpair itself in Settings.
+### 5.2 Release Build (Signed APK)
+1. Generate an Android release keystore (if you do not already have one):
+```sh
+keytool -genkey -v -keystore remora-release.jks -keyalg RSA -keysize 4096 -validity 10000 -alias remora -storetype JKS
+```
+2. Set environment variables in your terminal session:
+```powershell
+$env:KEYSTORE_PATH = "C:\path\to\remora-release.jks"
+$env:KEYSTORE_PASSWORD = "your-keystore-password"
+$env:KEY_ALIAS = "remora"
+$env:KEY_PASSWORD = "your-key-password"
+```
+3. Build the release APK:
+```sh
+cd apps/android
+./gradlew.bat assembleRelease
+```
+The signed APK will be generated at:
+`apps/android/app/build/outputs/apk/release/app-release.apk`
 
-## 7. Troubleshooting
+Transfer and install `app-release.apk` to your phone via ADB or file transfer.
 
-| Symptom | Check |
-|---|---|
-| Phone shows PC offline | `remora service status`; relay URL in the patch; `remora doctor` |
-| Pairing QR never appears | host log for relay enrollment errors (wrong enroll secret) |
-| No notifications | `google-services.json` present at build time; FCM secret set; Android notification permission |
-| Approval asks for fingerprint every time | expected for high-risk approvals; see `approvalBiometric` |
+---
+
+## 6. Pairing Phone and PC
+
+1. On your PC, navigate to `http://127.0.0.1:7717/api/remora/` in your browser.
+2. Click **Pair phone** to display the one-time enrollment QR code.
+3. Open the Remora app on your Android device and tap **Pair**.
+4. Scan the QR code with your phone camera.
+5. Verify that the 6-digit Short Authentication String (SAS) displayed on your phone matches the SAS displayed on your PC screen.
+6. Click **Confirm** on the PC.
+7. The phone is now authenticated and pins the host's identity key.
+
+---
+
+## 7. Device Management & Revocation
+
+If a paired device is lost, stolen, or decommissioned:
+1. Open the PC management dashboard at `http://127.0.0.1:7717/api/remora/`.
+2. Under **Paired Devices**, locate the device name and click **Revoke**.
+3. Revocation takes effect immediately:
+   - The device static key is marked revoked in the host registry.
+   - All active relay WebSockets and Noise channels for that device are terminated.
+   - The device cannot reconnect or re-enroll without a newly generated pairing QR code.
+
+---
+
+## 8. Backup and Disaster Recovery
+
+### 8.1 Relay State
+The Cloudflare Worker Durable Object (`AccountHub`) stores all routing metadata and device mappings in Cloudflare's globally replicated Durable Object SQLite storage. No manual database backup is required. If redeploying the worker code, existing SQLite storage persists automatically.
+
+### 8.2 Host Identity and Paired Devices
+The host identity keys and paired device registry reside in your dsh profile directory:
+- `%USERPROFILE%\.dsh\profiles\remora\credentials.json`
+- `%USERPROFILE%\.dsh\profiles\remora\remora-devices.json`
+
+To back up: Copy these two files to a secure backup location.
+To restore on a new PC: Copy the files back into `%USERPROFILE%\.dsh\profiles\remora\` before launching the service.
+
+---
+
+## 9. Troubleshooting Matrix
+
+| Symptom | Probable Cause | Resolution |
+|---|---|---|
+| Phone shows "Host Offline" | dsh host process stopped or relay unreachable | Run `remora service status` and `remora doctor --profile remora`. Verify `relayUrl` in `cordis.patch.yml`. |
+| Pairing QR fails to generate | Invalid relay enrollment secret | Check host logs (`remora service logs`). Verify that `REMORA_RELAY_ENROLL_SECRET` matches the Cloudflare secret. |
+| No push notifications received | Missing `google-services.json` or FCM key | Verify `google-services.json` was present when building Android app. Verify `FCM_SERVICE_ACCOUNT_JSON` secret in Cloudflare. Ensure Android notification permissions are granted. |
+| Biometric prompt requested on every action | High-risk approval policy active | Expected behavior for destructive commands (e.g. `rm`, file deletion, shell pipelines) per Blueprint §11 security model. |
+| Path access denied error | Requested path outside configured roots | Add workspace directories to `remoteRoots` in `%USERPROFILE%\.dsh\profiles\remora\cordis.patch.yml`. |

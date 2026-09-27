@@ -1,6 +1,6 @@
 {
   "name": "@remora/testkit",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Fake phone, adversarial relay, and e2e environment (task P1-T1)",
   "type": "module",
