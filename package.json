@@ -14,6 +14,7 @@
     "test": "pnpm -r run test",
     "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
     "test:security": "vitest run --config tests/security/vitest.config.ts",
+    "test:perf": "vitest run --config tests/perf/vitest.config.ts",
     "conformance:check": "node scripts/check-conformance.mjs",
     "upstream:fetch": "node scripts/fetch-upstream.mjs",
     "issues:sync": "node scripts/sync-issues.mjs"
