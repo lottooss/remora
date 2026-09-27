@@ -1,6 +1,6 @@
 # Threat model
 
-Status: **v1-draft**. Owner: Verification & Security role. Reviewed at P3 exit and P6 exit ([roadmap](../roadmap.md)).
+Status: **v1-frozen**. Owner: Verification & Security role. Reviewed at P3 exit and P6 exit ([roadmap](../roadmap.md)).
 Every mitigation below names the test that proves it; a mitigation without a passing test is not done.
 
 ## 1. Assets
@@ -52,18 +52,23 @@ Out of scope: a compromised PC account or administrator (game over), a rooted ph
 | T14 | Prompt injection leads to a dangerous approval approved on a small screen | 9 | exact command/args preview; risk classifier; biometric for high risk; `argsDigest` binds what was shown; answers need the app, not the notification | `packages/host/test/interaction.test.ts`, `tests/security/approvals.spec.ts` (PASS: digest mismatch rejected) |
 | T15 | CSRF / DNS rebinding against the management page | 8 | page lives under dsh `/api` (cookie `SameSite=Strict`, Host/Origin fence); state changes are POST with same-origin checks | `packages/host/test/web.test.ts` (PASS: cross-origin POST & rebinding Host rejected) |
 | T16 | Local users hit Remora | 7 | Remora opens no port; management page inherits dsh cookie auth; secrets in the user profile | Port scan shows no listening port; `packages/host/test/web.test.ts` (PASS) |
-| T17 | Hostile git config executes code during `diffs.*` | 9 | `core.fsmonitor=false`, empty hooks path, `--no-ext-diff --no-textconv`, `--no-optional-locks`, timeouts | Scheduled for P4-H2 |
-| T18 | Push content visible to Google | 3 | payload encrypted with per-device push key; `host_offline` carries metadata only | `apps/relay/test/worker.test.ts`, `conformance/vectors/crypto/push.json` (PASS) |
+| T17 | Hostile git config executes code during `diffs.*` | 9 | `core.fsmonitor=false`, empty hooks path, `--no-ext-diff --no-textconv`, `--no-optional-locks`, timeouts | `tests/security/git-and-push-hardening.spec.ts` (PASS: malicious hooks, diff, textconv, fsmonitor neutralized) |
+| T18 | Push content visible to Google | 3 | payload encrypted with per-device push key; `host_offline` carries metadata only | `tests/security/git-and-push-hardening.spec.ts`, `apps/relay/test/worker.test.ts`, `conformance/vectors/crypto/push.json` (PASS) |
 | T19 | Secrets or content in logs | all | redaction helpers; log statements reviewed; tests scan captured logs for known secrets and payload markers | `tests/security/log-scans.spec.ts` (PASS: host, relay, and secret scanning) |
-| T20 | Dependency supply chain | — | lockfiles committed; minimal dependencies; audited `@noble/*`, BouncyCastle, Tink; `pnpm audit` / Gradle dependency review in CI | CI dependency audit |
+| T20 | Dependency supply chain | — | lockfiles committed; minimal dependencies; audited `@noble/*`, BouncyCastle, Tink; `pnpm audit` / Gradle dependency review in CI | CI dependency audit; `pnpm audit --prod` 0 vulns |
 | T21 | A dsh upgrade silently routes approvals around the bridge | — | adapter fixtures per version; startup self-check that the bridge listener is registered and ordered first; CI against npm `next` | `packages/host/test/interaction.test.ts` (PASS: waterfall precedence) |
 | T22 | Protocol downgrade | 1, 2 | only v1 exists; `hello` negotiates max common version; relay rejects unknown versions | `packages/protocol/test/rcp.test.ts`, `apps/relay/test/worker.test.ts` (PASS) |
 | T23 | Paired device floods the host | 5, 6 | per-device rate limits, stream caps, 48 KiB messages | `tests/security/limits-and-revocation.spec.ts` (PASS: burst & mutating rate limits, message size cap) |
 | T24 | Clock manipulation to reuse an approval | 5 | single-use ids are primary; time window is secondary | `tests/security/approvals.spec.ts` (PASS: expired timestamp rejected, replay rejected) |
 | T25 | Attacker who knows the phone PIN enrolls a new fingerprint | 5 | approval keys invalidated on biometric enrollment; rotation requires PC confirmation | `:feature:settings:test` (PASS); manual device test runbook |
 | T26 | Leaked relay enroll secret | 10 | only enables host enrollment; hosts cannot reach unlinked devices; rotate secret | `apps/relay/test/worker.test.ts` (PASS: scoped host enrollment) |
-| T27 | Cloudflare account takeover | 2 | same as ADV2 (content-blind) + junk pushes fail decryption; owner enables 2FA | `conformance/vectors/crypto/push.json` (PASS: push AEAD decryption failure) |
+| T27 | Cloudflare account takeover | 2 | same as ADV2 (content-blind) + junk pushes fail decryption; owner enables 2FA | `conformance/vectors/crypto/push.json`, `tests/security/git-and-push-hardening.spec.ts` (PASS: push AEAD decryption failure) |
 | T28 | Stolen relay key used to kick the real device (newest wins) | 6 | relay key alone cannot pass E2E; repeated 4409 surfaces a warning in the app | `packages/relay-link/test/relay-link.test.ts` (PASS: 100 forced disconnects survive) |
+| T29 | Push notification ciphertext tampering | 1, 2, 3 | ChaCha20-Poly1305 AEAD per-device push key; bit-flip fails tag verification and drops cleanly | `tests/security/git-and-push-hardening.spec.ts` (PASS: bit-flip & truncation fail closed) |
+| T30 | Cross-device push payload injection | 2, 3 | Push payload encrypted with device A's push key cannot be decrypted by device B | `tests/security/git-and-push-hardening.spec.ts` (PASS: key isolation verified) |
+| T31 | Host-offline alarm spoofing | 2 | Alarms armed by host presence heartbeat; FCM dispatches only upon missed heartbeat interval | `apps/relay/test/worker.test.ts` (PASS: host-offline alarm delivery) |
+| T32 | Notification preference tampering | 5, 6 | `notify.prefs.*` enforced by host policy guard; per-device preferences stored in isolated store | `packages/host/test/notify.test.ts` (PASS: prefs schema and isolation verified) |
+| T33 | Android FCM background key exposure | 6 | Phone decrypts payload only inside service sandbox, wipes decrypted plaintext and raw keys with `wipe()` | `apps/android/app/src/test/.../notification/PushNotificationTest.kt` (PASS) |
 
 ## 4. Residual risks (accepted for v1)
 
@@ -80,7 +85,8 @@ Out of scope: a compromised PC account or administrator (game over), a rooted ph
 - [x] Pairing: missing SAS confirmation, ticket reuse, expired QR, substituted host key, wrong PSK (`tests/security/pairing-attacks.spec.ts`).
 - [x] Approvals: unsigned high-risk, bad signature, high-S DER accepted, digest mismatch, replay, cross-session id, after revoke (`tests/security/approvals.spec.ts`).
 - [x] Path escapes: `..`, absolute outside roots, junction, symlink, 8.3 short name, UNC, `\\?\`, mixed case, trailing dots/spaces (Windows), NUL bytes (`tests/security/path-escapes.spec.ts`).
-- [ ] Git hardening with hostile repo config (scheduled for P4-H2).
+- [x] Git hardening with hostile repo config (`tests/security/git-and-push-hardening.spec.ts`).
+- [x] Push encryption integrity & key isolation (`tests/security/git-and-push-hardening.spec.ts`).
 - [x] Log scans (host, relay `wrangler tail` capture, app diagnostics export) contain no secrets or payload markers (`tests/security/log-scans.spec.ts`).
 - [x] Management page: cross-origin POST, rebinding Host, missing cookie (`packages/host/test/web.test.ts`).
 - [x] Rate limits and size limits at relay and host (`tests/security/limits-and-revocation.spec.ts`).
