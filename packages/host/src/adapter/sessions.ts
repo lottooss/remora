@@ -798,4 +798,28 @@ export class SessionAdapter {
     const textPart = content.find((c) => (c as { type?: string })?.type === 'text') as { text?: string } | undefined
     return textPart?.text ?? ''
   }
+
+  /**
+   * Retrieves session workspace path and recent events for file and diff operations.
+   */
+  async getSessionDetails(sessionId: string): Promise<{
+    workspaceRoot: string | null
+    events: SessionEvent[]
+  } | null> {
+    const listRes = await this.list({ limit: 100, includeArchived: true }).catch(() => ({ items: [] }))
+    const found = listRes.items.find((s) => s.id === sessionId)
+    if (!found) return null
+
+    const page = await this.page({
+      sessionId,
+      beforeSeq: Number.MAX_SAFE_INTEGER,
+      limit: 100,
+    }).catch(() => ({ events: [], hasOlder: false }))
+
+    return {
+      workspaceRoot: found.workspace.path,
+      events: page.events,
+    }
+  }
 }
+

@@ -41,6 +41,12 @@ export const DSH_ERROR_CODE_MAP: Readonly<Record<string, string>> = Object.freez
   'directory-picker/unreadable': RCP_ERROR_CODES.forbidden,
   'directory-picker/exists': RCP_ERROR_CODES.conflict,
   'directory-picker/create-failed': RCP_ERROR_CODES.internal_error,
+  'workspace-file/not-found': RCP_ERROR_CODES.not_found,
+  'workspace-file/outside-workspace': RCP_ERROR_CODES.forbidden,
+  'workspace-file/too-large': RCP_ERROR_CODES.too_large,
+  'workspace-file/not-text': RCP_ERROR_CODES.invalid_params,
+  'workspace-file/not-regular-file': RCP_ERROR_CODES.invalid_params,
+  'workspace-file/not-directory': RCP_ERROR_CODES.invalid_params,
   'gateway/cancelled': RCP_ERROR_CODES.cancelled,
   'gateway/not-found': RCP_ERROR_CODES.method_not_found,
   'gateway/signature-invalid': RCP_ERROR_CODES.invalid_params,
@@ -404,3 +410,147 @@ export async function gatewayDirectoryPickerCreateDirectory(
     return res as string
   })
 }
+
+export async function gatewayWorkspaceFilesRead(
+  gateway: TypertGateway,
+  args: { sessionId: string; path: string; range?: { offset?: number; limit?: number } },
+  signal?: AbortSignal,
+): Promise<{
+  absolutePath: string
+  version: string
+  offset: number
+  text: string
+  lines: number
+  eof: boolean
+  bytes?: number
+}> {
+  return withGatewayError(async () => {
+    const payload: Record<string, unknown> = {
+      workspaceFileScopeId: args.sessionId,
+      path: args.path,
+    }
+    if (args.range !== undefined) payload['range'] = args.range
+    const res = await gateway.invoke({
+      namespace: 'workspaceFiles',
+      method: 'read',
+      args: payload,
+      ...(signal !== undefined ? { signal } : {}),
+    })
+    return res as {
+      absolutePath: string
+      version: string
+      offset: number
+      text: string
+      lines: number
+      eof: boolean
+      bytes?: number
+    }
+  })
+}
+
+export async function gatewayWorkspaceFilesReadBytes(
+  gateway: TypertGateway,
+  args: { sessionId: string; path: string; range?: { offset?: number; length?: number } },
+  signal?: AbortSignal,
+): Promise<{
+  absolutePath: string
+  version: string
+  offset: number
+  data: string
+  eof: boolean
+  bytes?: number
+}> {
+  return withGatewayError(async () => {
+    const payload: Record<string, unknown> = {
+      workspaceFileScopeId: args.sessionId,
+      path: args.path,
+    }
+    if (args.range !== undefined) payload['range'] = args.range
+    const res = await gateway.invoke({
+      namespace: 'workspaceFiles',
+      method: 'readBytes',
+      args: payload,
+      ...(signal !== undefined ? { signal } : {}),
+    })
+    return res as {
+      absolutePath: string
+      version: string
+      offset: number
+      data: string
+      eof: boolean
+      bytes?: number
+    }
+  })
+}
+
+export async function gatewayWorkspaceFilesStat(
+  gateway: TypertGateway,
+  args: { sessionId: string; path: string },
+  signal?: AbortSignal,
+): Promise<{
+  absolutePath: string
+  version: string
+  bytes?: number
+}> {
+  return withGatewayError(async () => {
+    const res = await gateway.invoke({
+      namespace: 'workspaceFiles',
+      method: 'stat',
+      args: {
+        workspaceFileScopeId: args.sessionId,
+        path: args.path,
+      },
+      ...(signal !== undefined ? { signal } : {}),
+    })
+    return res as {
+      absolutePath: string
+      version: string
+      bytes?: number
+    }
+  })
+}
+
+export async function gatewayWorkspaceFilesList(
+  gateway: TypertGateway,
+  args: { sessionId: string; path: string },
+  signal?: AbortSignal,
+): Promise<{
+  path: string
+  entries: { name: string; type: 'file' | 'directory' | 'other'; size?: number }[]
+  truncated: boolean
+}> {
+  return withGatewayError(async () => {
+    const res = await gateway.invoke({
+      namespace: 'workspaceFiles',
+      method: 'list',
+      args: {
+        workspaceFileScopeId: args.sessionId,
+        path: args.path,
+      },
+      ...(signal !== undefined ? { signal } : {}),
+    })
+    return res as {
+      path: string
+      entries: { name: string; type: 'file' | 'directory' | 'other'; size?: number }[]
+      truncated: boolean
+    }
+  })
+}
+
+export async function gatewayWorkspaceFilesChanges(
+  gateway: TypertGateway,
+  args: { sessionId: string },
+  signal?: AbortSignal,
+): Promise<AsyncIterable<unknown>> {
+  return withGatewayError(async () => {
+    return await gateway.stream({
+      namespace: 'workspaceFiles',
+      method: 'changes',
+      args: {
+        workspaceFileScopeId: args.sessionId,
+      },
+      ...(signal !== undefined ? { signal } : {}),
+    })
+  })
+}
+

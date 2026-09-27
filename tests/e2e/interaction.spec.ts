@@ -193,8 +193,9 @@ describe('End-to-End Interaction & AnswerBridge (P3-H1)', () => {
     const highRiskPromise = raceApproval(highRiskReq, () => new Promise(() => {}), pendingRegistry, {
       approvalTimeoutMs: 10_000,
       policyGuard: {
-        evaluateApprovalRisk: () => ({ risk: 'high', requiresSignature: true }),
-      },
+        classifyRisk: () => 'high',
+        approvalBiometric: 'high',
+      } as any,
       hasPairedDevices: () => true,
     })
 

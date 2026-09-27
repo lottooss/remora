@@ -23,6 +23,10 @@ import { registerWorkspaceMethods } from './rcp/methods/workspaces.ts'
 import { FsAdapter, registerFsMethods } from './rcp/methods/fs.ts'
 import { SessionAdapter } from './adapter/sessions.ts'
 import { registerSessionMethods } from './rcp/methods/sessions.ts'
+import { GitAdapter } from './adapter/git.ts'
+import { FilesAdapter } from './adapter/files.ts'
+import { registerFilesMethods } from './rcp/methods/files.ts'
+import { registerDiffsMethods } from './rcp/methods/diffs.ts'
 
 export { Config, RemoraConfigError, resolveConfig } from './config.ts'
 export type { NotifyConfig, ResolvedConfig } from './config.ts'
@@ -36,9 +40,13 @@ export * from './web/index.ts'
 export * from './web/routes.ts'
 export * from './adapter/index.ts'
 export * from './adapter/workspaces.ts'
+export * from './adapter/git.ts'
+export * from './adapter/files.ts'
 export * from './rcp/methods/sessions.ts'
 export * from './rcp/methods/workspaces.ts'
 export * from './rcp/methods/fs.ts'
+export * from './rcp/methods/files.ts'
+export * from './rcp/methods/diffs.ts'
 export * from './interaction/index.ts'
 export * from './rcp/methods/interaction.ts'
 export * from './policy/index.ts'
@@ -163,6 +171,9 @@ export function apply(ctx: Context, config: Config): void {
   registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)
 
   const gateway = (ctx as any).typertGateway
+  const gitAdapter = new GitAdapter()
+
+  let sessionAdapter: SessionAdapter | undefined
   if (gateway) {
     const workspaceAdapter = new WorkspaceAdapter({ gateway, policyGuard })
     registerWorkspaceMethods(rcpServer, workspaceAdapter)
@@ -170,13 +181,22 @@ export function apply(ctx: Context, config: Config): void {
     const fsAdapter = new FsAdapter({ gateway, policyGuard })
     registerFsMethods(rcpServer, fsAdapter)
 
-    const sessionAdapter = new SessionAdapter({
+    sessionAdapter = new SessionAdapter({
       gateway,
       policyGuard,
       workspaceAdapter,
     })
     registerSessionMethods(rcpServer, sessionAdapter)
   }
+
+  const filesAdapter = new FilesAdapter({
+    gateway,
+    policyGuard,
+    gitAdapter,
+    sessionAdapter,
+  })
+  registerFilesMethods(rcpServer, filesAdapter)
+  registerDiffsMethods(rcpServer, filesAdapter)
 
   const channelManager = new ChannelManager({
     identity,
