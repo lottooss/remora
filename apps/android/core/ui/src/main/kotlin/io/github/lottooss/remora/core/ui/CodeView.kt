@@ -116,12 +116,10 @@ fun rememberCodeColors(colorScheme: ColorScheme = MaterialTheme.colorScheme): Co
  * Renders [text] in a [LazyColumn] so files with 20,000+ lines scroll smoothly.
  * Line numbers sit in a dimmed, unselectable gutter whose width fits the last
  * line number; [startLineNumber] offsets the first rendered number. [softWrap]
- * picks the initial layout: horizontal scroll per row, or text wrapping. The
- * magnifier opens an in-text search bar that highlights every match, shows
- * "current/total", and scrolls prev/next navigation into view. When
- * [onLoadMore] is non-null (caller has more content) and the viewport nears the
- * end of the loaded lines, the callback fires so the caller can append; a
- * spinner marks the pending tail.
+ * picks the initial layout: horizontal scroll per row, or text wrapping. A
+ * non-empty [searchQuery] highlights every match in the search bar and in the
+ * code, with prev/next navigation. When [hasMore] is true a "Load more lines"
+ * button is appended at the bottom and invokes [onLoadMore] when pressed.
  */
 @Composable
 fun CodeView(
@@ -129,14 +127,12 @@ fun CodeView(
     modifier: Modifier = Modifier,
     startLineNumber: Int = 1,
     softWrap: Boolean = false,
-    searchOpen: Boolean = false,
-    initialSearchQuery: String = "",
+    searchQuery: String = "",
     onLoadMore: (() -> Unit)? = null,
     hasMore: Boolean = false,
 ) {
     var wrapOn by remember { mutableStateOf(softWrap) }
-    var searchVisible by remember { mutableStateOf(searchOpen) }
-    var searchQuery by remember { mutableStateOf(initialSearchQuery) }
+    var searchQuery by remember { mutableStateOf(searchQuery) }
     var currentMatch by remember { mutableIntStateOf(1) }
     val listState = rememberLazyListState()
     val horizontalScroll = rememberScrollState()
@@ -165,28 +161,24 @@ fun CodeView(
         CodeViewToolbar(
             wrapOn = wrapOn,
             onToggleWrap = { wrapOn = !wrapOn },
-            searchVisible = searchVisible,
-            onToggleSearch = { searchVisible = !searchVisible },
         )
-        if (searchVisible) {
-            CodeSearchBar(
-                query = searchQuery,
-                onQueryChange = { searchQuery = it },
-                current = safeCurrentMatch,
-                total = totalMatches,
-                onPrevious = {
-                    if (totalMatches > 0) {
-                        currentMatch = if (safeCurrentMatch > 1) safeCurrentMatch - 1 else totalMatches
-                    }
-                },
-                onNext = {
-                    if (totalMatches > 0) {
-                        currentMatch = if (safeCurrentMatch < totalMatches) safeCurrentMatch + 1 else 1
-                    }
-                },
-                onClose = { searchVisible = false },
-            )
-        }
+        CodeSearchBar(
+            query = searchQuery,
+            onQueryChange = { searchQuery = it },
+            current = safeCurrentMatch,
+            total = totalMatches,
+            onPrevious = {
+                if (totalMatches > 0) {
+                    currentMatch = if (safeCurrentMatch > 1) safeCurrentMatch - 1 else totalMatches
+                }
+            },
+            onNext = {
+                if (totalMatches > 0) {
+                    currentMatch = if (safeCurrentMatch < totalMatches) safeCurrentMatch + 1 else 1
+                }
+            },
+            onClose = { },
+        )
         val gutterWidth = remember(lines.size, startLineNumber) {
             val last = startLineNumber + lines.size - 1
             (maxOf(2, last.toString().length) * 7 + 14).dp
@@ -243,8 +235,6 @@ fun CodeView(
 private fun CodeViewToolbar(
     wrapOn: Boolean,
     onToggleWrap: () -> Unit,
-    searchVisible: Boolean,
-    onToggleSearch: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -253,12 +243,6 @@ private fun CodeViewToolbar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(modifier = Modifier.weight(1f))
-        IconButton(onClick = onToggleSearch) {
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = if (searchVisible) "Hide search" else "Search code",
-            )
-        }
         TextButton(onClick = onToggleWrap) {
             Text(
                 text = if (wrapOn) "Wrap: on" else "Wrap: off",
@@ -448,8 +432,7 @@ private fun CodeViewSearchPreview() {
         CodeView(
             text = SAMPLE_CODE,
             softWrap = true,
-            searchOpen = true,
-            initialSearchQuery = "fun",
+            searchQuery = "fun",
         )
     }
 }
@@ -458,6 +441,6 @@ private fun CodeViewSearchPreview() {
 @Composable
 private fun CodeViewPaginationPreview() {
     RemoraTheme {
-        CodeView(text = SAMPLE_CODE, startLineNumber = 41, onLoadMore = {})
+        CodeView(text = SAMPLE_CODE, startLineNumber = 41, hasMore = true, onLoadMore = {})
     }
 }

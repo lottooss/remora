@@ -2,7 +2,6 @@ package io.github.lottooss.remora.core.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -31,7 +30,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private const val SIDE_BY_SIDE_MIN_WIDTH = 600
 private val DIFF_FONT_SIZE = 12.sp
 private val DIFF_LINE_HEIGHT = 16.sp
 private val SIDE_BY_SIDE_LINE_HEIGHT = 20.dp
@@ -59,44 +57,42 @@ private sealed interface DiffRow {
  * tint, deleted lines (`-`) a red tint, and context lines keep the default
  * background.
  *
- * When [sideBySide] is true and the available width is at least 600 dp, change
- * blocks render as two aligned panes (deleted left, added right) instead of the
- * unified column. When [onLoadNextHunk] is non-null (the caller has more hunks,
- * e.g. `DiffFileResult.nextHunk != null`), a "Load next hunk" button is
- * appended and invokes the callback when pressed.
+ * When [isWideScreen] is true, change blocks render as two aligned panes
+ * (deleted left, added right) instead of the unified column. When
+ * [hasMoreHunks] is true (the caller has more hunks, e.g.
+ * `DiffFileResult.nextHunk != null`), a "Load next hunk" button is appended
+ * and invokes [onLoadMoreHunks] when pressed.
  */
 @Composable
 fun DiffView(
     hunks: List<DiffHunk>,
     modifier: Modifier = Modifier,
-    sideBySide: Boolean = false,
-    onLoadNextHunk: (() -> Unit)? = null,
+    onLoadMoreHunks: (() -> Unit)? = null,
+    hasMoreHunks: Boolean = false,
+    isWideScreen: Boolean = false,
 ) {
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val sideBySideMode = sideBySide && maxWidth >= SIDE_BY_SIDE_MIN_WIDTH.dp
-        val rows = remember(hunks, sideBySideMode) {
-            hunks.flatMap { hunk -> hunkToRows(hunk, sideBySideMode) }
-        }
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
-            itemsIndexed(rows, key = { index, _ -> index }) { _, row ->
-                when (row) {
-                    is DiffRow.HunkHeader -> HunkHeaderRow(text = row.text)
-                    is DiffRow.UnifiedLine ->
-                        UnifiedDiffLine(text = row.text, kind = row.kind)
-                    is DiffRow.ChangeBlock -> SideBySideChangeBlock(block = row)
-                }
+    val rows = remember(hunks, isWideScreen) {
+        hunks.flatMap { hunk -> hunkToRows(hunk, isWideScreen) }
+    }
+    LazyColumn(modifier = modifier.fillMaxSize()) {
+        itemsIndexed(rows, key = { index, _ -> index }) { _, row ->
+            when (row) {
+                is DiffRow.HunkHeader -> HunkHeaderRow(text = row.text)
+                is DiffRow.UnifiedLine ->
+                    UnifiedDiffLine(text = row.text, kind = row.kind)
+                is DiffRow.ChangeBlock -> SideBySideChangeBlock(block = row)
             }
-            if (onLoadNextHunk != null) {
-                item(key = "load-next-hunk") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        TextButton(onClick = onLoadNextHunk) {
-                            Text("Load next hunk")
-                        }
+        }
+        if (hasMoreHunks) {
+            item(key = "load-next-hunk") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    TextButton(onClick = { onLoadMoreHunks?.invoke() }) {
+                        Text("Load next hunk")
                     }
                 }
             }
@@ -104,9 +100,9 @@ fun DiffView(
     }
 }
 
-private fun hunkToRows(hunk: DiffHunk, sideBySide: Boolean): List<DiffRow> {
+private fun hunkToRows(hunk: DiffHunk, isWideScreen: Boolean): List<DiffRow> {
     val rows = mutableListOf<DiffRow>(DiffRow.HunkHeader(hunk.header))
-    if (!sideBySide) {
+    if (!isWideScreen) {
         hunk.lines.forEach { line ->
             rows += unifiedRow(line)
         }
@@ -162,8 +158,8 @@ private fun HunkHeaderRow(text: String) {
 @Composable
 private fun UnifiedDiffLine(text: String, kind: DiffLineKind) {
     val background = when (kind) {
-        DiffLineKind.ADDED -> Color(0x334CAF50)
-        DiffLineKind.DELETED -> Color(0x33EF5350)
+        DiffLineKind.ADDED -> Color(0x224CAF50)
+        DiffLineKind.DELETED -> Color(0x22F44336)
         DiffLineKind.CONTEXT -> Color.Transparent
     }
     Row(modifier = Modifier.fillMaxWidth().background(background)) {
@@ -203,8 +199,8 @@ private fun SideBySideChangeBlock(block: DiffRow.ChangeBlock) {
 @Composable
 private fun SideBySideLine(text: String, kind: DiffLineKind) {
     val background = when (kind) {
-        DiffLineKind.ADDED -> Color(0x334CAF50)
-        else -> Color(0x33EF5350)
+        DiffLineKind.ADDED -> Color(0x224CAF50)
+        else -> Color(0x22F44336)
     }
     Row(
         modifier = Modifier
@@ -280,7 +276,7 @@ private val SAMPLE_HUNKS = listOf(
 @Composable
 private fun DiffViewPreview() {
     RemoraTheme {
-        DiffView(hunks = SAMPLE_HUNKS, onLoadNextHunk = {})
+        DiffView(hunks = SAMPLE_HUNKS, hasMoreHunks = true, onLoadMoreHunks = {})
     }
 }
 
@@ -288,6 +284,6 @@ private fun DiffViewPreview() {
 @Composable
 private fun DiffViewSideBySidePreview() {
     RemoraTheme {
-        DiffView(hunks = SAMPLE_HUNKS, sideBySide = true)
+        DiffView(hunks = SAMPLE_HUNKS, isWideScreen = true)
     }
 }

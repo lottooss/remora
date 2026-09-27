@@ -368,6 +368,7 @@ fun FilesScreen(
                             text = result?.text.orEmpty(),
                             softWrap = softWrap,
                             onLoadMore = if (!isEof) { { loadMoreLines() } } else null,
+                            hasMore = !isEof,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -474,7 +475,8 @@ fun FilesScreen(
                             val nextHunk = result?.nextHunk
                             DiffView(
                                 hunks = uiHunks,
-                                onLoadNextHunk = if (nextHunk != null) { { loadMoreHunks() } } else null,
+                                onLoadMoreHunks = if (nextHunk != null) { { loadMoreHunks() } } else null,
+                                hasMoreHunks = nextHunk != null,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
