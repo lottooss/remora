@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -22,7 +21,6 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,7 +35,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -48,14 +45,13 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.TextAlign
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.text.MatchResult
 
-private const val PREFETCH_LINES = 5
 private val CODE_FONT_SIZE = 12.sp
 private val CODE_LINE_HEIGHT = 16.sp
 
@@ -133,12 +129,14 @@ fun CodeView(
     modifier: Modifier = Modifier,
     startLineNumber: Int = 1,
     softWrap: Boolean = false,
-    searchQuery: String = "",
+    searchOpen: Boolean = false,
+    initialSearchQuery: String = "",
     onLoadMore: (() -> Unit)? = null,
     hasMore: Boolean = false,
 ) {
     var wrapOn by remember { mutableStateOf(softWrap) }
-    var searchQuery by remember { mutableStateOf(searchQuery) }
+    var searchVisible by remember { mutableStateOf(searchOpen) }
+    var searchQuery by remember { mutableStateOf(initialSearchQuery) }
     var currentMatch by remember { mutableIntStateOf(1) }
     val listState = rememberLazyListState()
     val horizontalScroll = rememberScrollState()
@@ -167,24 +165,28 @@ fun CodeView(
         CodeViewToolbar(
             wrapOn = wrapOn,
             onToggleWrap = { wrapOn = !wrapOn },
+            searchVisible = searchVisible,
+            onToggleSearch = { searchVisible = !searchVisible },
         )
-        CodeSearchBar(
-            query = searchQuery,
-            onQueryChange = { searchQuery = it },
-            current = safeCurrentMatch,
-            total = totalMatches,
-            onPrevious = {
-                if (totalMatches > 0) {
-                    currentMatch = if (safeCurrentMatch > 1) safeCurrentMatch - 1 else totalMatches
-                }
-            },
-            onNext = {
-                if (totalMatches > 0) {
-                    currentMatch = if (safeCurrentMatch < totalMatches) safeCurrentMatch + 1 else 1
-                }
-            },
-            onClose = { },
-        )
+        if (searchVisible) {
+            CodeSearchBar(
+                query = searchQuery,
+                onQueryChange = { searchQuery = it },
+                current = safeCurrentMatch,
+                total = totalMatches,
+                onPrevious = {
+                    if (totalMatches > 0) {
+                        currentMatch = if (safeCurrentMatch > 1) safeCurrentMatch - 1 else totalMatches
+                    }
+                },
+                onNext = {
+                    if (totalMatches > 0) {
+                        currentMatch = if (safeCurrentMatch < totalMatches) safeCurrentMatch + 1 else 1
+                    }
+                },
+                onClose = { searchVisible = false },
+            )
+        }
         val gutterWidth = remember(lines.size, startLineNumber) {
             val last = startLineNumber + lines.size - 1
             (maxOf(2, last.toString().length) * 7 + 14).dp
