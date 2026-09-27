@@ -8,7 +8,7 @@ The PC side of Remora: an out-of-tree **DeepSeek Harness bundle** (`package.json
 
 ## Status
 
-Skeleton: `apply()` validates configuration (`relayUrl` required, https except loopback, absolute roots) and logs. Nothing connects yet.
+`apply()` validates configuration (`relayUrl` required, https except loopback, absolute roots), then starts the host: it dials the relay, terminates the end-to-end channel for paired phones, serves RCP/1, adapts dsh sessions through the gateway (P2-H2), and runs pairing (P2-H1). The management page is served on the dsh web origin at `/api/remora/` (exact route plus a 303 from the trailing-slash alias); when the host has no paired device, the first pairing attempt opens automatically as soon as the relay connects and its QR is printed to an attached TTY.
 
 ## Try it in a throwaway dsh profile
 

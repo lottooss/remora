@@ -2,9 +2,10 @@
  * `AccountHub`: the single Durable Object per owner (RLY/1 §1).
  * Handles SQLite schema migrations, WebSocket hibernation, auto-response keepalives,
  * authentication with Ed25519 challenge verification, enrollment, routing with 17-byte
- * header rewrite, presence tracking, token-bucket limits, and clean close codes.
+ * header rewrite, presence tracking, token-bucket limits, FCM push dispatch, the
+ * host-offline DO alarm, and clean close codes.
  *
- * Implements RLY/1 §2–§7 and §9–§11 (task P1-R1).
+ * Implements RLY/1 §2–§11 (core: task P1-R1; push + host-offline alarm: P5-R1).
  */
 import { DurableObject } from 'cloudflare:workers'
 import {
@@ -25,10 +26,11 @@ import {
   randomBytes,
   verifyRelayChallenge,
 } from '@remora/crypto'
+import { type FcmEnv, sendFcmDataMessage } from './fcm.ts'
 
 const PING_REQ = '{"t":"ping"}'
 const PING_RES = '{"t":"pong"}'
-const OFFLINE_TASK_KEY = 'offline:host'
+const OFFLINE_TASK_PREFIX = 'offline:host:'
 
 export type EndpointKind = 'host' | 'device'
 
@@ -157,8 +159,14 @@ export class AccountHub extends DurableObject<Env> {
         'created_at INTEGER NOT NULL, ' +
         'last_seen_at INTEGER, ' +
         'revoked_at INTEGER, ' +
-        'fcm_token TEXT)',
+        'fcm_token TEXT, ' +
+        'host_offline INTEGER DEFAULT 0)',
     )
+    try {
+      sql.exec('ALTER TABLE endpoints ADD COLUMN host_offline INTEGER DEFAULT 0')
+    } catch {
+      // Column already exists
+    }
     sql.exec(
       'CREATE TABLE IF NOT EXISTS links (' +
         'host_id TEXT NOT NULL, ' +
@@ -551,6 +559,9 @@ export class AccountHub extends DurableObject<Env> {
       case 'push.token':
         await this.onPushToken(ws, att, frame, rid)
         break
+      case 'push':
+        await this.onPush(ws, att, frame, rid)
+        break
       case 'bye':
         ws.close(CloseCodes.NORMAL, 'bye')
         break
@@ -814,12 +825,104 @@ export class AccountHub extends DurableObject<Env> {
     }
 
     const token = typeof frame.token === 'string' ? frame.token : null
-    this.ctx.storage.sql.exec('UPDATE endpoints SET fcm_token = ?1 WHERE id = ?2', token, att.endpointId!)
+    const hostOffline = frame.hostOffline === true ? 1 : 0
+    this.ctx.storage.sql.exec(
+      'UPDATE endpoints SET fcm_token = ?1, host_offline = ?2 WHERE id = ?3',
+      token,
+      hostOffline,
+      att.endpointId!,
+    )
 
     this.sendJson(ws, {
       t: 'ok',
       rid,
     })
+  }
+
+  /**
+   * Handles a `push` frame from an authenticated host (RLY/1 §5, §8).
+   * Fans out an FCM data-only message per destination device. STRICT INVARIANT:
+   * `ct` is passed through opaquely — the relay never decrypts or inspects it
+   * beyond the length check.
+   */
+  private async onPush(ws: WebSocket, att: Attachment, frame: Record<string, unknown>, rid?: string): Promise<void> {
+    if (att.kind !== 'host') {
+      this.sendError(ws, 'forbidden', 'Only hosts can send push notifications', rid)
+      return
+    }
+
+    const ct = typeof frame.ct === 'string' ? frame.ct : null
+    if (ct === null || ct.length > 3072) {
+      this.sendError(ws, 'bad_request', 'ct must be a string of at most 3072 characters', rid)
+      return
+    }
+
+    if (!Array.isArray(frame.to)) {
+      this.sendError(ws, 'bad_request', 'to must be an array of device ids', rid)
+      return
+    }
+    const to = frame.to.filter((d): d is string => typeof d === 'string')
+
+    const collapse = typeof frame.collapse === 'string' ? frame.collapse : undefined
+    const priority = frame.priority === 'high' || frame.priority === 'normal' ? frame.priority : undefined
+    const ttl =
+      typeof frame.ttl === 'number' && Number.isInteger(frame.ttl) && frame.ttl >= 0 && frame.ttl <= 86400
+        ? frame.ttl
+        : undefined
+
+    const hostId = att.endpointId!
+    const results: { id: string; status: 'sent' | 'no_token' | 'unregistered' | 'error' }[] = []
+
+    for (const deviceId of to) {
+      if (!this.links.has(`${hostId}|${deviceId}`)) {
+        results.push({ id: deviceId, status: 'no_token' })
+        continue
+      }
+
+      const rows = this.ctx.storage.sql.exec<{ revoked_at: number | null; fcm_token: string | null }>(
+        'SELECT revoked_at, fcm_token FROM endpoints WHERE id = ?1',
+        deviceId,
+      ).toArray()
+      const row = rows[0]
+      if (row === undefined || row.revoked_at !== null || row.fcm_token === null) {
+        results.push({ id: deviceId, status: 'no_token' })
+        continue
+      }
+
+      const result = await sendFcmDataMessage(this.fcmEnv(), {
+        token: row.fcm_token,
+        data: { v: '1', h: hostId, ct },
+        collapseKey: collapse,
+        priority,
+        ttl,
+      })
+
+      if (result.status === 'unregistered') {
+        // Token cleanup (RLY/1 §8): FCM reported UNREGISTERED / INVALID_ARGUMENT.
+        this.ctx.storage.sql.exec('UPDATE endpoints SET fcm_token = NULL WHERE id = ?1', deviceId)
+        results.push({ id: deviceId, status: 'unregistered' })
+      } else {
+        results.push({ id: deviceId, status: result.status })
+      }
+    }
+
+    this.sendJson(ws, {
+      t: 'push.result',
+      rid,
+      results,
+    })
+  }
+
+  /**
+   * FCM env for the current Worker. `FCM_SERVICE_ACCOUNT_JSON` is a secret and
+   * `FCM_ENDPOINT` is a test override; neither is in the generated Env type.
+   */
+  private fcmEnv(): FcmEnv {
+    const env = this.env as unknown as { FCM_SERVICE_ACCOUNT_JSON?: unknown; FCM_ENDPOINT?: unknown }
+    return {
+      FCM_SERVICE_ACCOUNT_JSON: typeof env.FCM_SERVICE_ACCOUNT_JSON === 'string' ? env.FCM_SERVICE_ACCOUNT_JSON : undefined,
+      FCM_ENDPOINT: typeof env.FCM_ENDPOINT === 'string' ? env.FCM_ENDPOINT : undefined,
+    }
   }
 
   /**
@@ -946,7 +1049,7 @@ export class AccountHub extends DurableObject<Env> {
           const due = Date.now() + this.hostOfflineAlertMs()
           this.ctx.storage.sql.exec(
             'INSERT INTO tasks (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v',
-            OFFLINE_TASK_KEY,
+            `${OFFLINE_TASK_PREFIX}${att.endpointId}`,
             JSON.stringify({ hostId: att.endpointId, due }),
           )
           this.bump('alarms_set')
@@ -963,21 +1066,29 @@ export class AccountHub extends DurableObject<Env> {
 
   private async cancelOfflineTask(hostId: string): Promise<void> {
     const sql = this.ctx.storage.sql
-    const rows = sql.exec<{ v: string }>('SELECT v FROM tasks WHERE k = ?1', OFFLINE_TASK_KEY).toArray()
-    const row = rows[0]
-    let hadTask = false
-    if (row !== undefined) {
-      try {
-        const task = JSON.parse(row.v) as { hostId?: unknown }
-        if (task.hostId === hostId) {
-          sql.exec('DELETE FROM tasks WHERE k = ?1', OFFLINE_TASK_KEY)
-          hadTask = true
-        }
-      } catch {
-        // ignore corrupt json
-      }
+    sql.exec('DELETE FROM tasks WHERE k = ?1', `${OFFLINE_TASK_PREFIX}${hostId}`)
+    const remaining = sql.exec<{ k: string }>('SELECT k FROM tasks WHERE k LIKE ?1', `${OFFLINE_TASK_PREFIX}%`).toArray()
+    if (remaining.length === 0) await this.ctx.storage.deleteAlarm()
+  }
+
+  /**
+   * Host-offline alert (RLY/1 §8): metadata-only push to every linked,
+   * non-revoked device that opted in (`host_offline = 1`) and has a token.
+   * Carries no content — the app renders it from its own host record.
+   */
+  private async dispatchHostOfflineAlert(hostId: string): Promise<void> {
+    const rows = this.ctx.storage.sql.exec<{ fcm_token: string }>(
+      'SELECT e.fcm_token FROM links l ' +
+        'JOIN endpoints e ON l.device_id = e.id ' +
+        'WHERE l.host_id = ?1 AND e.revoked_at IS NULL AND e.host_offline = 1 AND e.fcm_token IS NOT NULL',
+      hostId,
+    ).toArray()
+    for (const row of rows) {
+      await sendFcmDataMessage(this.fcmEnv(), {
+        token: row.fcm_token,
+        data: { v: '1', h: hostId, k: 'host_offline' },
+      })
     }
-    if (hadTask) await this.ctx.storage.deleteAlarm()
   }
 
   override async alarm(): Promise<void> {
@@ -997,20 +1108,33 @@ export class AccountHub extends DurableObject<Env> {
       }
     }
 
-    // Host offline alert task check
+    // Host offline alert tasks (RLY/1 §8)
     const sql = this.ctx.storage.sql
-    const taskRows = sql.exec<{ v: string }>('SELECT v FROM tasks WHERE k = ?1', OFFLINE_TASK_KEY).toArray()
-    const taskRow = taskRows[0]
-    if (taskRow !== undefined) {
+    const taskRows = sql.exec<{ k: string; v: string }>(
+      'SELECT k, v FROM tasks WHERE k LIKE ?1',
+      `${OFFLINE_TASK_PREFIX}%`,
+    ).toArray()
+    let nextDue: number | null = null
+    for (const taskRow of taskRows) {
+      let task: { hostId?: unknown; due?: unknown } | null = null
       try {
-        const task = JSON.parse(taskRow.v) as { hostId?: string; due?: number }
-        if (task.due && task.due <= now) {
-          sql.exec('DELETE FROM tasks WHERE k = ?1', OFFLINE_TASK_KEY)
-          // Host confirmed offline (P5-R1 handles push notification dispatch)
-        }
+        task = JSON.parse(taskRow.v) as { hostId?: unknown; due?: unknown }
       } catch {
-        sql.exec('DELETE FROM tasks WHERE k = ?1', OFFLINE_TASK_KEY)
+        task = null
       }
+      if (task === null || typeof task.hostId !== 'string' || typeof task.due !== 'number') {
+        sql.exec('DELETE FROM tasks WHERE k = ?1', taskRow.k)
+        continue
+      }
+      if (task.due > now) {
+        if (nextDue === null || task.due < nextDue) nextDue = task.due
+        continue
+      }
+      const stillOffline = !this.findSocketsFor(task.hostId).some((s) => this.isAuthed(s))
+      if (stillOffline) await this.dispatchHostOfflineAlert(task.hostId)
+      sql.exec('DELETE FROM tasks WHERE k = ?1', taskRow.k)
     }
+    if (nextDue !== null) await this.armMinAlarm(nextDue)
+    else await this.ctx.storage.deleteAlarm()
   }
 }

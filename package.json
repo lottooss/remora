@@ -13,7 +13,8 @@
     "lint": "oxlint packages apps/relay/src apps/cli/src scripts",
     "test": "pnpm -r run test",
     "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
-    "test:security": "node -e \"console.error('security suite arrives with task P3-T1'); process.exit(1)\"",
+    "test:security": "vitest run --config tests/security/vitest.config.ts",
+    "test:perf": "vitest run --config tests/perf/vitest.config.ts",
     "conformance:check": "node scripts/check-conformance.mjs",
     "upstream:fetch": "node scripts/fetch-upstream.mjs",
     "issues:sync": "node scripts/sync-issues.mjs"

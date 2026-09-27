@@ -1,6 +1,6 @@
 {
   "name": "@remora/host",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Remora host: DeepSeek Harness bundle + Cordis plugin (the PC side of Remora)",
   "type": "module",
@@ -30,7 +30,8 @@
   "dependencies": {
     "@remora/crypto": "workspace:*",
     "@remora/protocol": "workspace:*",
-    "@remora/relay-link": "workspace:*"
+    "@remora/relay-link": "workspace:*",
+    "qrcode": "^1.5.4"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.2",
-    "@deepseek-ai/schemastery": "3.18.2"
+    "@deepseek-ai/schemastery": "3.18.2",
+    "@types/qrcode": "^1.5.6"
   }
 }

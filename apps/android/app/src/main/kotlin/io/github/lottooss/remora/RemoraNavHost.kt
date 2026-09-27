@@ -7,6 +7,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import androidx.navigation.navDeepLink
 import io.github.lottooss.remora.feature.conversation.ApprovalsScreen
 import io.github.lottooss.remora.feature.conversation.ConversationScreen
 import io.github.lottooss.remora.feature.files.FilesScreen
@@ -41,7 +42,10 @@ fun RemoraNavHost(
                 },
             )
         }
-        composable(Routes.HOSTS) {
+        composable(
+            route = Routes.HOSTS,
+            deepLinks = listOf(navDeepLink { uriPattern = "remora://hosts" }),
+        ) {
             HostsScreen(onOpenSessions = { navController.navigate(Routes.SESSIONS) })
         }
         composable(Routes.SESSIONS) {
@@ -54,6 +58,10 @@ fun RemoraNavHost(
         composable(
             route = Routes.CONVERSATION,
             arguments = listOf(navArgument(Routes.SESSION_ID_ARG) { type = NavType.StringType }),
+            deepLinks = listOf(
+                navDeepLink { uriPattern = "remora://session/{sessionId}" },
+                navDeepLink { uriPattern = "remora://conversation/{sessionId}" },
+            ),
         ) { entry ->
             val sessionId = entry.arguments?.getString(Routes.SESSION_ID_ARG).orEmpty()
             ConversationScreen(
@@ -81,11 +89,20 @@ fun RemoraNavHost(
                 onBack = { navController.popBackStack() },
             )
         }
-        composable(Routes.APPROVALS) {
+        composable(
+            route = Routes.APPROVALS,
+            deepLinks = listOf(
+                navDeepLink { uriPattern = "remora://approvals" },
+                navDeepLink { uriPattern = "remora://approvals/{id}" },
+            ),
+        ) {
             ApprovalsScreen()
         }
         composable(Routes.SETTINGS) {
-            SettingsScreen(onOpenDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) })
+            SettingsScreen(
+                onOpenDiagnostics = { navController.navigate(Routes.DIAGNOSTICS) },
+                isPushConfigured = BuildConfig.HAS_GOOGLE_SERVICES,
+            )
         }
         composable(Routes.DIAGNOSTICS) {
             DiagnosticsScreen(onBack = { navController.popBackStack() })

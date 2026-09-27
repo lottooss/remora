@@ -13,6 +13,11 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:crypto"))
+    implementation(libs.bouncycastle)
     implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.androidx.biometric)
+    implementation(libs.tink.android)
     testImplementation(libs.junit)
+    testImplementation(libs.truth)
 }

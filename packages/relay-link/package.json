@@ -1,6 +1,6 @@
 {
   "name": "@remora/relay-link",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Relay (RLY/1) WebSocket client for Node, used by the host and the testkit (task P1-L1)",
   "type": "module",

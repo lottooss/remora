@@ -17,6 +17,8 @@ export interface DeviceRecord {
   lastSeenAt: number
   /** Whether the device has been revoked. */
   revoked: boolean
+  /** Uncompressed EC P-256 approval public key. */
+  approvalPublicKey?: Uint8Array | undefined
 }
 
 export interface DeviceRegistry {
@@ -24,8 +26,11 @@ export interface DeviceRegistry {
   getDeviceById(deviceId: string): DeviceRecord | null
   addDevice(record: DeviceRecord): void
   revokeDevice(deviceId: string): void
+  renameDevice?(deviceId: string, name: string): void
   listDevices(): DeviceRecord[]
 }
+
+export { PersistentDeviceRegistry } from './persistent-registry.ts'
 
 /**
  * In-memory device registry used for testing and baseline host operation.

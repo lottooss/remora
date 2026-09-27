@@ -1,6 +1,6 @@
 {
   "name": "@remora/crypto",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Crypto/1: Noise IKpsk2, identities, relay auth, pairing, approval signatures, push AEAD (task P1-C1)",
   "type": "module",

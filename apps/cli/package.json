@@ -1,6 +1,6 @@
 {
   "name": "@remora/cli",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "remora command: service install/uninstall/status/logs, host supervisor, doctor (task P5-O1)",
   "type": "module",

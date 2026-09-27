@@ -61,6 +61,16 @@ export interface ChannelManagerOptions {
   rcpServer: RcpServer
   /** Where encoded outbound frames go (the relay connection in production). */
   sendFrame: SendFrameCallback
+  /** Optional pairing service for new device pairings. */
+  pairingService?: {
+    hasActiveAttempt(): boolean
+    handlePairingHandshake(
+      deviceId: string,
+      channelId: number,
+      peerRawId: Uint8Array,
+      msg1Bytes: Uint8Array,
+    ): Promise<boolean>
+  }
 }
 
 export class ChannelManager {
@@ -69,7 +79,44 @@ export class ChannelManager {
   private totalHalfOpen = 0
   private authFailures = 0
 
-  constructor(private readonly options: ChannelManagerOptions) {}
+  constructor(private readonly options: ChannelManagerOptions) {
+    options.rcpServer.setTransportSender?.((deviceId, channelId, msg) =>
+      this.sendTransport(deviceId, channelId, msg),
+    )
+  }
+
+  /** Sends an encrypted RCP transport frame to a device over an open channel. */
+  async sendTransport(deviceId: string, channelId: number, messageJson: string): Promise<boolean> {
+    const session = this.sessions.get(this.sessionKey(deviceId, channelId))
+    if (!session) return false
+
+    try {
+      const responseCiphertext = session.sendCipher.encryptWithAd(
+        new Uint8Array(0),
+        utf8ToBytes(messageJson),
+      )
+      const frameBytes = encodeDataFrame({
+        channel: channelId,
+        peerKind: PeerKind.DEVICE,
+        peerId: session.peerRawId,
+        payload: concatBytes(Uint8Array.of(RECORD_TYPE.TRANSPORT), responseCiphertext),
+      })
+      await this.options.sendFrame(frameBytes)
+      return true
+    } catch {
+      this.closeSession(deviceId, channelId)
+      return false
+    }
+  }
+
+  /** Close all active sessions for a specific device (e.g. upon revocation). */
+  closeDeviceChannels(deviceId: string): void {
+    for (const [key, session] of this.sessions.entries()) {
+      if (session.deviceId === deviceId) {
+        this.sessions.delete(key)
+      }
+    }
+  }
 
   /** Sessions are addressed by device *and* channel: a channel id is single-use. */
   private sessionKey(deviceId: string, channelId: number): string {
@@ -118,9 +165,18 @@ export class ChannelManager {
     // A msg1 may never replace an established session on the same channel.
     if (this.sessions.has(sessionKey)) return
 
-    // Session admission (Crypto/1 §6): paired and not revoked, else drop silently.
+    // Session admission (Crypto/1 §6): paired and not revoked, else check pairing attempt.
     const device = this.options.registry.getDeviceById(deviceId)
     if (!device || device.revoked) {
+      if (this.options.pairingService?.hasActiveAttempt()) {
+        const handled = await this.options.pairingService.handlePairingHandshake(
+          deviceId,
+          channelId,
+          peerRawId,
+          msg1Bytes,
+        )
+        if (handled) return
+      }
       this.authFailures += 1
       return
     }
@@ -266,6 +322,17 @@ export class ChannelManager {
     this.sessions.clear()
     this.halfOpenCount.clear()
     this.totalHalfOpen = 0
+  }
+
+  hasSession(deviceId: string, channelId: number): boolean {
+    return this.sessions.has(this.sessionKey(deviceId, channelId))
+  }
+
+  hasDeviceSession(deviceId: string): boolean {
+    for (const session of this.sessions.values()) {
+      if (session.deviceId === deviceId) return true
+    }
+    return false
   }
 
   getActiveSessionsCount(): number {

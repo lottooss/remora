@@ -130,6 +130,7 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 | Live agent status, errors | events `agent/status`, `agent/error` | session-controller `index.ts` ~150 |
 | Durable session facts | `session/event` `(session, event)`; `ctx.sessions.get(id)?.snapshotEvents()` | `docs/architecture.md` §Session log; session-controller `inspect()` |
 | Local HTTP routes behind browser auth | `ctx.connection` exact Fetch routes under `/api` | client-connection README §Use this package (⟂ P0-S1) |
+| Trailing-slash alias for `/api/remora/` | `ctx.webServer.register` exact route (exact table wins over prefix), guarded with `connection.requestRejection` for parity with `/api` | `host/webserver/src/index.ts` (`register`, `match`); `client-connection/src/rpc-host.ts` (`requestRejection`) |
 | Logging | `ctx.logger` | Cordis |
 | Mock LLM for e2e | `@deepseek-ai/dsh-llm-mock-server` (OpenAI-compatible HTTP/SSE fault server) + `DEEPSEEK_BASE_URL` | npm |
 
@@ -139,7 +140,7 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 |---|---|---|---|
 | Q1 | Can an out-of-tree plugin in an npm-installed dsh call `typertGateway.invoke/stream` with strict descriptors for `session/*`, `workspace/*`, `directoryPicker/*`, `workspaceFiles/*`? | P0-S1 | **Yes.** Verified in P0-S1; strict descriptors validate and execute. |
 | Q2 | Exact `SessionFollowRequest` fields (resume cursor, live-frame opt-in) and `SessionFollowFrame` variants; record fixtures | P0-S1 | **Documented & Recorded.** Fixtures recorded in `packages/host/test/fixtures/dsh-0.1.5-rc.3/`. Resume cursor filtered client-side. |
-| Q3 | Can an out-of-tree plugin register exact `/api/remora/*` Fetch routes that inherit browser authentication? | P0-S1 | **Yes.** `ctx.connection.registerFetchRoute` under `/api` enforces browser auth cookie. |
+| Q3 | Can an out-of-tree plugin register exact `/api/remora/*` Fetch routes that inherit browser authentication? | P0-S1 | **Yes.** `ctx.connection.fetch.register` (exact routes under `/api`) inherits the browser-auth cookie, Host/Origin fence, and `sec-fetch-site: cross-site` refusal (private impl `registerFetchRoute`). Used by P2-H1 for `/api/remora` and its actions. |
 | Q4 | `ctx.credentials` record API and `ctx.storage.domain` API for an out-of-tree owner | P0-S1 | **Yes.** Namespaced records `${scope}/${id}` work cleanly without private imports. |
 | Q5 | Do root-context `prepend` listeners receive Agent-scoped waterfall dispatches first? | P0-S2 | **Yes.** Verified in P0-S2; root-context listeners registered with `prepend: true` fire before child/Agent-scoped listeners. |
 | Q6 | How is a forwarded waterfall withdrawn from a browser when resolved elsewhere? Which withdrawal option works? | P0-S2 | **Derived `AbortSignal` on `next()`.** Forwarded request abort signal cancels browser UI prompt without aborting the parent turn. |
@@ -156,5 +157,6 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 | 2026-09-24 | 0.1.5-rc.3 | Host role (P0-S1) | Q1–Q4, Q10 | Verified: in-process gateway calls, follow streams, credentials, storage, and packed bundle installation |
 | 2026-09-24 | 0.1.5-rc.3 | Host role (P0-S2) | Q5–Q7 | Verified: waterfall prepend ordering, AbortSignal withdrawal, and Session tool-call argument inspection |
 | 2026-09-24 | Windows 11 / Node v24 | Host role (P0-S6) | Q9 | Verified: SetThreadExecutionState via in-process koffi & non-elevated logon autostart |
+| 2026-09-25 | 0.1.5-rc.3 (source reading) | Host role (P2-H1) | §7 fetch/webserver seams re-read for the management routes | as documented; `fetch.register` exact routes inherit the `/api` fence, `webServer.register` exact matches beat prefix matches |
 
 

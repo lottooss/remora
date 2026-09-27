@@ -122,4 +122,33 @@ export class HostRelayConnection {
       frame.payload,
     )
   }
+
+  /**
+   * Sends one RLY/1 §5 `push` control frame (ciphertext only — the relay and
+   * FCM never see plaintext, AGENTS §1.1). Resolves with the relay's
+   * per-device results once it answers.
+   */
+  async sendPushFrame(frame: {
+    to: string[]
+    ct: string
+    collapse?: string | undefined
+    priority?: 'high' | 'normal' | undefined
+    ttl?: number | undefined
+  }): Promise<Array<{ id: string; status: string }>> {
+    const reply = await this.link.request<{
+      results?: Array<{ id?: unknown; status?: unknown }>
+    }>({
+      t: 'push',
+      to: frame.to,
+      ct: frame.ct,
+      ...(frame.collapse !== undefined ? { collapse: frame.collapse } : {}),
+      ...(frame.priority !== undefined ? { priority: frame.priority } : {}),
+      ...(frame.ttl !== undefined ? { ttl: frame.ttl } : {}),
+    })
+    const results = Array.isArray(reply.results) ? reply.results : []
+    return results.map((item) => ({
+      id: typeof item.id === 'string' ? item.id : '',
+      status: typeof item.status === 'string' ? item.status : 'error',
+    }))
+  }
 }

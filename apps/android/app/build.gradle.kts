@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
 }
@@ -21,24 +22,46 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
-        versionName = "0.0.0"
+        versionName = "1.0.0"
+        buildConfigField("boolean", "HAS_GOOGLE_SERVICES", hasGoogleServices.toString())
+    }
+
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("KEYSTORE_PATH")
+            if (!keystorePath.isNullOrBlank() && file(keystorePath).exists()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
+                keyAlias = System.getenv("KEY_ALIAS") ?: ""
+                keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+            }
+        }
     }
 
     buildTypes {
         debug { applicationIdSuffix = ".debug" }
-        // Release signing and shrinking: task P6-O1.
-        release { isMinifyEnabled = false }
+        release {
+            isMinifyEnabled = false
+            val releaseSigning = signingConfigs.getByName("release")
+            if (releaseSigning.storeFile != null && releaseSigning.storeFile!!.exists()) {
+                signingConfig = releaseSigning
+            }
+        }
     }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 }
 
 dependencies {
     implementation(project(":core:model"))
+    implementation(project(":core:crypto"))
     implementation(project(":core:data"))
     implementation(project(":core:security"))
     implementation(project(":core:ui"))
@@ -62,10 +85,12 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
 
-    if (hasGoogleServices) {
-        implementation(platform(libs.firebase.bom))
-        implementation(libs.firebase.messaging)
-    }
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation(libs.junit)
+    testImplementation(libs.truth)
 }

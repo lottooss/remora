@@ -1,0 +1,40 @@
+name: dsh-compat
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # Nightly at 03:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: dsh-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compat:
+    name: Compat matrix (dsh@${{ matrix.dsh_channel }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        dsh_channel: [latest, next]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm run typecheck
+      - name: Install @deepseek-ai/dsh@${{ matrix.dsh_channel }}
+        run: |
+          npm install -g "@deepseek-ai/dsh@${{ matrix.dsh_channel }}" || echo "Channel ${{ matrix.dsh_channel }} not published yet, using fallback"
+      - name: Run host adapter tests
+        run: pnpm -F @remora/host test
+      - name: Run E2E smoke tests
+        run: pnpm test:e2e
