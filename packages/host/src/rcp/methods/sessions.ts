@@ -28,13 +28,21 @@ function parseSessionsSearchParams(p: unknown): { query: string } {
   return { query }
 }
 
-export function registerSessionMethods(rcpServer: RcpServer, adapter: SessionAdapter): void {
-  rcpServer.registerMethod('sessions.create', async (p) => {
+export function registerSessionMethods(
+  rcpServer: RcpServer,
+  adapter: SessionAdapter,
+  onSessionAccess?: ((sessionId: string, deviceId: string) => void) | undefined,
+): void {
+  rcpServer.registerMethod('sessions.create', async (p, ctx) => {
     const parsed = SessionsCreateParamsSchema.safeParse(p)
     if (!parsed.success) {
       throw new RcpMethodError(createRcpError(RCP_ERROR_CODES.invalid_params, 'invalid sessions.create params'))
     }
-    return await adapter.create(parsed.data)
+    const result = await adapter.create(parsed.data)
+    if (result && typeof (result as { sessionId?: string }).sessionId === 'string') {
+      onSessionAccess?.((result as { sessionId: string }).sessionId, ctx.deviceId)
+    }
+    return result
   })
 
   rcpServer.registerMethod('sessions.list', async (p) => {

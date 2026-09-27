@@ -328,6 +328,13 @@ export class ChannelManager {
     return this.sessions.has(this.sessionKey(deviceId, channelId))
   }
 
+  hasDeviceSession(deviceId: string): boolean {
+    for (const session of this.sessions.values()) {
+      if (session.deviceId === deviceId) return true
+    }
+    return false
+  }
+
   getActiveSessionsCount(): number {
     return this.sessions.size
   }

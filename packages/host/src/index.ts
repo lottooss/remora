@@ -18,6 +18,8 @@ import { registerManagementRoutes } from './web/routes.ts'
 import { PendingRegistry, registerAnswerBridge, runAnswerBridgeSelfCheck } from './interaction/index.ts'
 import { registerInteractionMethods } from './rcp/methods/interaction.ts'
 import { DefaultPolicyGuard } from './policy/index.ts'
+import { InMemoryNotifyPrefsStore, HostNotifier } from './notify/index.ts'
+import { registerNotifyMethods } from './rcp/methods/notify.ts'
 import { WorkspaceAdapter } from './adapter/workspaces.ts'
 import { registerWorkspaceMethods } from './rcp/methods/workspaces.ts'
 import { FsAdapter, registerFsMethods } from './rcp/methods/fs.ts'
@@ -50,6 +52,7 @@ export * from './rcp/methods/diffs.ts'
 export * from './interaction/index.ts'
 export * from './rcp/methods/interaction.ts'
 export * from './policy/index.ts'
+export * from './notify/index.ts'
 export * from './platform/index.ts'
 
 import { KeepAwakeManager } from './platform/index.ts'
@@ -156,6 +159,9 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
 
+  const notifyPrefsStore = new InMemoryNotifyPrefsStore()
+  registerNotifyMethods(rcpServer, notifyPrefsStore)
+
   const pendingRegistry = new PendingRegistry()
   const disposeBridge = registerAnswerBridge(ctx, {
     registry,
@@ -189,7 +195,9 @@ export function apply(ctx: Context, config: Config): void {
       policyGuard,
       workspaceAdapter,
     })
-    registerSessionMethods(rcpServer, sessionAdapter)
+    registerSessionMethods(rcpServer, sessionAdapter, (sessionId, deviceId) => {
+      notifier.recordSessionDevice(sessionId, deviceId)
+    })
   }
 
   const filesAdapter = new FilesAdapter({
@@ -213,6 +221,19 @@ export function apply(ctx: Context, config: Config): void {
 
   relay.attachChannelManager(channelManager)
 
+  const notifier = new HostNotifier({
+    registry,
+    prefsStore: notifyPrefsStore,
+    config: resolved.notify,
+    sendPush: async (frame) => {
+      await relay.sendPushFrame(frame)
+    },
+    isDeviceConnected: (deviceId) => channelManager.hasDeviceSession(deviceId),
+    isDeviceForegrounded: (_deviceId, _sessionId) => false,
+  })
+
+  const detachNotifier = notifier.attachPendingRegistry(pendingRegistry)
+
   const keepAwakeManager = new KeepAwakeManager({
     enabled: resolved.keepAwake === 'while-busy',
     gracePeriodMs: 120_000,
@@ -228,12 +249,30 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
   })
+  untypedCtx.on('session/event', (event: unknown) => {
+    if (typeof event === 'object' && event !== null) {
+      const e = event as { type?: string; sessionId?: string; title?: string }
+      if (e.type === 'turn/end' && typeof e.sessionId === 'string') {
+        void notifier.notifyTurnDone(e.sessionId, e.title).catch(() => {})
+      }
+    }
+  })
+  untypedCtx.on('agent/error', (event: unknown) => {
+    if (typeof event === 'object' && event !== null) {
+      const e = event as { sessionId?: string; error?: unknown; title?: string }
+      if (typeof e.sessionId === 'string') {
+        const errText = typeof e.error === 'string' ? e.error : 'Agent encountered an error'
+        void notifier.notifyTurnError(e.sessionId, errText, e.title).catch(() => {})
+      }
+    }
+  })
 
   // Disposer: zeroize channel keys, then close the relay socket. Runs when the
   // fiber unloads; dsh waits up to 2 s for it (AGENTS §7.3).
   ctx.effect(
     () => () => {
       ctx.logger.info('remora: disposing host plugin')
+      detachNotifier()
       keepAwakeManager.dispose()
       disposeBridge()
       channelManager.closeAll()
