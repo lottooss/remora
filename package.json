@@ -11,7 +11,7 @@
     "build": "pnpm -r --filter \"./packages/**\" --filter \"./apps/cli\" run build",
     "typecheck": "pnpm -r run typecheck",
     "lint": "oxlint packages apps/relay/src apps/cli/src scripts",
-    "test": "pnpm -r run test",
+    "test": "pnpm -r run test && vitest run --config scripts/vitest.config.ts",
     "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
     "test:real-dsh": "vitest run --config tests/real-dsh/vitest.config.ts",
     "test:security": "vitest run --config tests/security/vitest.config.ts",
