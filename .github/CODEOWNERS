@@ -1,0 +1,11 @@
+# Gates and contracts: changes need the owner's approval (docs/SWARM.md §4).
+# Takes effect once branch protection requires Code Owner reviews (task P7-O6).
+/.github/                     @lottooss
+/scripts/check-*.mjs          @lottooss
+/scripts/gates.allow.json     @lottooss
+/tests/real-dsh/              @lottooss
+/conformance/schema/          @lottooss
+/docs/SWARM.md                @lottooss
+/AGENTS.md                    @lottooss
+/docs/specs/                  @lottooss
+/docs/adr/                    @lottooss

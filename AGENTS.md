@@ -11,7 +11,7 @@
 4. Touching the host plugin? Read [docs/upstream/dsh-integration.md](docs/upstream/dsh-integration.md) and fetch the upstream source (`node scripts/fetch-upstream.mjs`).
 5. Touching a wire format or crypto? Read the spec: [RCP/1](docs/specs/rcp-v1.md), [RLY/1](docs/specs/relay-v1.md), [Crypto/1](docs/specs/crypto-v1.md).
 
-Project status: **P0 — Specify & Spike.** The code tree is a building skeleton; the specs are `v1-draft` until task P0-A2 freezes them.
+Project status: **P7 — Remediation & Real Integration.** Phases P2–P6 were closed but an audit (2026-09-28) found the product does not work against real dsh or a real phone. **Swarm agents: read [docs/SWARM.md](docs/SWARM.md) before anything else**; its rules override the "Working a task" flow below where they are stricter.
 
 ## 1. Cardinal invariants (non-negotiable)
 
