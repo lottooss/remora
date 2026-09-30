@@ -4,7 +4,7 @@
  * (`cordis.patch.yml`).
  */
 import os from 'node:os'
-import type { Context } from '@deepseek-ai/cordis'
+import { Logger, type Context, type Exporter, type Message } from '@deepseek-ai/cordis'
 // Declaration merging: these type-only imports teach the compiler that
 // `ctx.typertGateway` (api-gateway) exists and that the `agent/status`,
 // `agent/error` (dsh-agent) and `session/event` (dsh-session) event names are
@@ -83,6 +83,22 @@ export const inject: string[] = ['typertGateway', 'credentials', 'storage']
  */
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
+  // dsh's web profile registers no console exporter for the Cordis logger
+  // (verified against upstream.lock.json 0.1.5-rc.3: a plugin's ctx.logger
+  // output never reaches the terminal), so the owner would never see the
+  // host's startup and status lines. Bridge this plugin's records to the
+  // terminal with the official formatter, scoped by logger name (the -1
+  // default threshold silences every other logger; remora shows up to warn).
+  // Registered as an effect of this fiber, so it disappears with the plugin.
+  // The write goes through process.stdout like the pairing QR (web/index.ts).
+  const consoleBridge: Exporter = {
+    colors: false,
+    levels: { default: -1, remora: 2 },
+    export: (message: Message) => {
+      process.stdout.write(`${Logger.format(consoleBridge, message)}\n`)
+    },
+  }
+  ctx.logger.exporter(consoleBridge)
   const identity = createHostIdentity()
   const registry = new PersistentDeviceRegistry()
   const hostName = os.hostname()
