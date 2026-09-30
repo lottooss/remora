@@ -147,13 +147,16 @@ describe('RetryingGateway.invoke', () => {
     })
 
     const promise = retrying.invoke(listRequest)
-
+    // Attach the rejection assertion before stepping fake time: the promise
+    // rejects mid-step, and Node would report the rejection as unhandled while
+    // the test is still advancing the clock.
+    const assertion = expect(promise).rejects.toBe(recorded)
     // Attempts at t=0, 250, 500, 750 are retried; the attempt at t=1000 is past
     // the deadline, so the original error is rethrown and nothing more is tried.
     for (let step = 0; step < 4; step += 1) {
       await retryStep(time)
     }
-    await expect(promise).rejects.toBe(recorded)
+    await assertion
     expect(scripted.invoke).toHaveBeenCalledTimes(5)
     expect(time.delays).toEqual([250, 250, 250, 250])
     expect(time.pendingSleepCount()).toBe(0)
@@ -169,6 +172,7 @@ describe('RetryingGateway.invoke', () => {
     const controller = new AbortController()
 
     const promise = retrying.invoke({ ...listRequest, signal: controller.signal })
+    const assertion = expect(promise).rejects.toMatchObject({ name: 'AbortError' })
     await drainMicrotasks()
     expect(scripted.invoke).toHaveBeenCalledTimes(1)
 
@@ -176,7 +180,7 @@ describe('RetryingGateway.invoke', () => {
     controller.abort()
     await time.flush()
 
-    await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
+    await assertion
     expect(scripted.invoke).toHaveBeenCalledTimes(1)
     expect(time.pendingSleepCount()).toBe(0)
   })
@@ -220,12 +224,13 @@ describe('RetryingGateway.invoke', () => {
     const retrying = new RetryingGateway(scripted, { clock: time.clock, sleep: time.sleep })
 
     const promise = retrying.invoke(listRequest)
+    const assertion = expect(promise).rejects.toBe(recorded)
     // 120 retries at t=0..29750 keep failing inside the deadline; the attempt at
     // t=30000 is the first one past the deadline and rejects for good.
     for (let step = 0; step < 120; step += 1) {
       await retryStep(time)
     }
-    await expect(promise).rejects.toBe(recorded)
+    await assertion
     expect(scripted.invoke).toHaveBeenCalledTimes(121)
     expect(time.delays).toEqual(Array.from({ length: 120 }, () => 250))
     expect(time.elapsed()).toBe(30_000)
@@ -277,10 +282,11 @@ describe('RetryingGateway.stream', () => {
     })
 
     const promise = retrying.stream(listRequest)
+    const assertion = expect(promise).rejects.toBe(recorded)
     for (let step = 0; step < 4; step += 1) {
       await retryStep(time)
     }
-    await expect(promise).rejects.toBe(recorded)
+    await assertion
     expect(scripted.stream).toHaveBeenCalledTimes(5)
     expect(time.delays).toEqual([250, 250, 250, 250])
     expect(time.pendingSleepCount()).toBe(0)
@@ -295,13 +301,14 @@ describe('RetryingGateway.stream', () => {
     const controller = new AbortController()
 
     const promise = retrying.stream({ ...listRequest, signal: controller.signal })
+    const assertion = expect(promise).rejects.toMatchObject({ name: 'AbortError' })
     await drainMicrotasks()
     expect(scripted.stream).toHaveBeenCalledTimes(1)
 
     controller.abort()
     await time.flush()
 
-    await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
+    await assertion
     expect(scripted.stream).toHaveBeenCalledTimes(1)
     expect(time.pendingSleepCount()).toBe(0)
   })
