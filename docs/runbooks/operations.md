@@ -1,4 +1,6 @@
-# Operations Runbook — Remora v1.0.0
+# Operations Runbook
+
+> **v1 not released — see milestone P7.** An audit on 2026-09-28 found Remora does not yet work against real dsh or a real phone; several instructions below were corrected on 2026-09-30 (see [SWARM.md §0](../SWARM.md#0-why-this-phase-exists-read-this-it-is-not-optional)). Do not follow this guide end-to-end until the P7 wave-5 owner tasks (P7-O1…P7-O5) pass.
 
 Owner-facing guide from zero to "my phone controls dsh on my PC".
 
@@ -70,9 +72,11 @@ dsh --profile remora --from-default-profile web
 dsh plugin --profile remora add ./packages/host
 ```
 
-Store your `REMORA_ENROLL_SECRET` in dsh credentials under `REMORA_RELAY_ENROLL_SECRET`:
-```sh
-dsh credentials --profile remora set REMORA_RELAY_ENROLL_SECRET "<your-enroll-secret>"
+Provide the enrollment secret to dsh as the key `REMORA_RELAY_ENROLL_SECRET` (its value is the `REMORA_ENROLL_SECRET` you stored in Cloudflare above). There is no dedicated dsh CLI command for this: dsh-credentials-local resolves credential keys from the launch environment, then its store, then the project `.env`, then the harness-home `.env`. The simplest option is to put `REMORA_RELAY_ENROLL_SECRET=<value>` in `%USERPROFILE%\.dsh\.env` (or export it in the process environment you launch dsh from):
+
+```text
+# %USERPROFILE%\.dsh\.env
+REMORA_RELAY_ENROLL_SECRET=<your-enroll-secret>
 ```
 
 Edit your profile configuration patch at `%USERPROFILE%\.dsh\profiles\remora\cordis.patch.yml`:
@@ -130,7 +134,7 @@ To stop or uninstall the service at any time:
 node apps/cli/lib/bin.js service uninstall
 ```
 
-> **Power settings recommendation:** Set *Sleep when plugged in* to *Never* in Windows Settings (System → Power). Remora automatically uses Windows thread execution state flags (`ES_SYSTEM_REQUIRED`) to keep the PC awake during active AI agent turns.
+> **Power settings recommendation:** Set *Sleep when plugged in* to *Never* in Windows Settings (System → Power). Automatic keep-awake during active agent turns is **not implemented yet** — the current keep-awake path is a no-op on Windows (see [SWARM.md §0](../SWARM.md#0-why-this-phase-exists-read-this-it-is-not-optional)); P7-H6 will fix it and this note will be updated when it lands. Until then, the manual power setting above is the only thing keeping the PC awake.
 
 ---
 
@@ -197,12 +201,8 @@ If a paired device is lost, stolen, or decommissioned:
 The Cloudflare Worker Durable Object (`AccountHub`) stores all routing metadata and device mappings in Cloudflare's globally replicated Durable Object SQLite storage. No manual database backup is required. If redeploying the worker code, existing SQLite storage persists automatically.
 
 ### 8.2 Host Identity and Paired Devices
-The host identity keys and paired device registry reside in your dsh profile directory:
-- `%USERPROFILE%\.dsh\profiles\remora\credentials.json`
-- `%USERPROFILE%\.dsh\profiles\remora\remora-devices.json`
 
-To back up: Copy these two files to a secure backup location.
-To restore on a new PC: Copy the files back into `%USERPROFILE%\.dsh\profiles\remora\` before launching the service.
+The host currently does **not** persist its identity keys or the paired-device registry — every restart forgets both (see [SWARM.md §0](../SWARM.md#0-why-this-phase-exists-read-this-it-is-not-optional)). Where this state will live is **determined by P7-H2 (persistent host identity) and P7-H4 (persistent device registry)**; until those tasks land there is nothing reliable to back up, and this section will be updated when they merge.
 
 ---
 

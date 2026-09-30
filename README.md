@@ -4,7 +4,7 @@
 
 Remora attaches to the `dsh` agent running on your PC the way a remora rides with a whale: the harness keeps doing the work on your machine; your phone becomes a remote window onto it. See every session, watch answers stream in, send prompts, approve tool calls (with a fingerprint for risky ones), answer the agent's questions, start new sessions in allowed folders, browse files and diffs, and get notified when the agent needs you.
 
-> **Status: P0 — Specify & Spike.** Architecture, contracts, and task plan are written; the code tree is a building skeleton. Nothing is usable yet.
+> **Status: P7 — remediation; not yet usable.** Phases P2–P6 were closed, but an audit on 2026-09-28 found the product does not work against real dsh or a real phone; see [docs/SWARM.md](docs/SWARM.md) and the [P7 milestone](https://github.com/lottooss/remora/milestone/8) for what is actually verified and what remains.
 
 ```mermaid
 flowchart LR
