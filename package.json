@@ -13,6 +13,7 @@
     "lint": "oxlint packages apps/relay/src apps/cli/src scripts",
     "test": "pnpm -r run test",
     "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
+    "test:real-dsh": "vitest run --config tests/real-dsh/vitest.config.ts",
     "test:security": "vitest run --config tests/security/vitest.config.ts",
     "test:perf": "vitest run --config tests/perf/vitest.config.ts",
     "conformance:check": "node scripts/check-conformance.mjs",

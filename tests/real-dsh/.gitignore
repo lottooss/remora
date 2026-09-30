@@ -1,0 +1,3 @@
+# Test artifacts (collected dsh/relay logs) are written here on every run and
+# uploaded by CI on failure. Never commit them.
+artifacts/

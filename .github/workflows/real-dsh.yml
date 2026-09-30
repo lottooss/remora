@@ -1,0 +1,40 @@
+name: real-dsh
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: real-dsh-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  real-dsh:
+    name: Real dsh boot (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:real-dsh
+      - name: Upload dsh and relay logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-dsh-logs-${{ matrix.os }}
+          path: tests/real-dsh/artifacts/
+          if-no-files-found: warn
+          retention-days: 14
