@@ -4,7 +4,16 @@
  * (`cordis.patch.yml`).
  */
 import os from 'node:os'
-import type { Context } from '@deepseek-ai/cordis'
+import { Logger, type Context, type Exporter, type Message } from '@deepseek-ai/cordis'
+// Declaration merging: these type-only imports teach the compiler that
+// `ctx.typertGateway` (api-gateway) exists and that the `agent/status`,
+// `agent/error` (dsh-agent) and `session/event` (dsh-session) event names are
+// part of Cordis's `Events` map, so every `ctx.on` below is type-checked.
+// They are devDependencies pinned to the upstream.lock.json version and never
+// imported at runtime.
+import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-api-gateway'
+import type {} from '@deepseek-ai/dsh-session'
 import { decodeBase64Url } from '@remora/crypto'
 import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
@@ -60,8 +69,13 @@ import { KeepAwakeManager } from './platform/index.ts'
 /** Stable Cordis plugin name. */
 export const name = 'remora'
 
-/** Services required before `apply` runs. */
-export const inject: string[] = []
+/**
+ * Services required before `apply` runs (Cordis 4 keeps the plugin fiber
+ * pending until all of them exist; dsh provides each on its own service
+ * fiber — see the P0-S1 spike). The optional web connection is NOT here:
+ * the management routes register through `ctx.inject(['connection'], ...)`.
+ */
+export const inject: string[] = ['typertGateway', 'credentials', 'storage']
 
 /**
  * Plugin body: resolve configuration, instantiate identity, device registry,
@@ -69,6 +83,22 @@ export const inject: string[] = []
  */
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
+  // dsh's web profile registers no console exporter for the Cordis logger
+  // (verified against upstream.lock.json 0.1.5-rc.3: a plugin's ctx.logger
+  // output never reaches the terminal), so the owner would never see the
+  // host's startup and status lines. Bridge this plugin's records to the
+  // terminal with the official formatter, scoped by logger name (the -1
+  // default threshold silences every other logger; remora shows up to warn).
+  // Registered as an effect of this fiber, so it disappears with the plugin.
+  // The write goes through process.stdout like the pairing QR (web/index.ts).
+  const consoleBridge: Exporter = {
+    colors: false,
+    levels: { default: -1, remora: 2 },
+    export: (message: Message) => {
+      process.stdout.write(`${Logger.format(consoleBridge, message)}\n`)
+    },
+  }
+  ctx.logger.exporter(consoleBridge)
   const identity = createHostIdentity()
   const registry = new PersistentDeviceRegistry()
   const hostName = os.hostname()
@@ -179,26 +209,26 @@ export function apply(ctx: Context, config: Config): void {
 
   registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)
 
-  const gateway = (ctx as any).typertGateway
+  // Guaranteed by `inject` above: without it the fiber never loads, so the
+  // previous silent `if (gateway)` branch (which skipped the session methods
+  // without a word) is gone — fail closed at load instead.
+  const gateway = ctx.typertGateway
   const gitAdapter = new GitAdapter()
 
-  let sessionAdapter: SessionAdapter | undefined
-  if (gateway) {
-    const workspaceAdapter = new WorkspaceAdapter({ gateway, policyGuard })
-    registerWorkspaceMethods(rcpServer, workspaceAdapter)
+  const workspaceAdapter = new WorkspaceAdapter({ gateway, policyGuard })
+  registerWorkspaceMethods(rcpServer, workspaceAdapter)
 
-    const fsAdapter = new FsAdapter({ gateway, policyGuard })
-    registerFsMethods(rcpServer, fsAdapter)
+  const fsAdapter = new FsAdapter({ gateway, policyGuard })
+  registerFsMethods(rcpServer, fsAdapter)
 
-    sessionAdapter = new SessionAdapter({
-      gateway,
-      policyGuard,
-      workspaceAdapter,
-    })
-    registerSessionMethods(rcpServer, sessionAdapter, (sessionId, deviceId) => {
-      notifier.recordSessionDevice(sessionId, deviceId)
-    })
-  }
+  const sessionAdapter = new SessionAdapter({
+    gateway,
+    policyGuard,
+    workspaceAdapter,
+  })
+  registerSessionMethods(rcpServer, sessionAdapter, (sessionId, deviceId) => {
+    notifier.recordSessionDevice(sessionId, deviceId)
+  })
 
   const filesAdapter = new FilesAdapter({
     gateway,
@@ -239,8 +269,12 @@ export function apply(ctx: Context, config: Config): void {
     gracePeriodMs: 120_000,
   })
 
-  const untypedCtx = ctx as unknown as { on(event: string, callback: (event: unknown) => void): () => void }
-  untypedCtx.on('agent/status', (event: unknown) => {
+  // Typed registrations: the event names are checked against dsh's augmented
+  // Cordis `Events` map (type-only imports at the top). The handler bodies keep
+  // their pre-P7-H1 payload handling verbatim on purpose — this packet freezes
+  // behavior; retyping the handlers against the real dsh payloads is P7-H5
+  // (docs/tasks/P7-H5.md).
+  ctx.on('agent/status', (event: unknown) => {
     if (typeof event === 'object' && event !== null) {
       const { agent, status } = event as { agent?: { id?: string } | string; status?: string }
       const agentId = typeof agent === 'object' && agent !== null ? agent.id ?? 'default' : typeof agent === 'string' ? agent : 'default'
@@ -249,7 +283,7 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
   })
-  untypedCtx.on('session/event', (event: unknown) => {
+  ctx.on('session/event', (event: unknown) => {
     if (typeof event === 'object' && event !== null) {
       const e = event as { type?: string; sessionId?: string; title?: string }
       if (e.type === 'turn/end' && typeof e.sessionId === 'string') {
@@ -257,7 +291,7 @@ export function apply(ctx: Context, config: Config): void {
       }
     }
   })
-  untypedCtx.on('agent/error', (event: unknown) => {
+  ctx.on('agent/error', (event: unknown) => {
     if (typeof event === 'object' && event !== null) {
       const e = event as { sessionId?: string; error?: unknown; title?: string }
       if (typeof e.sessionId === 'string') {
