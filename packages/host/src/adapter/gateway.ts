@@ -53,6 +53,12 @@ export const DSH_ERROR_CODE_MAP: Readonly<Record<string, string>> = Object.freez
   'gateway/endpoint-unknown': RCP_ERROR_CODES.method_not_found,
 })
 
+/** Reads the `code` property of an upstream dsh error, if it is a string. */
+function upstreamErrorCode(err: unknown): string | undefined {
+  const code = (err as { code?: unknown } | null | undefined)?.code
+  return typeof code === 'string' ? code : undefined
+}
+
 /**
  * Maps any upstream dsh error or RemoteError to a client-safe RcpError
  * with the original code in `details.dsh` (RCP/1 §3).
@@ -62,9 +68,7 @@ export function mapDshErrorToRcp(err: unknown): RcpError {
     return err.rcpError
   }
 
-  const dshCode = typeof (err as { code?: unknown })?.code === 'string'
-    ? (err as { code: string }).code
-    : undefined
+  const dshCode = upstreamErrorCode(err)
 
   if (dshCode && Object.hasOwn(DSH_ERROR_CODE_MAP, dshCode)) {
     const rcpCode = DSH_ERROR_CODE_MAP[dshCode]!
@@ -90,6 +94,135 @@ export async function withGatewayError<T>(fn: () => Promise<T>): Promise<T> {
     return await fn()
   } catch (err: unknown) {
     throw new RcpMethodError(mapDshErrorToRcp(err))
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Startup-race retry (docs/tasks/P7-H9.md)
+// ---------------------------------------------------------------------------
+
+/** The only upstream error code worth retrying: dsh services start asynchronously. */
+export const GATEWAY_SERVICE_UNAVAILABLE_CODE = 'gateway/service-unavailable'
+
+export const DEFAULT_GATEWAY_RETRY_DEADLINE_MS = 30_000
+
+export const DEFAULT_GATEWAY_RETRY_INTERVAL_MS = 250
+
+export interface RetryingGatewayOptions {
+  /** Wall-clock budget for retrying, counted from the first attempt. Default 30 000 ms. */
+  retryDeadlineMs?: number | undefined
+  /** Delay between two attempts. Default 250 ms. */
+  retryIntervalMs?: number | undefined
+  /** Time source in milliseconds. Injected for deterministic tests; default `Date.now`. */
+  clock?: (() => number) | undefined
+  /**
+   * Wait between attempts; rejects as soon as `signal` aborts. Injected for
+   * deterministic tests; default a timer-based wait.
+   */
+  sleep?: ((ms: number, signal: AbortSignal | undefined) => Promise<void>) | undefined
+}
+
+/**
+ * Default retry wait: resolves after `ms`, or rejects as soon as `signal`
+ * aborts. The rejection carries the signal's abort reason (Node's default is
+ * an `AbortError` DOMException), which `mapDshErrorToRcp` maps to the RCP
+ * `cancelled` code.
+ */
+function sleepUntil(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  if (signal === undefined) {
+    return new Promise<void>((resolve) => {
+      setTimeout(resolve, ms)
+    })
+  }
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason)
+      return
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = (): void => {
+      clearTimeout(timer)
+      reject(signal.reason)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+/**
+ * Wraps the raw dsh `ctx.typertGateway` so that `invoke` and `stream` survive
+ * the dsh startup race: until dsh finishes starting, the first gateway calls
+ * reject with `code === 'gateway/service-unavailable'` (recorded in
+ * `test/fixtures/dsh-0.1.5-rc.3/report.json`; the working retry pattern comes
+ * from `spikes/p0-s1-dsh-adapter/src/index.js`, `invokeReady`). Only that exact
+ * code is retried — every 250 ms until the deadline (default 30 s, set per
+ * instance via {@link RetryingGatewayOptions.retryDeadlineMs}) — and the
+ * caller's AbortSignal stops the retries immediately; every other error
+ * propagates on the first occurrence with the original error object. The
+ * request object reaches dsh untouched, so `signal` passthrough still lets dsh
+ * cancel the in-flight call itself.
+ */
+export class RetryingGateway implements TypertGateway {
+  readonly #inner: TypertGateway
+  readonly #retryDeadlineMs: number
+  readonly #retryIntervalMs: number
+  readonly #clock: () => number
+  readonly #sleep: (ms: number, signal: AbortSignal | undefined) => Promise<void>
+
+  constructor(inner: TypertGateway, options: RetryingGatewayOptions = {}) {
+    this.#inner = inner
+    this.#retryDeadlineMs = options.retryDeadlineMs ?? DEFAULT_GATEWAY_RETRY_DEADLINE_MS
+    this.#retryIntervalMs = options.retryIntervalMs ?? DEFAULT_GATEWAY_RETRY_INTERVAL_MS
+    this.#clock = options.clock ?? Date.now
+    this.#sleep = options.sleep ?? sleepUntil
+    // Fail closed on misconfiguration instead of retrying forever or never.
+    if (!Number.isFinite(this.#retryDeadlineMs) || this.#retryDeadlineMs < 0) {
+      throw new TypeError(
+        `retryDeadlineMs must be a finite non-negative number, got ${String(this.#retryDeadlineMs)}`,
+      )
+    }
+    if (!Number.isFinite(this.#retryIntervalMs) || this.#retryIntervalMs < 0) {
+      throw new TypeError(
+        `retryIntervalMs must be a finite non-negative number, got ${String(this.#retryIntervalMs)}`,
+      )
+    }
+  }
+
+  invoke(request: InvokeRemoteRequest): Promise<unknown> {
+    return this.#callWithRetry((req) => this.#inner.invoke(req), request)
+  }
+
+  stream(request: InvokeRemoteRequest): Promise<AsyncIterable<unknown>> | AsyncIterable<unknown> {
+    // Retries cover opening the stream; errors raised while iterating an
+    // already-established stream are the stream consumer's concern.
+    return this.#callWithRetry((req) => this.#inner.stream(req), request)
+  }
+
+  async #callWithRetry<T>(
+    call: (request: InvokeRemoteRequest) => T | Promise<T>,
+    request: InvokeRemoteRequest,
+  ): Promise<T> {
+    const signal = request.signal
+    const deadlineAt = this.#clock() + this.#retryDeadlineMs
+    for (;;) {
+      signal?.throwIfAborted()
+      try {
+        return await call(request)
+      } catch (err: unknown) {
+        if (upstreamErrorCode(err) !== GATEWAY_SERVICE_UNAVAILABLE_CODE) {
+          throw err
+        }
+        // The caller's abort wins over both the retry and the deadline, and the
+        // deadline gives up with the original error, never a synthetic timeout.
+        signal?.throwIfAborted()
+        if (this.#clock() >= deadlineAt) {
+          throw err
+        }
+        await this.#sleep(this.#retryIntervalMs, signal)
+      }
+    }
   }
 }
 
