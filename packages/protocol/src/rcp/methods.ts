@@ -292,6 +292,28 @@ export const SessionsListResultSchema = z
   .object({ items: z.array(SessionSummarySchema), next: z.string().optional() })
   .passthrough()
 
+export const SessionsSearchSchema = z
+  .object({
+    sessionId: SessionIdSchema,
+    title: z.string().nullable(),
+    snippet: z.string(),
+    at: EpochMsSchema,
+  })
+  .passthrough()
+export type SessionsSearchHit = z.infer<typeof SessionsSearchSchema>
+
+export const SessionsSearchParamsSchema = z
+  .object({ query: z.string().min(1).max(200) })
+  .passthrough()
+export const SessionsSearchResultSchema = z
+  .object({ results: z.array(SessionsSearchSchema) })
+  .passthrough()
+
+/**
+ * `sessions.get` is not part of RCP/1 §4–§11; P7-C1 removed it from the method
+ * registry. The host still registers a handler until P7-H7 deletes it, so the
+ * schemas stay exported for that handler. Do not build new methods on them.
+ */
 export const SessionsGetParamsSchema = z.object({ sessionId: SessionIdSchema }).passthrough()
 export const SessionsGetResultSchema = z
   .object({
@@ -423,6 +445,17 @@ export const WorkspacesListResultSchema = z
   .object({ workspaces: z.array(WorkspaceSchema) })
   .passthrough()
 
+/** Params of `workspaces.follow` (RCP/1 §6). */
+export const WorkspacesFollowParamsSchema = EmptyParamsSchema
+
+/** One frame of `workspaces.follow` (RCP/1 §6). */
+export const WorkspacesFollowItemSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('baseline'), workspaces: z.array(WorkspaceSchema) }).passthrough(),
+  z.object({ type: z.literal('upsert'), workspace: WorkspaceSchema }).passthrough(),
+  z.object({ type: z.literal('removed'), id: WorkspaceIdSchema }).passthrough(),
+])
+export type WorkspacesFollowItem = z.infer<typeof WorkspacesFollowItemSchema>
+
 export const WorkspacesCreateParamsSchema = z
   .object({ path: z.string().min(1), requestId: RequestIdSchema })
   .passthrough()
@@ -459,6 +492,36 @@ export const FsMkdirParamsSchema = z
   .passthrough()
 export const FsMkdirResultSchema = z.object({ path: z.string().min(1) }).passthrough()
 
+export const FilesListParamsSchema = z
+  .object({ sessionId: SessionIdSchema, path: z.string().min(1) })
+  .passthrough()
+export const FilesListResultSchema = z
+  .object({
+    path: z.string(),
+    entries: z.array(
+      z
+        .object({
+          name: z.string().min(1),
+          kind: z.enum(['dir', 'file', 'link']),
+          bytes: z.number().int().min(0).optional(),
+        })
+        .passthrough(),
+    ),
+    truncated: z.boolean(),
+  })
+  .passthrough()
+
+export const FilesStatParamsSchema = z
+  .object({ sessionId: SessionIdSchema, path: z.string().min(1) })
+  .passthrough()
+export const FilesStatResultSchema = z
+  .object({
+    path: z.string(),
+    bytes: z.number().int().min(0).optional(),
+    version: z.string(),
+  })
+  .passthrough()
+
 export const FilesReadParamsSchema = z
   .object({
     sessionId: SessionIdSchema,
@@ -479,6 +542,12 @@ export const FilesReadResultSchema = z
   })
   .passthrough()
 
+/**
+ * `files.readBytes` is not part of RCP/1 §4–§11; P7-C1 removed it from the
+ * method registry. The host still registers a handler until P7-H7 deletes it,
+ * so the schemas stay exported for that handler. Do not build new methods on
+ * them.
+ */
 export const FilesReadBytesParamsSchema = z
   .object({
     sessionId: SessionIdSchema,
@@ -499,6 +568,33 @@ export const FilesReadBytesResultSchema = z
   })
   .passthrough()
 
+/**
+ * `diffs.file` (RCP/1 §9). The host currently serves the same payload shape
+ * under the off-spec name `diffs.get` (`DiffsGet*` below); P7-H7 removes that
+ * handler and the duplicated schemas with it.
+ */
+export const DiffsFileParamsSchema = z
+  .object({
+    sessionId: SessionIdSchema,
+    path: z.string().min(1),
+    fromHunk: z.number().int().min(0).optional(),
+  })
+  .passthrough()
+export const DiffsFileResultSchema = z
+  .object({
+    path: z.string(),
+    binary: z.boolean(),
+    hunks: z.array(z.object({ header: z.string(), lines: z.array(z.string()) }).passthrough()),
+    nextHunk: z.number().int().optional(),
+  })
+  .passthrough()
+
+/**
+ * `diffs.get` is not part of RCP/1 §4–§11; P7-C1 removed it from the method
+ * registry (the spec method is `diffs.file` above). The host still registers a
+ * handler until P7-H7 deletes it, so the schemas stay exported for that
+ * handler. Do not build new methods on them.
+ */
 export const DiffsGetParamsSchema = z
   .object({
     sessionId: SessionIdSchema,
@@ -535,6 +631,11 @@ export const DiffsStatusResultSchema = z
   })
   .passthrough()
 
+/**
+ * `diffs.hunk` is not part of RCP/1 §4–§11; P7-C1 removed it from the method
+ * registry. The host still registers a handler until P7-H7 deletes it, so the
+ * schemas stay exported for that handler. Do not build new methods on them.
+ */
 export const DiffsHunkParamsSchema = z
   .object({
     sessionId: SessionIdSchema,
@@ -589,41 +690,28 @@ export const QuestionsAnswerResultSchema = z
   .object({ accepted: z.boolean(), by: z.enum(['phone', 'pc', 'system']) })
   .passthrough()
 
-export const DevicesListParamsSchema = EmptyParamsSchema
-export const DevicesListResultSchema = z
+/** Params of `files.changes` (RCP/1 §9). */
+export const FilesChangesParamsSchema = z.object({ sessionId: SessionIdSchema }).passthrough()
+
+/** One frame of `files.changes` (RCP/1 §9). */
+export const FilesChangesItemSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('ready') }).passthrough(),
+  z.object({ type: z.literal('changed'), paths: z.array(z.string()) }).passthrough(),
+])
+export type FilesChangesItem = z.infer<typeof FilesChangesItemSchema>
+
+export const DevicesSelfParamsSchema = EmptyParamsSchema
+export const DevicesSelfResultSchema = z
   .object({
-    devices: z.array(
-      z
-        .object({
-          id: DeviceIdSchema,
-          name: z.string(),
-          pairedAt: EpochMsSchema,
-          current: z.boolean().optional(),
-          revoked: z.boolean().optional(),
-          approvalKey: z.object({ hardwareBacked: z.boolean().nullable() }).passthrough(),
-        })
-        .passthrough(),
-    ),
+    id: DeviceIdSchema,
+    name: z.string(),
+    pairedAt: EpochMsSchema,
+    approvalKey: z.object({ hardwareBacked: z.boolean().nullable() }).passthrough(),
   })
   .passthrough()
 
-export const DevicesRenameParamsSchema = z
-  .object({
-    deviceId: DeviceIdSchema,
-    name: z.string().min(1).max(64),
-    requestId: RequestIdSchema,
-  })
-  .passthrough()
-export const DevicesRenameResultSchema = z
-  .object({ id: DeviceIdSchema, name: z.string() })
-  .passthrough()
-
-export const DevicesRevokeParamsSchema = z
-  .object({ deviceId: DeviceIdSchema, requestId: RequestIdSchema })
-  .passthrough()
-export const DevicesRevokeResultSchema = z
-  .object({ ok: z.literal(true), id: DeviceIdSchema })
-  .passthrough()
+export const DevicesUnpairParamsSchema = z.object({ requestId: RequestIdSchema }).passthrough()
+export const DevicesUnpairResultSchema = z.object({ ok: z.literal(true) }).passthrough()
 
 export const DevicesRotateApprovalKeyParamsSchema = z
   .object({ approvalPub: B64uSchema, requestId: RequestIdSchema })

@@ -1,0 +1,368 @@
+{
+  "suite": "rcp/method-list",
+  "version": 1,
+  "source": "Generated from @remora/protocol RCP_METHODS (packages/protocol/src/rcp/registry.ts), which packages/protocol/test/rcp-spec-methods.test.ts asserts equal to docs/specs/rcp-v1.md section 11. Consumed by :core:protocol (Kotlin) for method parity in P7-A5.",
+  "notes": "Each case is one RCP/1 method: input.method names it and expect carries its kind and mutating flag. Regenerate after any registry or spec section 11 change.",
+  "cases": [
+    {
+      "name": "hello",
+      "input": {
+        "method": "hello"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "ping",
+      "input": {
+        "method": "ping"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "host.status",
+      "input": {
+        "method": "host.status"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "sessions.list",
+      "input": {
+        "method": "sessions.list"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "sessions.search",
+      "input": {
+        "method": "sessions.search"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "sessions.follow",
+      "input": {
+        "method": "sessions.follow"
+      },
+      "expect": {
+        "kind": "stream",
+        "mutating": false
+      }
+    },
+    {
+      "name": "sessions.page",
+      "input": {
+        "method": "sessions.page"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "sessions.eventText",
+      "input": {
+        "method": "sessions.eventText"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "sessions.toolOutput",
+      "input": {
+        "method": "sessions.toolOutput"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "sessions.prompt",
+      "input": {
+        "method": "sessions.prompt"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "sessions.cancel",
+      "input": {
+        "method": "sessions.cancel"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "sessions.queue.update",
+      "input": {
+        "method": "sessions.queue.update"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "sessions.create",
+      "input": {
+        "method": "sessions.create"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "sessions.rename",
+      "input": {
+        "method": "sessions.rename"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "sessions.selectModel",
+      "input": {
+        "method": "sessions.selectModel"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "sessions.control",
+      "input": {
+        "method": "sessions.control"
+      },
+      "expect": {
+        "kind": "stream",
+        "mutating": false
+      }
+    },
+    {
+      "name": "models.catalog",
+      "input": {
+        "method": "models.catalog"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "workspaces.follow",
+      "input": {
+        "method": "workspaces.follow"
+      },
+      "expect": {
+        "kind": "stream",
+        "mutating": false
+      }
+    },
+    {
+      "name": "workspaces.list",
+      "input": {
+        "method": "workspaces.list"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "workspaces.create",
+      "input": {
+        "method": "workspaces.create"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "fs.browse",
+      "input": {
+        "method": "fs.browse"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "fs.mkdir",
+      "input": {
+        "method": "fs.mkdir"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "devices.self",
+      "input": {
+        "method": "devices.self"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "devices.unpair",
+      "input": {
+        "method": "devices.unpair"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "devices.rotateApprovalKey",
+      "input": {
+        "method": "devices.rotateApprovalKey"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "interaction.follow",
+      "input": {
+        "method": "interaction.follow"
+      },
+      "expect": {
+        "kind": "stream",
+        "mutating": false
+      }
+    },
+    {
+      "name": "approvals.answer",
+      "input": {
+        "method": "approvals.answer"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "questions.answer",
+      "input": {
+        "method": "questions.answer"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    },
+    {
+      "name": "files.list",
+      "input": {
+        "method": "files.list"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "files.stat",
+      "input": {
+        "method": "files.stat"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "files.read",
+      "input": {
+        "method": "files.read"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "files.changes",
+      "input": {
+        "method": "files.changes"
+      },
+      "expect": {
+        "kind": "stream",
+        "mutating": false
+      }
+    },
+    {
+      "name": "diffs.status",
+      "input": {
+        "method": "diffs.status"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "diffs.file",
+      "input": {
+        "method": "diffs.file"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "notify.prefs.get",
+      "input": {
+        "method": "notify.prefs.get"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": false
+      }
+    },
+    {
+      "name": "notify.prefs.set",
+      "input": {
+        "method": "notify.prefs.set"
+      },
+      "expect": {
+        "kind": "unary",
+        "mutating": true
+      }
+    }
+  ]
+}
