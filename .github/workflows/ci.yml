@@ -48,3 +48,18 @@ jobs:
         with:
           node-version-file: .node-version
       - run: pnpm run conformance:check -- --strict
+
+  no-stubs:
+    # Non-required until wave 4 (P7-V3 removes continue-on-error): the scan fails on
+    # real stubs in production code that later packets must fix (docs/tasks/P7-G3.md).
+    name: No-stubs (non-required until P7-V3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: pnpm run check:no-stubs

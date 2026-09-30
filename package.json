@@ -17,6 +17,7 @@
     "test:security": "vitest run --config tests/security/vitest.config.ts",
     "test:perf": "vitest run --config tests/perf/vitest.config.ts",
     "conformance:check": "node scripts/check-conformance.mjs",
+    "check:no-stubs": "node scripts/check-no-stubs.mjs",
     "upstream:fetch": "node scripts/fetch-upstream.mjs",
     "issues:sync": "node scripts/sync-issues.mjs"
   },
