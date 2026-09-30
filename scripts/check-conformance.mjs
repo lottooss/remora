@@ -4,6 +4,8 @@
 // format is small, and the TypeScript and Kotlin loaders rely on exactly these fields.
 //
 // Usage: node scripts/check-conformance.mjs [--strict]
+// A bare "--" is ignored (pnpm run forwards it literally in `pnpm run ... -- --strict`
+// on some versions, e.g. pnpm 12).
 //
 // Without --strict only the schema rules are enforced (the `conformance:check` gate).
 // With --strict (task P7-G2) a file is additionally rejected when any case is a
@@ -125,7 +127,7 @@ function validateStrict(doc, key) {
   return violations
 }
 
-const args = process.argv.slice(2)
+const args = process.argv.slice(2).filter((arg) => arg !== '--')
 const strict = args.includes('--strict')
 const unknownArgs = args.filter((arg) => arg !== '--strict')
 if (unknownArgs.length > 0) {
