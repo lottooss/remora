@@ -33,3 +33,18 @@ jobs:
       - run: pnpm -F @remora/relay run deploy:check
       - name: Task packets parse and form a DAG
         run: node scripts/sync-issues.mjs --dry-run --repo "${{ github.repository }}"
+
+  conformance-strict:
+    # Non-required until wave 4 (P7-V3 removes continue-on-error): strict mode fails
+    # while placeholder vectors remain (docs/tasks/P7-G2.md).
+    name: Conformance (strict, non-required until P7-V3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: pnpm run conformance:check -- --strict
