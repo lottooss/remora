@@ -19,6 +19,7 @@ import {
   provideFakeDshServices,
   reserveClosedPort,
 } from './support/dsh-fakes.ts'
+import { createInMemoryCredentialsStore } from './identity/fake-credentials.ts'
 import { createValidHostConfig } from './support/host-config.ts'
 
 /**
@@ -53,15 +54,39 @@ function logSummary(messages: Message[]): string {
   return JSON.stringify(messages.map((message) => [message.type, firstArgString(message)]))
 }
 
+/**
+ * The host id from the "remora: host started (id: %s, ...)" info record:
+ * `args` is [format, hostId, relayOrigin, remoteRoots].
+ */
+function startedHostId(messages: Message[]): string {
+  const started = messages.find(
+    (message) => message.type === 'info' && firstArgString(message)?.startsWith('remora: host started') === true,
+  )
+  const id = started?.args[1]
+  return typeof id === 'string' ? id : ''
+}
+
+/**
+ * Provides the in-memory credentials store under the `credentials` service
+ * name, inside its own plugin fiber the way dsh provides the real seam
+ * (`provideFakeDshServices` keeps its refusing fake for the boot-must-not-use
+ * contract; the identity record store is the one service P7-H2 boot may use).
+ */
+async function provideCredentialsStore(ctx: Context, store: ReturnType<typeof createInMemoryCredentialsStore>): Promise<void> {
+  await ctx.plugin({ apply: (serviceCtx: Context) => void serviceCtx.provide('credentials', store) })
+}
+
 describe('remora host plugin apply() harness', () => {
   it('starts on a real Cordis context with the dsh services present', async () => {
     const ctx = new Context()
     const messages = captureLogs(ctx)
     await provideFakeDshServices(ctx, {
       typertGateway: createFakeTypertGateway(),
-      credentials: createFakeCredentials(),
       storage: createFakeStorage(),
     })
+    // The host identity lives in the credentials record seam (P7-H2), so boot
+    // reads and creates the `remora/host-identity` record through it.
+    await provideCredentialsStore(ctx, createInMemoryCredentialsStore())
 
     const config = createValidHostConfig({ relayUrl: `http://127.0.0.1:${await reserveClosedPort()}` })
     const loaded = await ctx.plugin(host, config)
@@ -108,5 +133,45 @@ describe('remora host plugin apply() harness', () => {
     expect(
       messages.some((message) => firstArgString(message)?.startsWith('remora: host started') === true),
     ).toBe(false)
+  }, 15_000)
+
+  it('keeps the same host id across a restart (same credentials store)', async () => {
+    // One dsh credentials store stands for the profile's credential records;
+    // each mount is a fresh Cordis root, the way a dsh restart is.
+    const credentialsStore = createInMemoryCredentialsStore()
+    const config = createValidHostConfig({ relayUrl: `http://127.0.0.1:${await reserveClosedPort()}` })
+
+    const first = new Context()
+    const firstMessages = captureLogs(first)
+    await provideFakeDshServices(first, {
+      typertGateway: createFakeTypertGateway(),
+      storage: createFakeStorage(),
+    })
+    await provideCredentialsStore(first, credentialsStore)
+    const firstLoaded = await first.plugin(host, config)
+    expect(
+      firstLoaded.state,
+      `first mount did not reach ACTIVE; log records: ${logSummary(firstMessages)}`,
+    ).toBe(FIBER_STATE.ACTIVE)
+    const firstId = startedHostId(firstMessages)
+    expect(firstId).toMatch(/^h_[a-z2-7]{26}$/)
+    await firstLoaded.dispose()
+
+    const second = new Context()
+    const secondMessages = captureLogs(second)
+    await provideFakeDshServices(second, {
+      typertGateway: createFakeTypertGateway(),
+      storage: createFakeStorage(),
+    })
+    await provideCredentialsStore(second, credentialsStore)
+    const secondLoaded = await second.plugin(host, config)
+    expect(
+      secondLoaded.state,
+      `second mount did not reach ACTIVE; log records: ${logSummary(secondMessages)}`,
+    ).toBe(FIBER_STATE.ACTIVE)
+    const secondId = startedHostId(secondMessages)
+    expect(secondId).toMatch(/^h_[a-z2-7]{26}$/)
+    expect(secondId, 'host id changed across a restart; the identity is not persisted').toBe(firstId)
+    await secondLoaded.dispose()
   }, 15_000)
 })
