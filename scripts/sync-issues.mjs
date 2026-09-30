@@ -22,8 +22,9 @@ const MILESTONES = {
   P4: ['P4 · Remote Work', 'New sessions in allowlisted roots, files and diffs.'],
   P5: ['P5 · Notifications & Always-on', 'FCM push, host-offline alerts, remora service, keep-awake.'],
   P6: ['P6 · Harden & Release', 'Reliability, performance, security sign-off, operations guide, v1.0.0.'],
+  P7: ['P7 · Remediation & Real Integration', 'Make it actually work: unfakeable gates, fix the real dsh/phone integration, fill vectors, owner verification. Playbook: docs/SWARM.md.'],
 }
-const ROLE_COLORS = { integrator: '5319e7', 'protocol-crypto': 'b60205', relay: 'f9a03f', host: '0e8a16', android: '1d76db', verification: 'fbca04' }
+const ROLE_COLORS = { integrator: '5319e7', 'protocol-crypto': 'b60205', relay: 'f9a03f', host: '0e8a16', android: '1d76db', verification: 'fbca04', owner: 'fef2c0' }
 const KIND_COLORS = { spike: 'c2e0c6', feature: 'a2eeef', chore: 'ededed', test: 'd4c5f9', docs: 'bfdadc' }
 const SIZE_COLORS = { S: 'e6f4ea', M: 'c5def5', L: 'f9d0c4' }
 const EXTRA_LABELS = {
@@ -78,7 +79,10 @@ function topologicalOrder(tasks) {
 }
 
 function labelsFor(task) {
-  return [`phase:${task.phase}`, `role:${task.role}`, `kind:${task.kind}`, `size:${task.size}`]
+  const labels = [`phase:${task.phase}`, `role:${task.role}`, `kind:${task.kind}`, `size:${task.size}`]
+  if (task.role === 'owner') labels.push('owner-action')
+  if (task.wave !== undefined) labels.push(`wave:${task.wave}`)
+  return labels
 }
 
 function issueBody(task, repo, numbers) {
@@ -89,9 +93,9 @@ function issueBody(task, repo, numbers) {
     `<!-- remora-task: ${task.id} -->`,
     `> Generated from [\`docs/tasks/${task.id}.md\`](https://github.com/${repo}/blob/main/docs/tasks/${task.id}.md) by \`scripts/sync-issues.mjs\`. Edit the packet, not this issue body.`,
     '',
-    `| Role | Kind | Size | Depends on |`,
-    `|---|---|---|---|`,
-    `| ${task.role} | ${task.kind} | ${task.size} | ${deps} |`,
+    `| Role | Kind | Size | Wave | Depends on |`,
+    `|---|---|---|---|---|`,
+    `| ${task.role} | ${task.kind} | ${task.size} | ${task.wave ?? '-'} | ${deps} |`,
     '',
     `**Owned paths:** ${task.owned_paths.map((p) => `\`${p}\``).join(', ')}`,
     '',
@@ -110,6 +114,9 @@ for (const [role, color] of Object.entries(ROLE_COLORS)) wantedLabels.set(`role:
 for (const [kind, color] of Object.entries(KIND_COLORS)) wantedLabels.set(`kind:${kind}`, [color, `Task kind: ${kind}`])
 for (const [size, color] of Object.entries(SIZE_COLORS)) wantedLabels.set(`size:${size}`, [color, `Rough size ${size} (docs/tasks/README.md)`])
 for (const [name, value] of Object.entries(EXTRA_LABELS)) wantedLabels.set(name, value)
+for (const wave of new Set(tasks.map((t) => t.wave).filter((w) => w !== undefined))) {
+  wantedLabels.set(`wave:${wave}`, ['0052cc', `Swarm wave ${wave} (docs/SWARM.md): start only when every earlier wave is merged`])
+}
 const existingLabels = new Set(dryRun ? [] : JSON.parse(gh(['label', 'list', '--repo', repo, '--limit', '500', '--json', 'name'])).map((l) => l.name))
 for (const [name, [color, description]] of wantedLabels) {
   if (existingLabels.has(name)) continue
