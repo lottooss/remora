@@ -120,21 +120,44 @@ export function parseSpecMethods(specText: string): SpecMethod[] {
   const sections = sectionsOf(specText)
   const methods: SpecMethod[] = []
 
-  for (const match of requireSection(sections, 4, 'Session start').matchAll(/^### `([^`]+)`/gm)) {
-    const name = match[1]
-    if (name === undefined) throw new Error('unreachable match group in §4 heading')
-    methods.push({ name, kind: 'unary', mutating: false })
-  }
-
-  const methodSections: ReadonlyArray<[number, string]> = [
+  // Sections in numeric order so the result follows spec order (§4, §5, … §10).
+  const numberedSections: ReadonlyArray<[number, string]> = [
+    [4, 'Session start'],
     [5, 'Sessions'],
     [6, 'Workspaces and new sessions'],
+    [7, 'Pairing and devices'],
     [8, 'Interaction (approvals and questions)'],
     [9, 'Files and diffs'],
     [10, 'Notifications'],
   ]
-  for (const [number, title] of methodSections) {
-    const rows = tableRowsOf(requireSection(sections, number, title))
+  for (const [number, title] of numberedSections) {
+    const section = requireSection(sections, number, title)
+    if (number === 4) {
+      for (const match of section.matchAll(/^### `([^`]+)`/gm)) {
+        const name = match[1]
+        if (name === undefined) throw new Error('unreachable match group in §4 heading')
+        methods.push({ name, kind: 'unary', mutating: false })
+      }
+      continue
+    }
+    if (number === 7) {
+      const pairingRows = tableRowsOf(section)
+      const pairingHeader = requireHeaderRow(pairingRows, 7, ['Message', 'Direction', 'Payload'])
+      for (const cells of pairingRows.slice(pairingHeader + 1)) {
+        if (!(cells[2] ?? '').includes('device → host')) continue // host-initiated pair.* messages
+        const tokens = backtickedTokens(cells[1] ?? '')
+        if (tokens.length !== 1) {
+          throw new Error(`§7 message row must name exactly one message: ${cells.join(' | ')}`)
+        }
+        methods.push({
+          name: tokens[0] as string,
+          kind: 'unary',
+          mutating: (cells[3] ?? '').includes('requestId'),
+        })
+      }
+      continue
+    }
+    const rows = tableRowsOf(section)
     const header = requireHeaderRow(rows, number, ['Method', 'Kind'])
     for (const cells of rows.slice(header + 1)) {
       const tokens = backtickedTokens(cells[1] ?? '')
@@ -148,21 +171,6 @@ export function parseSpecMethods(specText: string): SpecMethod[] {
         mutating: kindCell.includes('mutating'),
       })
     }
-  }
-
-  const pairingRows = tableRowsOf(requireSection(sections, 7, 'Pairing and devices'))
-  const pairingHeader = requireHeaderRow(pairingRows, 7, ['Message', 'Direction', 'Payload'])
-  for (const cells of pairingRows.slice(pairingHeader + 1)) {
-    if (!(cells[2] ?? '').includes('device → host')) continue // host-initiated pair.* messages
-    const tokens = backtickedTokens(cells[1] ?? '')
-    if (tokens.length !== 1) {
-      throw new Error(`§7 message row must name exactly one message: ${cells.join(' | ')}`)
-    }
-    methods.push({
-      name: tokens[0] as string,
-      kind: 'unary',
-      mutating: (cells[3] ?? '').includes('requestId'),
-    })
   }
 
   const seen = new Set<string>()

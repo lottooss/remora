@@ -11,6 +11,11 @@ import {
   createRcpError,
 } from '../src/rcp/index.ts'
 
+/**
+ * The reconciled RCP/1 method set (P7-C1): exactly the methods defined by
+ * docs/specs/rcp-v1.md §4–§11, in spec order. `rcp-spec-methods.test.ts`
+ * additionally parses the spec tables and asserts this list mechanically.
+ */
 const EXPECTED_METHODS: ReadonlyArray<{
   name: string
   kind: 'unary' | 'stream'
@@ -20,47 +25,49 @@ const EXPECTED_METHODS: ReadonlyArray<{
   { name: 'ping', kind: 'unary', mutating: false },
   { name: 'host.status', kind: 'unary', mutating: false },
   { name: 'sessions.list', kind: 'unary', mutating: false },
-  { name: 'sessions.get', kind: 'unary', mutating: false },
-  { name: 'sessions.create', kind: 'unary', mutating: true },
-  { name: 'sessions.prompt', kind: 'unary', mutating: true },
-  { name: 'sessions.cancel', kind: 'unary', mutating: true },
+  { name: 'sessions.search', kind: 'unary', mutating: false },
   { name: 'sessions.follow', kind: 'stream', mutating: false },
   { name: 'sessions.page', kind: 'unary', mutating: false },
   { name: 'sessions.eventText', kind: 'unary', mutating: false },
   { name: 'sessions.toolOutput', kind: 'unary', mutating: false },
-  { name: 'sessions.control', kind: 'stream', mutating: false },
+  { name: 'sessions.prompt', kind: 'unary', mutating: true },
+  { name: 'sessions.cancel', kind: 'unary', mutating: true },
   { name: 'sessions.queue.update', kind: 'unary', mutating: true },
+  { name: 'sessions.create', kind: 'unary', mutating: true },
   { name: 'sessions.rename', kind: 'unary', mutating: true },
   { name: 'sessions.selectModel', kind: 'unary', mutating: true },
+  { name: 'sessions.control', kind: 'stream', mutating: false },
+  { name: 'models.catalog', kind: 'unary', mutating: false },
+  { name: 'workspaces.follow', kind: 'stream', mutating: false },
   { name: 'workspaces.list', kind: 'unary', mutating: false },
   { name: 'workspaces.create', kind: 'unary', mutating: true },
   { name: 'fs.browse', kind: 'unary', mutating: false },
   { name: 'fs.mkdir', kind: 'unary', mutating: true },
-  { name: 'files.read', kind: 'unary', mutating: false },
-  { name: 'files.readBytes', kind: 'unary', mutating: false },
-  { name: 'diffs.get', kind: 'unary', mutating: false },
-  { name: 'diffs.status', kind: 'unary', mutating: false },
-  { name: 'diffs.hunk', kind: 'unary', mutating: false },
+  { name: 'devices.self', kind: 'unary', mutating: false },
+  { name: 'devices.unpair', kind: 'unary', mutating: true },
+  { name: 'devices.rotateApprovalKey', kind: 'unary', mutating: true },
   { name: 'interaction.follow', kind: 'stream', mutating: false },
   { name: 'approvals.answer', kind: 'unary', mutating: true },
   { name: 'questions.answer', kind: 'unary', mutating: true },
-  { name: 'devices.list', kind: 'unary', mutating: false },
-  { name: 'devices.rename', kind: 'unary', mutating: true },
-  { name: 'devices.revoke', kind: 'unary', mutating: true },
-  { name: 'devices.rotateApprovalKey', kind: 'unary', mutating: true },
+  { name: 'files.list', kind: 'unary', mutating: false },
+  { name: 'files.stat', kind: 'unary', mutating: false },
+  { name: 'files.read', kind: 'unary', mutating: false },
+  { name: 'files.changes', kind: 'stream', mutating: false },
+  { name: 'diffs.status', kind: 'unary', mutating: false },
+  { name: 'diffs.file', kind: 'unary', mutating: false },
   { name: 'notify.prefs.get', kind: 'unary', mutating: false },
   { name: 'notify.prefs.set', kind: 'unary', mutating: true },
-  { name: 'models.catalog', kind: 'unary', mutating: false },
 ]
 
 const EMPTY_PARAMS_METHODS = new Set([
   'host.status',
   'sessions.list',
   'sessions.control',
+  'workspaces.follow',
   'workspaces.list',
   'fs.browse',
   'interaction.follow',
-  'devices.list',
+  'devices.self',
   'notify.prefs.get',
   'models.catalog',
 ])
@@ -72,7 +79,7 @@ describe('RCP/1 method registry', () => {
     )
     expect(RCP_METHOD_NAMES).toEqual(EXPECTED_METHODS.map((expected) => expected.name))
     expect(RCP_METHODS).toHaveLength(EXPECTED_METHODS.length)
-    expect(EXPECTED_METHODS).toHaveLength(35)
+    expect(EXPECTED_METHODS).toHaveLength(36)
   })
 
   it('indexes every method by name with matching metadata', () => {

@@ -151,6 +151,7 @@ interface Workspace { id: WorkspaceId; title: string; path: string; remoteAllowe
 | Method | Kind | Params → Result |
 |---|---|---|
 | `workspaces.follow` | stream | `{}` → items `{ type: 'baseline'; workspaces: Workspace[] }` · `{ type: 'upsert'; workspace: Workspace }` · `{ type: 'removed'; id: WorkspaceId }` |
+| `workspaces.list` | unary | `{}` → `{ workspaces: Workspace[] }` |
 | `workspaces.create` | unary, mutating, guarded | `{ path: string; requestId: Uuid }` → `{ workspace: Workspace; created: boolean }` |
 | `fs.browse` | unary, guarded | `{ path?: string }` → `{ path: string \| null; parent: string \| null; entries: { name: string; kind: 'dir' \| 'file' \| 'link' }[]; truncated: boolean }` — no `path` lists the roots |
 | `fs.mkdir` | unary, mutating, guarded | `{ parent: string; name: string (single segment); requestId: Uuid }` → `{ path: string }` |
@@ -222,26 +223,59 @@ Guard: paths must canonicalize inside the session's workspace root or a root. Bi
 
 ## 11. Method summary
 
+One row per device-callable method, in the order the methods are defined in §4–§10. This table is the authority for the method set: `@remora/protocol` asserts its registry against it, and `conformance/vectors/rcp/method-list.json` is generated from it.
+
 | Method | Mutating | Idempotency | Guard / risk |
 |---|---|---|---|
-| `hello`, `ping`, `host.status` | no | — | paired device |
-| `sessions.list/search/follow/page/eventText/toolOutput`, `sessions.control`, `models.catalog` | no | — | paired device |
-| `sessions.prompt/cancel/queue.update/rename/selectModel` | yes | `requestId` (host cache 10 min + dsh `requestId` for prompts) | paired device |
-| `sessions.create`, `workspaces.create`, `fs.mkdir` | yes | `requestId` | roots + `allowRemoteSessionStart` |
-| `fs.browse`, `files.*`, `diffs.*` | no | — | roots / session root |
+| `hello` | no | — | paired device |
+| `ping` | no | — | paired device |
+| `host.status` | no | — | paired device |
+| `sessions.list` | no | — | paired device |
+| `sessions.search` | no | — | paired device |
+| `sessions.follow` | no | — | paired device |
+| `sessions.page` | no | — | paired device |
+| `sessions.eventText` | no | — | paired device |
+| `sessions.toolOutput` | no | — | paired device |
+| `sessions.prompt` | yes | `requestId` (host cache 10 min + dsh `requestId` for prompts) | paired device |
+| `sessions.cancel` | yes | `requestId` | paired device |
+| `sessions.queue.update` | yes | `requestId` | paired device |
+| `sessions.create` | yes | `requestId` | roots + `allowRemoteSessionStart` |
+| `sessions.rename` | yes | `requestId` | paired device |
+| `sessions.selectModel` | yes | `requestId` | paired device |
+| `sessions.control` | no | — | paired device |
+| `models.catalog` | no | — | paired device |
+| `workspaces.follow` | no | — | paired device |
+| `workspaces.list` | no | — | paired device |
+| `workspaces.create` | yes | `requestId` | roots + `allowRemoteSessionStart` |
+| `fs.browse` | no | — | roots |
+| `fs.mkdir` | yes | `requestId` | roots |
+| `devices.self` | no | — | self only |
+| `devices.unpair` | yes | `requestId` | self only |
+| `devices.rotateApprovalKey` | yes | `requestId` | self only; key rotation needs PC confirmation |
 | `interaction.follow` | no | — | paired device |
 | `approvals.answer` | yes | pending `id` single-use | signature when `requiresSignature` |
 | `questions.answer` | yes | pending `id` single-use | paired device |
-| `devices.*`, `notify.prefs.*` | mixed | `requestId` | self only; key rotation needs PC confirmation |
+| `files.list` | no | — | session root / roots |
+| `files.stat` | no | — | session root / roots |
+| `files.read` | no | — | session root / roots |
+| `files.changes` | no | — | session root / roots |
+| `diffs.status` | no | — | session root / roots |
+| `diffs.file` | no | — | session root / roots |
+| `notify.prefs.get` | no | — | self only |
+| `notify.prefs.set` | yes | last write wins | self only |
 
 Per-device limits: 20 requests/s burst, 5 mutating requests/s, 10 concurrent streams; beyond → `rate_limited` with `retryAfterMs`.
 
 ## 12. Conformance vectors
 
-`conformance/vectors/rcp/`: `envelope.json` (valid/invalid messages), `methods/*.json` (one file per method with request/response examples and invalid params), `session-events.json` (every `SessionEvent` kind incl. unknown-value fallbacks), `limits.json` (boundary sizes). The host's event mapper additionally uses recorded dsh fixtures in `packages/host/test/fixtures/`.
+`conformance/vectors/rcp/`: `envelope.json` (valid/invalid messages), `methods/*.json` (one file per method with request/response examples and invalid params), `session-events.json` (every `SessionEvent` kind incl. unknown-value fallbacks), `limits.json` (boundary sizes). `method-list.json` is generated from `@remora/protocol`'s registry (which is asserted equal to §11) so the Kotlin client can assert the same method set. The host's event mapper additionally uses recorded dsh fixtures in `packages/host/test/fixtures/`.
 
 ## 13. Changelog
 
+- **v1.0.1 (P7-C1, additive):**
+  - Added `workspaces.list` (§6) to the method set: the host already served it and the app already called it, but it was missing from the spec.
+  - Rewrote §11 as one row per method. The previous grouped summary omitted `workspaces.follow` and used group/glob notation; no method was removed from the spec.
+  - Declared §11 the authority for the method set: `@remora/protocol`'s registry is tested against it and `conformance/vectors/rcp/method-list.json` is generated from it for Kotlin parity (P7-A5).
 - **v1.0.0 (v1-frozen, P0-A2):**
   - Clarified character offsets in streaming text updates (`assistant.delta`) as Unicode code point indices; file line numbers are 1-indexed integers (REVIEW item 2).
   - Specified initial `sessions.follow` inline snapshot packing cap at 50 messages / 48 KiB with `hasMoreOlder: true` pagination via `sessions.page` (REVIEW item 3).
