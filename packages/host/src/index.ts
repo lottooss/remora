@@ -17,8 +17,9 @@ import type {} from '@deepseek-ai/dsh-session'
 import { decodeBase64Url } from '@remora/crypto'
 import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
+import { RetryingGateway } from './adapter/gateway.ts'
 import { PersistentDeviceRegistry, type DeviceRecord } from './devices/index.ts'
-import { createHostIdentity } from './identity/index.ts'
+import { loadOrCreateHostIdentity, type HostCredentialsStore } from './identity/credentials.ts'
 import { PairingService } from './pairing/index.ts'
 import { RcpServer } from './rcp/index.ts'
 import { HostRelayConnection } from './relay/index.ts'
@@ -42,6 +43,7 @@ import { registerDiffsMethods } from './rcp/methods/diffs.ts'
 export { Config, RemoraConfigError, resolveConfig } from './config.ts'
 export type { NotifyConfig, ResolvedConfig } from './config.ts'
 export * from './identity/index.ts'
+export * from './identity/credentials.ts'
 export * from './devices/index.ts'
 export * from './rcp/index.ts'
 export * from './channel/index.ts'
@@ -78,10 +80,16 @@ export const name = 'remora'
 export const inject: string[] = ['typertGateway', 'credentials', 'storage']
 
 /**
- * Plugin body: resolve configuration, instantiate identity, device registry,
- * secure channel manager, RCP server, and connect to the relay via RelayLink.
+ * Plugin body: resolve configuration, load-or-create the persistent host
+ * identity from dsh credentials, instantiate device registry, secure channel
+ * manager, RCP server, and connect to the relay via RelayLink.
+ *
+ * Async on purpose (P7-H2): Cordis 4 accepts a promise-returning `apply` —
+ * the fiber stays pending until the returned promise settles and a rejection
+ * fails the plugin loudly (verified against @deepseek-ai/cordis 4.0.2) — so
+ * the startup simply awaits the identity record before anything that needs it.
  */
-export function apply(ctx: Context, config: Config): void {
+export async function apply(ctx: Context, config: Config): Promise<void> {
   const resolved = resolveConfig(config)
   // dsh's web profile registers no console exporter for the Cordis logger
   // (verified against upstream.lock.json 0.1.5-rc.3: a plugin's ctx.logger
@@ -99,7 +107,17 @@ export function apply(ctx: Context, config: Config): void {
     },
   }
   ctx.logger.exporter(consoleBridge)
-  const identity = createHostIdentity()
+  // The identity persists in the dsh credentials record `remora/host-identity`
+  // (crypto-v1.md §3): generated exactly once, reloaded on every restart, so
+  // restarting dsh no longer breaks every pairing. `inject` above guarantees
+  // the credentials service exists; the structural access is needed because
+  // the seam's package is provided by dsh at runtime and not on this bundle's
+  // dependency list (spikes/p0-s1-dsh-adapter Q4).
+  const credentials = (ctx as Context & { credentials?: HostCredentialsStore }).credentials
+  if (credentials === undefined) {
+    throw new Error('remora: the dsh credentials service is required but missing')
+  }
+  const identity = await loadOrCreateHostIdentity(credentials)
   const registry = new PersistentDeviceRegistry()
   const hostName = os.hostname()
 
@@ -212,7 +230,12 @@ export function apply(ctx: Context, config: Config): void {
   // Guaranteed by `inject` above: without it the fiber never loads, so the
   // previous silent `if (gateway)` branch (which skipped the session methods
   // without a word) is gone — fail closed at load instead.
-  const gateway = ctx.typertGateway
+  //
+  // P7-H9's RetryingGateway wraps the raw gateway exactly once so every
+  // adapter below survives dsh's startup race (calls reject with
+  // `gateway/service-unavailable` until dsh finishes starting); before P7-H2
+  // nothing constructed it, leaving the retry logic dead code.
+  const gateway = new RetryingGateway(ctx.typertGateway)
   const gitAdapter = new GitAdapter()
 
   const workspaceAdapter = new WorkspaceAdapter({ gateway, policyGuard })
