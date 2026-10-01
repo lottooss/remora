@@ -53,3 +53,13 @@ so the packed manifest's only runtime dependency is the published `ws` package. 
 peer dependencies `@deepseek-ai/cordis` and `@deepseek-ai/schemastery` stay external
 (peer dependencies) — dsh provides them, and bundling them would break Loader/schema
 identity (dsh-integration.md Q10).
+
+`pnpm -F @remora/host run build` first builds the workspace packages it bundles
+(`pnpm --filter "@remora/host^..." run build`), so it works from a clean checkout. The bundle
+fails closed: an import tsdown cannot resolve fails the build instead of being left as an
+external import, and `lib/index.js` may import only `@deepseek-ai/cordis`,
+`@deepseek-ai/schemastery`, `ws` and Node built-ins (`deps.onlyImport`). `pnpm pack` does not
+build, so always build before packing. `test/pack.test.ts` checks the whole path in the unit
+test run: it copies the workspace without any build output to a temp directory, runs only this
+package's `build`, packs, installs the tarball next to the two dsh peers in an empty directory,
+and imports it.
