@@ -40,8 +40,8 @@ async function relay(options: Parameters<typeof startFakeRelay>[0] = { enrollSec
   return fake
 }
 
-function credentialsWithSecret(value: string | undefined = SECRET): FakeHostCredentials {
-  return createHostCredentials({ references: value === undefined ? {} : { [SECRET_KEY]: value } })
+function credentialsWithSecret(value: string = SECRET): FakeHostCredentials {
+  return createHostCredentials({ references: { [SECRET_KEY]: value } })
 }
 
 /** A sleep that records the requested delays and returns at once. */
@@ -155,7 +155,8 @@ describe('ensureHostEnrolled', () => {
   it('with the secret missing throws a RemoraConfigError naming the key and the .env file, and sends nothing', async () => {
     const fake = await relay()
 
-    for (const credentials of [credentialsWithSecret(undefined), credentialsWithSecret('')]) {
+    // Unset, and set to an empty value (which the seam treats as unset).
+    for (const credentials of [createHostCredentials(), credentialsWithSecret('')]) {
       const failure = await ensureHostEnrolled({
         credentials,
         enrollSecretKey: SECRET_KEY,
