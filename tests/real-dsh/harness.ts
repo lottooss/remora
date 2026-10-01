@@ -410,19 +410,23 @@ export class RealDshHarness {
       } catch {
         // already gone
       }
-    } else {
-      try {
-        child.kill()
-      } catch {
-        // already gone
+      const deadline = Date.now() + graceMs
+      while (Date.now() < deadline && pidAlive(child.pid)) {
+        await new Promise((resolve) => setTimeout(resolve, 250))
       }
+      this.killTree(child)
+    } else {
+      // On Windows dsh runs under the cmd.exe shell `spawn(..., { shell: true })`
+      // creates; killing only the shell leaves node/dsh running and holding the
+      // web port. Kill the whole tree while the shell pid still roots it.
+      this.killTree(child)
     }
-    const deadline = Date.now() + graceMs
-    while (Date.now() < deadline && pidAlive(child.pid)) {
+    this.dshChild = null
+    // A restart reuses dshPort: wait until the previous dsh released it.
+    const portDeadline = Date.now() + 15_000
+    while (this.dshPort !== 0 && Date.now() < portDeadline && (await portOpen(this.dshPort))) {
       await new Promise((resolve) => setTimeout(resolve, 250))
     }
-    this.killTree(child)
-    this.dshChild = null
   }
 
   private dshEnv(): NodeJS.ProcessEnv {
