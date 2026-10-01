@@ -23,7 +23,7 @@
     }
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "pnpm --filter \"@remora/host^...\" run build && tsdown",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run --passWithNoTests"
   },

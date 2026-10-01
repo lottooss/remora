@@ -44,17 +44,23 @@ function quoteForCmd(arg: string): string {
   return /[\s"&|<>^()%!]/.test(arg) ? `"${arg.replace(/"/g, '""')}"` : arg
 }
 
-/** Run a command synchronously and return its exit status with combined stdout and stderr. */
+/**
+ * Run a command synchronously and return its exit status with combined stdout and stderr.
+ * On Windows `pnpm` and `npm` are `.cmd` shims, so they run through cmd.exe as one quoted
+ * command line; `git` and Node itself are spawned directly.
+ */
 function run(command: string, args: string[], cwd: string): RunResult {
   const viaShell = IS_WINDOWS && command !== process.execPath && command !== 'git'
-  const result = spawnSync(command, viaShell ? args.map(quoteForCmd) : args, {
+  const options = {
     cwd,
     encoding: 'utf8',
-    shell: viaShell,
     timeout: STEP_TIMEOUT_MS,
     windowsHide: true,
     env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
-  })
+  } as const
+  const result = viaShell
+    ? spawnSync([command, ...args.map(quoteForCmd)].join(' '), { ...options, shell: true })
+    : spawnSync(command, args, options)
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}${result.error ? `\n${String(result.error)}` : ''}`
   return { status: result.status, output }
 }
