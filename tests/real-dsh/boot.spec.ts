@@ -63,16 +63,17 @@ describe('real dsh boots @remora/host against the real relay', () => {
       }
 
       const output = bootLog().text
-      expect(output).toContain('remora: host started')
-      expect(output).toContain('remora: relay ready')
-
-      const errorLines = bootLog().lines.filter((line) => REMORA_ERROR_LINE.test(line))
-      expect(errorLines).toEqual([])
-
+      // Record the host id before the relay assertions, so the restart test checks
+      // identity persistence (P7-H2) independently of relay enrollment (P7-H3).
       const started = HOST_STARTED_LINE.exec(output)
       expect(started, `no "remora: host started (id: ...)" line in output:\n${output}`).not.toBeNull()
       firstHostId = started?.[1] ?? ''
       expect(firstHostId).not.toBe('')
+
+      expect(output).toContain('remora: relay ready')
+
+      const errorLines = bootLog().lines.filter((line) => REMORA_ERROR_LINE.test(line))
+      expect(errorLines).toEqual([])
     },
     180_000,
   )
