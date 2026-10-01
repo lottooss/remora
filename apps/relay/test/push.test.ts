@@ -104,7 +104,8 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
   async function disconnectHost(ws: WebSocket, reason: string): Promise<void> {
     ws.close(CloseCodes.NORMAL, reason)
     const hub = getAccountHubStub()
-    for (let attempt = 0; attempt < 400; attempt++) {
+    const deadline = Date.now() + 2000
+    while (Date.now() < deadline) {
       const armed = await runInDurableObject(hub, async (_instance: AccountHub, state: DurableObjectState) => {
         const tasks = state.storage.sql
           .exec<{ k: string }>('SELECT k FROM tasks WHERE k = ?1', `${OFFLINE_TASK_PREFIX}${hostId}`)
@@ -206,7 +207,10 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     globalThis.fetch = originalFetch
   })
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Test isolation (P7-R1): fire every host-offline alarm an earlier test's host disconnect
+    // left pending, before the captures are reset, so it can never fire inside this test.
+    await runAlarmAt(getAccountHubStub(), Date.now() + HOST_OFFLINE_ALERT_MS)
     capturedFcmRequests.length = 0
     fcmMockStatus = 200
     fcmMockBody = { name: 'projects/remora-test-proj/messages/msg_001' }
