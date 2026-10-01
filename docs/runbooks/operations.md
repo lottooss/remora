@@ -65,12 +65,22 @@ npm install -g @deepseek-ai/dsh@0.1.5-rc.3
 # 2. Build host plugin and CLI
 pnpm run build
 
-# 3. Create dedicated remora profile from web default
+# 3. Pack the host plugin tarball (self-contained: the build bundles the
+#    unpublished @remora/* packages; the tarball lands in the repo root)
+pnpm -F @remora/host pack
+
+# 4. Create dedicated remora profile from web default
 dsh --profile remora --from-default-profile web
 
-# 4. Link Remora host plugin to profile
-dsh plugin --profile remora add ./packages/host
+# 5. Install the packed Remora host plugin into the profile
+dsh plugin --profile remora add ./remora-host-1.0.0.tgz
 ```
+
+Installing from the packed tarball is the documented path (dsh-integration.md Q10): it
+keeps the dsh peer dependencies (`@deepseek-ai/cordis`, `@deepseek-ai/schemastery`)
+singletons provided by dsh itself and needs no access to the Remora workspace afterwards.
+Installing the checkout directory directly (`dsh plugin --profile remora add ./packages/host`)
+is only for fast local iteration on a development machine.
 
 Provide the enrollment secret to dsh as the key `REMORA_RELAY_ENROLL_SECRET` (its value is the `REMORA_ENROLL_SECRET` you stored in Cloudflare above). There is no dedicated dsh CLI command for this: dsh-credentials-local resolves credential keys from the launch environment, then its store, then the project `.env`, then the harness-home `.env`. The simplest option is to put `REMORA_RELAY_ENROLL_SECRET=<value>` in `%USERPROFILE%\.dsh\.env` (or export it in the process environment you launch dsh from):
 
