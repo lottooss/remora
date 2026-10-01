@@ -58,7 +58,7 @@ Start a wave only when **every** packet of all earlier waves is merged. Inside a
 |---|---|---|
 | **0 — Gates & honesty** | make fabrication impossible to merge; correct false docs | P7-G1, P7-G2, P7-G3, P7-D1, P7-C1, P7-O6 (owner) |
 | **1 — Host boots for real** | plugin loads in dsh, persistent identity, enrolls, remembers devices, packaging | P7-H1 → P7-H2 → P7-H3, P7-H4, P7-H8, P7-H9 |
-| **2 — Host completeness** | events, keep-awake, device methods, approval bridge, real-dsh e2e | P7-H5, P7-H6, P7-H7, P7-H10, P7-T1 |
+| **2 — Host completeness** | events, keep-awake, device methods, approval bridge, real-dsh e2e | P7-H5, P7-H6, P7-H7, P7-H10, P7-R1, P7-R2, P7-T1 |
 | **3 — Android real** | keys, lock, QR, subscriptions, pushes, screens | P7-A1, P7-A2, P7-A3, P7-A4, P7-A5, P7-A6, P7-A7 |
 | **4 — Contracts & vectors** | fill every vector, parity in both languages, flip strict gates | P7-V1, P7-V2, P7-V3 |
 | **5 — Real-world verification** | owner runs the phone, Cloudflare, Firebase; final e2e | P7-O1…P7-O5 (owner), P7-T2, P7-X1 |
