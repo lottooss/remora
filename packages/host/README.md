@@ -16,8 +16,9 @@ Never install into your everyday `web` profile. From the repository root:
 
 ```sh
 pnpm -F @remora/host run build
+pnpm -F @remora/host pack                  # writes remora-host-<version>.tgz into the repo root
 dsh --profile remora-dev --from-default-profile web
-dsh plugin --profile remora-dev add ./packages/host
+dsh plugin --profile remora-dev add ./remora-host-1.0.0.tgz
 ```
 
 Then add to `~/.dsh/profiles/remora-dev/cordis.patch.yml` (a patch replaces the whole row config, so restate every key from this package's `cordis.patch.yml`):
@@ -39,10 +40,26 @@ Then add to `~/.dsh/profiles/remora-dev/cordis.patch.yml` (a patch replaces the 
 
 `dsh --profile remora-dev --dump-config` shows the row; `dsh --profile remora-dev --no-open --port 7718` loads it.
 
-### Install Form (P0-S1 Decision)
+### Install Form (P0-S1 Decision, self-contained since P7-H8)
 
 Spike P0-S1 answered Q10 regarding installation packaging:
-- **Production / Standard Install:** Packed tarball (`pnpm -F @remora/host pack` followed by `dsh plugin --profile remora-dev add ./packages/host/remora-host-*.tgz`). This isolates dependencies strictly to the profile's hoisted environment, guaranteeing that `@deepseek-ai/cordis` and `@deepseek-ai/schemastery` remain singletons and avoiding duplicate loader/symbol collisions.
+- **Production / Standard Install:** Packed tarball (`pnpm -F @remora/host pack` followed by `dsh plugin --profile remora-dev add ./remora-host-<version>.tgz`). This isolates dependencies strictly to the profile's hoisted environment, guaranteeing that `@deepseek-ai/cordis` and `@deepseek-ai/schemastery` remain singletons and avoiding duplicate loader/symbol collisions.
 - **Fast Local Iteration:** `dsh plugin --profile remora-dev add ./packages/host` is supported during development provided the monorepo root does not install mismatched versions of the peer dependencies.
 
-> **The tarball install does not work yet** (audit 2026-09-28, [SWARM.md §0](../../docs/SWARM.md#0-why-this-phase-exists-read-this-it-is-not-optional)): the packed tarball depends on the unpublished workspace packages `@remora/crypto`, `@remora/protocol`, and `@remora/relay-link`, so it cannot resolve its dependencies. This is fixed by the packaging task P7-H8; until it lands, only the fast local iteration form above is an option — and even that will not boot until the P7 wave-1 host fixes (P7-H1) make `apply()` load on a real dsh.
+Since P7-H8 the tarball is the documented install path and is self-contained: the build
+(`tsdown`, see `tsdown.config.ts`) bundles the unpublished workspace packages
+`@remora/crypto`, `@remora/protocol`, `@remora/relay-link` and `qrcode` into `lib/index.js`,
+so the packed manifest's only runtime dependency is the published `ws` package. The dsh
+peer dependencies `@deepseek-ai/cordis` and `@deepseek-ai/schemastery` stay external
+(peer dependencies) — dsh provides them, and bundling them would break Loader/schema
+identity (dsh-integration.md Q10).
+
+`pnpm -F @remora/host run build` first builds the workspace packages it bundles
+(`pnpm --filter "@remora/host^..." run build`), so it works from a clean checkout. The bundle
+fails closed: an import tsdown cannot resolve fails the build instead of being left as an
+external import, and `lib/index.js` may import only `@deepseek-ai/cordis`,
+`@deepseek-ai/schemastery`, `ws` and Node built-ins (`deps.onlyImport`). `pnpm pack` does not
+build, so always build before packing. `test/pack.test.ts` checks the whole path in the unit
+test run: it copies the workspace without any build output to a temp directory, runs only this
+package's `build`, packs, installs the tarball next to the two dsh peers in an empty directory,
+and imports it.

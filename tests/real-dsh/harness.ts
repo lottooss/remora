@@ -25,7 +25,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const REPO_ROOT = path.resolve(__dirname, '../..')
-const HOST_PKG_DIR = path.resolve(REPO_ROOT, 'packages/host')
+const HOST_TARBALL = path.resolve(REPO_ROOT, 'remora-host-1.0.0.tgz')
 const RELAY_DIR = path.resolve(REPO_ROOT, 'apps/relay')
 const UPSTREAM_LOCK = path.resolve(REPO_ROOT, 'upstream.lock.json')
 export const ARTIFACTS_DIR = path.resolve(__dirname, 'artifacts')
@@ -245,16 +245,26 @@ export class RealDshHarness {
     }
   }
 
-  /** Install the built @remora/host checkout into the profile (real `dsh plugin add`). */
+  /** Pack @remora/host and install the tarball into the profile (real `dsh plugin add`). */
   addHostPlugin(): void {
     if (!this.dshBin) throw new Error('installDsh() must run before addHostPlugin()')
     const log = new OutputLog(this.logName('40-plugin-add.log'))
+    const pack = runSync('pnpm', ['-F', '@remora/host', 'pack'], {
+      cwd: REPO_ROOT,
+      timeout: 600_000,
+    })
+    log.push(`pnpm -F @remora/host pack -> status ${pack.status}\n${pack.stdout}\n${pack.stderr}`)
+    if (pack.status !== 0) {
+      throw new Error(
+        `pnpm pack of @remora/host failed (status ${pack.status}):\nstdout:\n${pack.stdout}\nstderr:\n${pack.stderr}`,
+      )
+    }
     const res = runSync(
       this.dshBin,
-      ['plugin', '--profile', E2E_PROFILE, 'add', HOST_PKG_DIR],
+      ['plugin', '--profile', E2E_PROFILE, 'add', HOST_TARBALL],
       { cwd: REPO_ROOT, env: this.dshEnv(), timeout: 600_000 },
     )
-    log.push(`dsh plugin add ${HOST_PKG_DIR} -> status ${res.status}\n${res.stdout}\n${res.stderr}`)
+    log.push(`dsh plugin add ${HOST_TARBALL} -> status ${res.status}\n${res.stdout}\n${res.stderr}`)
     if (res.status !== 0) {
       throw new Error(
         `dsh plugin add failed (status ${res.status}):\nstdout:\n${res.stdout}\nstderr:\n${res.stderr}`,
