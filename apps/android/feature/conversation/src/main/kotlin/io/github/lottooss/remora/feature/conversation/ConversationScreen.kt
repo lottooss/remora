@@ -310,7 +310,7 @@ fun EventItemView(event: SessionEvent, modifier: Modifier = Modifier) {
         is SessionEvent.ApprovalDecided -> TurnMarker(text = "Approval: ${event.toolName} -> ${event.outcome}", modifier)
         is SessionEvent.Notice -> TurnMarker(text = "[${event.level.uppercase()}] ${event.text}", modifier)
         is SessionEvent.AssistantAttempt -> TurnMarker(text = "Attempt ${event.outcome}", modifier)
-        is SessionEvent.TodoUpdated -> TurnMarker(text = "TODO list updated (${event.items.size} items)", modifier)
+        is SessionEvent.TodoUpdated -> TurnMarker(text = "Task list updated (${event.items.size} items)", modifier)
         is SessionEvent.Unknown -> TurnMarker(text = "Unknown event (${event.dshType})", modifier)
     }
 }
