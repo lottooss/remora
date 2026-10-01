@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers'
 import { runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   deriveEndpointId,
   encodeBase64Url,
@@ -57,6 +57,30 @@ function getAccountHubStub(): DurableObjectStub<AccountHub> {
   return ns.get(ns.idFromName('account'))
 }
 
+/**
+ * Host-offline alert delay for this file: the RLY/1 §8 value (120 s). It is far longer than
+ * the file takes to run, so a host-offline alarm never fires on its own here; every firing is
+ * explicit through {@link runAlarmAt}. A real-time delay let an alarm armed by one test fire
+ * inside a later one (P7-R1).
+ */
+const HOST_OFFLINE_ALERT_MS = 120_000
+
+/** Key of the relay's host-offline task row (account-hub.ts `OFFLINE_TASK_PREFIX`). */
+const OFFLINE_TASK_PREFIX = 'offline:host:'
+
+/**
+ * Runs the hub's scheduled alarm, if any, with the clock (`Date.now()`, shared with the
+ * Durable Object in this isolate) set to `at`. Returns whether an alarm was scheduled.
+ */
+async function runAlarmAt(hub: DurableObjectStub<AccountHub>, at: number): Promise<boolean> {
+  vi.setSystemTime(at)
+  try {
+    return await runDurableObjectAlarm(hub)
+  } finally {
+    vi.useRealTimers()
+  }
+}
+
 describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
   const originalFetch = globalThis.fetch
   const capturedFcmRequests: CapturedFcmRequest[] = []
@@ -73,6 +97,26 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
 
   let enrolledTicket = ''
 
+  /**
+   * Closes a host socket and waits until the relay has recorded the disconnect (offline task
+   * stored, alarm armed), so the close is never processed inside a later test.
+   */
+  async function disconnectHost(ws: WebSocket, reason: string): Promise<void> {
+    ws.close(CloseCodes.NORMAL, reason)
+    const hub = getAccountHubStub()
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const armed = await runInDurableObject(hub, async (_instance: AccountHub, state: DurableObjectState) => {
+        const tasks = state.storage.sql
+          .exec<{ k: string }>('SELECT k FROM tasks WHERE k = ?1', `${OFFLINE_TASK_PREFIX}${hostId}`)
+          .toArray()
+        return tasks.length === 1 && (await state.storage.getAlarm()) !== null
+      })
+      if (armed) return
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    throw new Error('relay did not record the host disconnect within 2 s')
+  }
+
   beforeAll(async () => {
     // Set test configuration on environment
     ;(env as any).FCM_SERVICE_ACCOUNT_JSON = JSON.stringify({
@@ -81,7 +125,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
       private_key: 'dummy-test-key',
     })
     ;(env as any).FCM_ENDPOINT = 'https://fake-fcm.googleapis.com'
-    ;(env as any).HOST_OFFLINE_ALERT_MS = '100'
+    ;(env as any).HOST_OFFLINE_ALERT_MS = String(HOST_OFFLINE_ALERT_MS)
 
     // Mock global fetch for fake FCM endpoint
     globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -142,7 +186,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     ws.send(JSON.stringify({ t: 'enroll.ticket', rid: 'tk1' }))
     const ticketMsg = await nextMessage<any>(ws)
     enrolledTicket = ticketMsg.ticket
-    ws.close(CloseCodes.NORMAL, 'setup complete')
+    await disconnectHost(ws, 'setup complete')
 
     // Enroll device with ticket
     const devRes = await SELF.fetch('https://relay.test/v1/enroll/device', {
@@ -201,6 +245,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     expect(reply.rid).toBe('pt1')
 
     ws.close(CloseCodes.NORMAL, 'token test done')
+    expect(capturedFcmRequests).toEqual([])
 
     // Verify persisted in SQLite
     const hub = getAccountHubStub()
@@ -214,6 +259,11 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
   })
 
   it('dispatches push message from host to device with byte-identical ciphertext', async () => {
+    // P7-R1: fire every host-offline alarm that is pending now at the worst moment for this
+    // test (after beforeEach reset the captures, before the host reconnects and cancels it).
+    // An earlier test's host disconnect must not have left one behind.
+    await runAlarmAt(getAccountHubStub(), Date.now() + HOST_OFFLINE_ALERT_MS)
+
     const connRes = await SELF.fetch('https://relay.test/v1/connect', {
       headers: { Upgrade: 'websocket', 'Sec-WebSocket-Protocol': RLY_SUBPROTOCOL },
     })
@@ -251,6 +301,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
 
     // Verify captured FCM HTTP v1 request
     expect(capturedFcmRequests.length).toBe(1)
+    expect(capturedFcmRequests.map((r) => r.body.message.data.ct)).toEqual([testCiphertext])
     const req = capturedFcmRequests[0]!
     expect(req.url).toContain('/v1/projects/remora-test-proj/messages:send')
     expect(req.body.message.token).toBe('fcm_token_device_abc_123')
@@ -265,7 +316,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     expect(req.body.message.android.ttl).toBe('3600s')
     expect(req.body.message.android.collapse_key).toBe('session_update')
 
-    ws.close(CloseCodes.NORMAL, 'push done')
+    await disconnectHost(ws, 'push done')
   })
 
   it('returns no_token when pushing to unlinked or tokenless endpoint', async () => {
@@ -297,8 +348,9 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     )
     const resUnlinked = await nextMessage<any>(ws)
     expect(resUnlinked.results).toEqual([{ id: 'd_unlinked000000000000000000000', status: 'no_token' }])
+    expect(capturedFcmRequests).toEqual([])
 
-    ws.close(CloseCodes.NORMAL, 'unlinked test done')
+    await disconnectHost(ws, 'unlinked test done')
   })
 
   it('cleans up token and reports unregistered on FCM UNREGISTERED response', async () => {
@@ -339,8 +391,9 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     const result = await nextMessage<any>(ws)
     expect(result.t).toBe('push.result')
     expect(result.results).toEqual([{ id: deviceId, status: 'unregistered' }])
+    expect(capturedFcmRequests.map((r) => r.body.message.data.ct)).toEqual(['test-ct'])
 
-    ws.close(CloseCodes.NORMAL, 'cleanup test done')
+    await disconnectHost(ws, 'cleanup test done')
 
     // Verify token was cleared from SQLite
     const hub = getAccountHubStub()
@@ -382,11 +435,16 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     await nextMessage<any>(hostWs) // ready
 
     // Disconnect host (closes last socket) -> arms alarm
-    hostWs.close(CloseCodes.NORMAL, 'host going offline')
-    await new Promise((r) => setTimeout(r, 150))
-    if (capturedFcmRequests.length === 0) {
-      await runDurableObjectAlarm(hub)
-    }
+    const closedFrom = Date.now()
+    await disconnectHost(hostWs, 'host going offline')
+    const closedBy = Date.now()
+
+    // The alarm runs before the delay has elapsed: nothing is sent yet
+    expect(await runAlarmAt(hub, closedFrom + HOST_OFFLINE_ALERT_MS - 1)).toBe(true)
+    expect(capturedFcmRequests).toEqual([])
+
+    // The alarm runs after the delay: exactly one alert
+    expect(await runAlarmAt(hub, closedBy + HOST_OFFLINE_ALERT_MS)).toBe(true)
 
     // Verify metadata-only FCM push was dispatched
     expect(capturedFcmRequests.length).toBe(1)
@@ -399,6 +457,10 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     })
     // Metadata only — no ct field
     expect(alertPush.body.message.data.ct).toBeUndefined()
+
+    // One-shot: nothing is left scheduled, so no second alert
+    expect(await runAlarmAt(hub, closedBy + 2 * HOST_OFFLINE_ALERT_MS)).toBe(false)
+    expect(capturedFcmRequests.length).toBe(1)
   })
 
   it('cancels host-offline alarm if host reconnects before alarm fires', async () => {
@@ -423,7 +485,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     await nextMessage<any>(hostWs1) // ready
 
     // Close host -> arms alarm
-    hostWs1.close(CloseCodes.NORMAL, 'temporary disconnect')
+    await disconnectHost(hostWs1, 'temporary disconnect')
 
     // Host quickly reconnects
     const connRes2 = await SELF.fetch('https://relay.test/v1/connect', {
@@ -443,11 +505,11 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
     )
     await nextMessage<any>(hostWs2) // ready -> cancels offline task & alarm
 
-    // Alarm should not run or should find task cancelled
-    const alarmRan = await runDurableObjectAlarm(hub)
+    // The armed alarm was cancelled: nothing runs, even after the delay
+    const alarmRan = await runAlarmAt(hub, Date.now() + HOST_OFFLINE_ALERT_MS)
     expect(alarmRan).toBe(false)
     expect(capturedFcmRequests.length).toBe(0)
 
-    hostWs2.close(CloseCodes.NORMAL, 'done')
+    await disconnectHost(hostWs2, 'done')
   })
 })
