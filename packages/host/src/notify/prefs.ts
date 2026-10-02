@@ -7,7 +7,8 @@ export interface NotifyPrefsStore {
   setPrefs(deviceId: string, prefs: Partial<NotifyPrefs>): NotifyPrefs
 }
 
-const DEFAULT_PREFS: NotifyPrefs = {
+/** The preferences a device has until it sets its own (P7-H4 persists these per device). */
+export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = {
   approval: true,
   question: true,
   turnDone: true,
@@ -31,7 +32,7 @@ export class InMemoryNotifyPrefsStore implements NotifyPrefsStore {
   }
 
   getPrefs(deviceId: string): NotifyPrefs {
-    return this.prefsByDevice.get(deviceId) ?? { ...DEFAULT_PREFS }
+    return this.prefsByDevice.get(deviceId) ?? { ...DEFAULT_NOTIFY_PREFS }
   }
 
   setPrefs(deviceId: string, prefs: Partial<NotifyPrefs>): NotifyPrefs {

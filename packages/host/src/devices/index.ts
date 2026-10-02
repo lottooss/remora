@@ -30,7 +30,13 @@ export interface DeviceRegistry {
   listDevices(): DeviceRecord[]
 }
 
-export { PersistentDeviceRegistry } from './persistent-registry.ts'
+export {
+  DEVICES_RECORD_KEY,
+  DeviceRegistryRecordError,
+  PersistentDeviceRegistry,
+  loadPersistentDeviceRegistry,
+} from './persistent-registry.ts'
+export type { PersistentDeviceRegistryOptions } from './persistent-registry.ts'
 
 /**
  * In-memory device registry used for testing and baseline host operation.
