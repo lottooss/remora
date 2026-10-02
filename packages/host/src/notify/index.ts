@@ -1,3 +1,5 @@
 export * from './prefs.ts'
 export * from './payload.ts'
 export * from './notifier.ts'
+export * from './dsh-events.ts'
+export * from './presence.ts'
