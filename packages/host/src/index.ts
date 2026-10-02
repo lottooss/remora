@@ -5,15 +5,13 @@
  */
 import os from 'node:os'
 import { Logger, type Context, type Exporter, type Message } from '@deepseek-ai/cordis'
-// Declaration merging: these type-only imports teach the compiler that
-// `ctx.typertGateway` (api-gateway) exists and that the `agent/status`,
-// `agent/error` (dsh-agent) and `session/event` (dsh-session) event names are
-// part of Cordis's `Events` map, so every `ctx.on` below is type-checked.
-// They are devDependencies pinned to the upstream.lock.json version and never
-// imported at runtime.
-import type {} from '@deepseek-ai/dsh-agent'
+// Declaration merging: this type-only import teaches the compiler that
+// `ctx.typertGateway` (api-gateway) exists on the Cordis Context. The dsh
+// event names (`session/event`, `agent/error`, `agent/status`) are augmented
+// by the type-only imports inside src/notify/dsh-events.ts, where the handlers
+// live; they are devDependencies pinned to the upstream.lock.json version and
+// never imported at runtime.
 import type {} from '@deepseek-ai/dsh-api-gateway'
-import type {} from '@deepseek-ai/dsh-session'
 import { decodeBase64Url } from '@remora/crypto'
 import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
@@ -35,12 +33,11 @@ import { registerManagementRoutes } from './web/routes.ts'
 import { PendingRegistry, registerAnswerBridge, runAnswerBridgeSelfCheck } from './interaction/index.ts'
 import { registerInteractionMethods } from './rcp/methods/interaction.ts'
 import { DefaultPolicyGuard } from './policy/index.ts'
-import { HostNotifier } from './notify/index.ts'
+import { HostNotifier, PresenceTrackingSessionAdapter, registerDshEventBridge } from './notify/index.ts'
 import { registerNotifyMethods } from './rcp/methods/notify.ts'
 import { WorkspaceAdapter } from './adapter/workspaces.ts'
 import { registerWorkspaceMethods } from './rcp/methods/workspaces.ts'
 import { FsAdapter, registerFsMethods } from './rcp/methods/fs.ts'
-import { SessionAdapter } from './adapter/sessions.ts'
 import { registerSessionMethods } from './rcp/methods/sessions.ts'
 import { GitAdapter } from './adapter/git.ts'
 import { FilesAdapter } from './adapter/files.ts'
@@ -298,7 +295,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const fsAdapter = new FsAdapter({ gateway, policyGuard })
   registerFsMethods(rcpServer, fsAdapter)
 
-  const sessionAdapter = new SessionAdapter({
+  // The presence-tracking subclass (P7-H5) is the real SessionAdapter plus one
+  // observation: every opened `sessions.follow` stream is recorded as session
+  // follow presence, which `isDeviceForegrounded` below consults. The
+  // open-channel half of presence comes from the ChannelManager probe.
+  const sessionAdapter = new PresenceTrackingSessionAdapter({
     gateway,
     policyGuard,
     workspaceAdapter,
@@ -336,7 +337,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       await relay.sendPushFrame(frame)
     },
     isDeviceConnected: (deviceId) => channelManager.hasDeviceSession(deviceId),
-    isDeviceForegrounded: (_deviceId, _sessionId) => false,
+    // Real presence (P7-H5): foregrounded means the device holds an open
+    // channel AND an active `sessions.follow` for the session — it receives
+    // the events in-band, so the push would only duplicate them. The
+    // notifier ANDs both halves; this callback answers the follow half.
+    isDeviceForegrounded: (deviceId, sessionId) =>
+      sessionId !== undefined && sessionAdapter.follows.isFollowing(sessionId, deviceId),
   })
 
   const detachNotifier = notifier.attachPendingRegistry(pendingRegistry)
@@ -346,36 +352,25 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     gracePeriodMs: 120_000,
   })
 
-  // Typed registrations: the event names are checked against dsh's augmented
-  // Cordis `Events` map (type-only imports at the top). The handler bodies keep
-  // their pre-P7-H1 payload handling verbatim on purpose — this packet freezes
-  // behavior; retyping the handlers against the real dsh payloads is P7-H5
-  // (docs/tasks/P7-H5.md).
-  ctx.on('agent/status', (event: unknown) => {
-    if (typeof event === 'object' && event !== null) {
-      const { agent, status } = event as { agent?: { id?: string } | string; status?: string }
-      const agentId = typeof agent === 'object' && agent !== null ? agent.id ?? 'default' : typeof agent === 'string' ? agent : 'default'
-      if (typeof status === 'string') {
-        keepAwakeManager.handleAgentStatus(agentId, status)
-      }
-    }
-  })
-  ctx.on('session/event', (event: unknown) => {
-    if (typeof event === 'object' && event !== null) {
-      const e = event as { type?: string; sessionId?: string; title?: string }
-      if (e.type === 'turn/end' && typeof e.sessionId === 'string') {
-        void notifier.notifyTurnDone(e.sessionId, e.title).catch(() => {})
-      }
-    }
-  })
-  ctx.on('agent/error', (event: unknown) => {
-    if (typeof event === 'object' && event !== null) {
-      const e = event as { sessionId?: string; error?: unknown; title?: string }
-      if (typeof e.sessionId === 'string') {
-        const errText = typeof e.error === 'string' ? e.error : 'Agent encountered an error'
-        void notifier.notifyTurnError(e.sessionId, errText, e.title).catch(() => {})
-      }
-    }
+  // The dsh event wiring (P7-H5): the handlers are typed against the real dsh
+  // signatures — `session/event` is emitted as `(session, event)`, `agent/error`
+  // as `{ agent, turn, step, error }` with the session id on `agent.id`, and
+  // `agent/status` as `{ agent, status }` (upstream.lock.json 0.1.5-rc.3) — and
+  // live in src/notify/dsh-events.ts, which owns the shape knowledge. Routing:
+  // turn ends and agent errors go to the notifier (turn-done/turn-error pushes
+  // to the devices in the session's audience), agent statuses to keep-awake.
+  // A session's title is a projection real dsh does not expose on the emitted
+  // Session, so the notifier renders its default titles.
+  registerDshEventBridge(ctx, {
+    onTurnEnded: (sessionId) => {
+      void notifier.notifyTurnDone(sessionId, null).catch(() => {})
+    },
+    onTurnErrored: (sessionId, errorText) => {
+      void notifier.notifyTurnError(sessionId, errorText, null).catch(() => {})
+    },
+    onAgentStatus: (agentId, status) => {
+      keepAwakeManager.handleAgentStatus(agentId, status)
+    },
   })
 
   // Enrollment (relay-v1.md §4.1) must precede the first relay connection: the
