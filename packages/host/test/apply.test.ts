@@ -38,6 +38,7 @@ import { createValidHostConfig } from './support/host-config.ts'
 import { createHostCredentials, type FakeHostCredentials } from './relay/fake-credentials.ts'
 import type { FakeGrantRecord } from './identity/fake-credentials.ts'
 import { startFakeRelay, type FakeRelay } from './relay/fake-relay.ts'
+import { createFixtureSession, createTestAgent, FIXTURE_SESSION_ID, FIXTURE_TURN_END } from './notify/dsh-test-events.ts'
 
 /**
  * Cordis fiber lifecycle states. The upstream `FiberState` is an ambient const
@@ -447,6 +448,115 @@ describe('remora host plugin apply() harness: relay enrollment (P7-H3)', () => {
     const third = await mountHost(credentials, relay.origin)
     expect(await waitFor(() => relayReadyLog(third.messages) !== undefined)).toBe(true)
     expect(relay.enrollRequests).toHaveLength(2)
+  }, 15_000)
+})
+
+/**
+ * The routing records the dsh event wiring (P7-H5) emits when a real-shaped
+ * dsh event reaches the plugin's handlers. The handlers must react to the
+ * exact shapes real dsh emits — `session/event` as `(session, event)` and
+ * `agent/error` as `{ agent, turn, step, error }` with the session id on
+ * `agent.id` (upstream.lock.json 0.1.5-rc.3) — so the wiring logs the routed
+ * session id (truncated to 6 characters, AGENTS.md §1.8) when it fires.
+ */
+const TURN_ENDED_LOG_PREFIX = 'remora: turn ended in session'
+const AGENT_ERROR_LOG_PREFIX = 'remora: agent error in session'
+
+describe('remora host plugin apply() harness: dsh event wiring (P7-H5)', () => {
+  it('routes a real turn/end session event to the turn-done notification path', async () => {
+    const ctx = new Context()
+    const messages = captureLogs(ctx)
+    await provideFakeDshServices(ctx, {
+      typertGateway: createFakeTypertGateway(),
+      storage: createFakeStorage(),
+    })
+    await provideCredentialsStore(ctx, credentialsWithSecret())
+    const loaded = await ctx.plugin(
+      host,
+      createValidHostConfig({ relayUrl: `http://127.0.0.1:${await reserveClosedPort()}` }),
+    )
+    expect(
+      loaded.state,
+      `plugin did not reach ACTIVE; log records: ${logSummary(messages)}`,
+    ).toBe(FIBER_STATE.ACTIVE)
+
+    // The exact emit real dsh performs (upstream session/src/index.ts):
+    // the owning session as the FIRST argument, the appended event second.
+    ctx.emit('session/event', createFixtureSession(), FIXTURE_TURN_END)
+
+    const routed = await waitFor(() =>
+      messages.some(
+        (message) => message.type === 'info' && firstArgString(message)?.startsWith(TURN_ENDED_LOG_PREFIX) === true,
+      ),
+    )
+    expect(
+      routed,
+      `the plugin never reacted to a real (session, event) turn/end emit — ` +
+        `the handler assumed a wrong event shape (P7-H5); log records: ${logSummary(messages)}`,
+    ).toBe(true)
+    const record = messages.find(
+      (message) => message.type === 'info' && firstArgString(message)?.startsWith(TURN_ENDED_LOG_PREFIX) === true,
+    )
+    expect(record?.args[1], 'the routed session id must be the real session id, truncated to 6 characters').toBe(
+      FIXTURE_SESSION_ID.slice(0, 6),
+    )
+    expect(
+      messages.filter((message) => message.type === 'error'),
+      'the real-shaped emit must not crash the wiring',
+    ).toEqual([])
+    await loaded.dispose()
+  }, 15_000)
+
+  it('routes a real agent/error payload to the turn-error notification path', async () => {
+    const ctx = new Context()
+    const messages = captureLogs(ctx)
+    await provideFakeDshServices(ctx, {
+      typertGateway: createFakeTypertGateway(),
+      storage: createFakeStorage(),
+    })
+    await provideCredentialsStore(ctx, credentialsWithSecret())
+    const loaded = await ctx.plugin(
+      host,
+      createValidHostConfig({ relayUrl: `http://127.0.0.1:${await reserveClosedPort()}` }),
+    )
+    expect(
+      loaded.state,
+      `plugin did not reach ACTIVE; log records: ${logSummary(messages)}`,
+    ).toBe(FIBER_STATE.ACTIVE)
+
+    // The exact payload real dsh emits (upstream agent/src/runtime-types.ts):
+    // `{ agent, turn, step, error }` — there is NO sessionId field; the
+    // session id is `agent.id`.
+    ctx.emit('agent/error', {
+      agent: createTestAgent(FIXTURE_SESSION_ID),
+      turn: 3,
+      step: 1,
+      error: new Error('provider dropped the connection'),
+    })
+
+    const routed = await waitFor(() =>
+      messages.some(
+        (message) => message.type === 'info' && firstArgString(message)?.startsWith(AGENT_ERROR_LOG_PREFIX) === true,
+      ),
+    )
+    expect(
+      routed,
+      `the plugin never reacted to a real agent/error payload — ` +
+        `the handler looked for a sessionId field that the real payload does not carry (P7-H5); log records: ${logSummary(messages)}`,
+    ).toBe(true)
+    const record = messages.find(
+      (message) => message.type === 'info' && firstArgString(message)?.startsWith(AGENT_ERROR_LOG_PREFIX) === true,
+    )
+    expect(record?.args[1], 'the routed session id must come from agent.id, truncated to 6 characters').toBe(
+      FIXTURE_SESSION_ID.slice(0, 6),
+    )
+    expect(record?.args[2], 'the routed turn number must come from the payload').toBe(3)
+    expect(record?.args[3], 'the routed step number must come from the payload').toBe(1)
+    expect(
+      messages.filter((message) => message.type === 'error'),
+      'the real-shaped emit must not crash the wiring',
+    ).toEqual([])
+    await loaded.dispose()
   }, 15_000)
 })
 
