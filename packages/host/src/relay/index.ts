@@ -2,13 +2,15 @@
  * Host-side relay wiring: owns the authenticated {@link RelayLink} session to
  * the self-hosted relay and forwards decoded RLY/1 data frames to the
  * {@link ChannelManager}. The relay only ever sees ciphertext — nothing here
- * parses SC/1 records or RCP payloads.
+ * parses SC/1 records or RCP payloads. Enrollment with the relay, which must
+ * precede the first connection, lives in ./enrollment.ts.
  */
-import { encodeBase64Url } from '@remora/crypto'
 import { decodeDataFrame, type DataFrame } from '@remora/protocol'
 import { RelayLink, type RelayLinkState } from '@remora/relay-link'
 import type { ChannelManager } from '../channel/index.ts'
 import type { HostIdentity } from '../identity/index.ts'
+
+export * from './enrollment.ts'
 
 export interface HostRelayOptions {
   /** Relay WebSocket endpoint, e.g. `wss://remora.example.workers.dev` */
@@ -32,32 +34,6 @@ export function normalizeRelayWsUrl(inputUrl: string): string {
     url.pathname = '/v1/connect'
   }
   return url.toString()
-}
-
-export async function enrollHost(
-  relayHttpUrl: string,
-  enrollSecret: string,
-  identity: HostIdentity,
-  hostName: string,
-): Promise<{ v: number; id: string }> {
-  const url = new URL('/v1/enroll/host', relayHttpUrl)
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      Authorization: `Bearer ${enrollSecret}`,
-    },
-    body: JSON.stringify({
-      v: 1,
-      relayPub: encodeBase64Url(identity.relayKeypair.publicKey),
-      name: hostName,
-      platform: process.platform,
-    }),
-  })
-  if (!res.ok) {
-    throw new Error(`Host enrollment failed (${res.status}): ${await res.text()}`)
-  }
-  return (await res.json()) as { v: number; id: string }
 }
 
 export class HostRelayConnection {

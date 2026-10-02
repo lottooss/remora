@@ -19,10 +19,17 @@ import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
 import { RetryingGateway } from './adapter/gateway.ts'
 import { PersistentDeviceRegistry, type DeviceRecord } from './devices/index.ts'
-import { loadOrCreateHostIdentity, type HostCredentialsStore } from './identity/credentials.ts'
+import { loadOrCreateHostIdentity } from './identity/credentials.ts'
 import { PairingService } from './pairing/index.ts'
 import { RcpServer } from './rcp/index.ts'
-import { HostRelayConnection } from './relay/index.ts'
+import {
+  HostRelayConnection,
+  describeEnrollmentFailure,
+  ensureHostEnrolled,
+  forgetRelayEnrollment,
+  resolveEnrollSecret,
+  type RelayEnrollmentCredentials,
+} from './relay/index.ts'
 import { printTerminalQr } from './web/index.ts'
 import { registerManagementRoutes } from './web/routes.ts'
 import { PendingRegistry, registerAnswerBridge, runAnswerBridgeSelfCheck } from './interaction/index.ts'
@@ -82,7 +89,8 @@ export const inject: string[] = ['typertGateway', 'credentials', 'storage']
 /**
  * Plugin body: resolve configuration, load-or-create the persistent host
  * identity from dsh credentials, instantiate device registry, secure channel
- * manager, RCP server, and connect to the relay via RelayLink.
+ * manager, RCP server, then enroll with the relay (once per relay origin,
+ * P7-H3) and connect to it via RelayLink.
  *
  * Async on purpose (P7-H2): Cordis 4 accepts a promise-returning `apply` —
  * the fiber stays pending until the returned promise settles and a rejection
@@ -113,10 +121,14 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // the credentials service exists; the structural access is needed because
   // the seam's package is provided by dsh at runtime and not on this bundle's
   // dependency list (spikes/p0-s1-dsh-adapter Q4).
-  const credentials = (ctx as Context & { credentials?: HostCredentialsStore }).credentials
+  const credentials = (ctx as Context & { credentials?: RelayEnrollmentCredentials }).credentials
   if (credentials === undefined) {
     throw new Error('remora: the dsh credentials service is required but missing')
   }
+  // The relay enrollment secret is required configuration (P7-H3): a missing
+  // one fails the load with a RemoraConfigError naming the key and the file to
+  // put it in. The value itself is re-resolved for every enrollment attempt.
+  await resolveEnrollSecret(credentials, resolved.enrollSecretKey)
   const identity = await loadOrCreateHostIdentity(credentials)
   const registry = new PersistentDeviceRegistry()
   const hostName = os.hostname()
@@ -130,7 +142,30 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     identity,
     onStatusChange: (status) => {
       ctx.logger.debug('remora: relay status -> %s', status)
+      if (status === 'idle') {
+        // RelayLink falls back to idle only when the relay ends the link for
+        // good (4401/4403 refusal, 4409 replaced) and does not redial. Forget
+        // the remembered enrollment so the next start enrolls again — a relay
+        // that lost its endpoint table would otherwise refuse this host forever.
+        void forgetRelayEnrollment(credentials).then(
+          () => {
+            ctx.logger.error(
+              'remora: the relay at %s ended the link for good (see the relay error above); its remembered enrollment was cleared, restart dsh to enroll again',
+              resolved.relayOrigin,
+            )
+          },
+          (error: unknown) => {
+            ctx.logger.error(
+              'remora: the relay at %s ended the link for good and its remembered enrollment could not be cleared: %s',
+              resolved.relayOrigin,
+              error instanceof Error ? error.message : 'unknown',
+            )
+          },
+        )
+        return
+      }
       if (status !== 'ready') return
+      ctx.logger.info('remora: relay ready (host %s)', identity.hostId.slice(0, 6))
       // Terminal-only pairing: open one attempt as soon as the relay is usable
       // and nothing is paired yet, so an attached terminal can show the QR
       // without the management page.
@@ -324,21 +359,66 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     }
   })
 
-  // Disposer: zeroize channel keys, then close the relay socket. Runs when the
-  // fiber unloads; dsh waits up to 2 s for it (AGENTS §7.3).
+  // Enrollment (relay-v1.md §4.1) must precede the first relay connection: the
+  // relay refuses an endpoint it does not know (4403). It runs in the
+  // background so the plugin and its management page are up while an
+  // unreachable relay is retried with backoff; a final failure (401, a
+  // malformed answer) is logged once and the relay loop is never started.
+  const connectAbort = new AbortController()
+  let connecting: Promise<void> = Promise.resolve()
+
+  // Disposer: stop enrolling, zeroize channel keys, then close the relay
+  // socket. Runs when the fiber unloads; dsh waits up to 2 s for it (AGENTS
+  // §7.3) — every wait in the enrollment aborts on `connectAbort`.
   ctx.effect(
-    () => () => {
+    () => async () => {
       ctx.logger.info('remora: disposing host plugin')
+      connectAbort.abort()
       detachNotifier()
       keepAwakeManager.dispose()
       disposeBridge()
       channelManager.closeAll()
-      return relay.stop()
+      await connecting
+      await relay.stop()
     },
     'remora host',
   )
 
-  relay.start()
+  connecting = (async () => {
+    try {
+      const outcome = await ensureHostEnrolled({
+        credentials,
+        enrollSecretKey: resolved.enrollSecretKey,
+        relayOrigin: resolved.relayOrigin,
+        identity,
+        hostName,
+        signal: connectAbort.signal,
+        onRetry: (error, delayMs) => {
+          ctx.logger.warn(
+            'remora: relay enrollment with %s not possible yet (%s); retrying in %d s',
+            resolved.relayOrigin,
+            error.code,
+            Math.round(delayMs / 1000),
+          )
+        },
+        onRememberFailed: (error) => {
+          ctx.logger.warn(
+            'remora: enrolled with the relay but could not remember it (%s); the next start enrolls again',
+            error instanceof Error ? error.message : 'unknown',
+          )
+        },
+      })
+      if (connectAbort.signal.aborted) return
+      if (outcome === 'enrolled') {
+        ctx.logger.info('remora: enrolled with the relay %s (host %s)', resolved.relayOrigin, identity.hostId.slice(0, 6))
+      }
+      relay.start()
+    } catch (error: unknown) {
+      if (connectAbort.signal.aborted) return
+      // '%s': the line embeds paths such as %USERPROFILE% that must not be read as a format.
+      ctx.logger.error('%s', describeEnrollmentFailure(error, resolved))
+    }
+  })()
 
   ctx.logger.info(
     'remora: host started (id: %s, relay: %s, %d remote roots)',
