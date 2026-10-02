@@ -48,7 +48,13 @@ The lesson drives every rule below: **green tests and confident reports proved n
 
 A worker may not verify its own PR, and a verifier may not verify a PR whose worker shares its session/context.
 
-**Current setup (from 2026-10-01):** Claude acts as Integrator and Verifier. Workers are `remora-worker` agents (Opus, defined in `.claude/agents/remora-worker.md`), one task at a time. The Integrator re-runs each PR's checks independently before squash-merging, and makes gate and packet changes itself.
+**Current setup (from 2026-10-02):** the GLM 5.3 Flash swarm is back as Workers, Verifiers and Integrator. From 2026-10-01 to 2026-10-02 Claude acted as Integrator/Verifier with Opus workers; that phase merged P7-H2, P7-H8, P7-R1 and several gate fixes. `.claude/agents/remora-worker.md` is the Claude-specific worker definition; GLM agents use the prompt templates in §7 and §8.
+
+**Lessons from the audits (apply them):**
+- A gate test can itself be wrong. If a packet's acceptance looks impossible to meet honestly, inspect the gate and stop and report (§6). Do not work around it. Example: `boot.spec.ts` once recorded the host id only after an assertion that could not pass yet.
+- Read real dsh output, not only the assertion line. The real-dsh CI logs and `tests/real-dsh/artifacts/` show exactly what dsh printed.
+- On Windows, dsh runs under a `cmd.exe` shell; kill process trees, not pids (see `tests/real-dsh/harness.ts`).
+- A PR whose CI jobs did not run (for example, billing or cancelled runs) is not verified. Re-run them before merging.
 
 ## 3. Waves (strict order)
 
@@ -58,7 +64,7 @@ Start a wave only when **every** packet of all earlier waves is merged. Inside a
 |---|---|---|
 | **0 — Gates & honesty** | make fabrication impossible to merge; correct false docs | P7-G1, P7-G2, P7-G3, P7-D1, P7-C1, P7-O6 (owner) |
 | **1 — Host boots for real** | plugin loads in dsh, persistent identity, enrolls, remembers devices, packaging | P7-H1 → P7-H2 → P7-H3, P7-H4, P7-H8, P7-H9 |
-| **2 — Host completeness** | events, keep-awake, device methods, approval bridge, real-dsh e2e | P7-H5, P7-H6, P7-H7, P7-H10, P7-T1 |
+| **2 — Host completeness** | events, keep-awake, device methods, approval bridge, real-dsh e2e | P7-H5, P7-H6, P7-H7, P7-H10, P7-R1, P7-R2, P7-T1 |
 | **3 — Android real** | keys, lock, QR, subscriptions, pushes, screens | P7-A1, P7-A2, P7-A3, P7-A4, P7-A5, P7-A6, P7-A7 |
 | **4 — Contracts & vectors** | fill every vector, parity in both languages, flip strict gates | P7-V1, P7-V2, P7-V3 |
 | **5 — Real-world verification** | owner runs the phone, Cloudflare, Firebase; final e2e | P7-O1…P7-O5 (owner), P7-T2, P7-X1 |
@@ -86,6 +92,8 @@ These are the gates. A worker PR that modifies them is rejected unless its packe
 | Conformance (strict from wave 4) | `pnpm run conformance:check -- --strict` | P7-G2 |
 | Android | `cd apps/android && ./gradlew assembleDebug testDebugUnitTest` | existing |
 | Real-dsh e2e (from wave 2) | `pnpm test:real-dsh:e2e` | P7-T1 |
+
+**From the merge of P7-H3, `real-dsh` is green on `main`** (both tests, ubuntu and windows). Every later PR must keep it green: a red `real-dsh` run is a regression and blocks the merge, even though branch protection does not enforce it yet.
 
 ## 6. Stop and report
 
