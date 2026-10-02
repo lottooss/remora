@@ -18,7 +18,7 @@ import { decodeBase64Url } from '@remora/crypto'
 import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
 import { RetryingGateway } from './adapter/gateway.ts'
-import { PersistentDeviceRegistry, type DeviceRecord } from './devices/index.ts'
+import { loadPersistentDeviceRegistry, type DeviceRecord } from './devices/index.ts'
 import { loadOrCreateHostIdentity } from './identity/credentials.ts'
 import { PairingService } from './pairing/index.ts'
 import { RcpServer } from './rcp/index.ts'
@@ -35,7 +35,7 @@ import { registerManagementRoutes } from './web/routes.ts'
 import { PendingRegistry, registerAnswerBridge, runAnswerBridgeSelfCheck } from './interaction/index.ts'
 import { registerInteractionMethods } from './rcp/methods/interaction.ts'
 import { DefaultPolicyGuard } from './policy/index.ts'
-import { InMemoryNotifyPrefsStore, HostNotifier } from './notify/index.ts'
+import { HostNotifier } from './notify/index.ts'
 import { registerNotifyMethods } from './rcp/methods/notify.ts'
 import { WorkspaceAdapter } from './adapter/workspaces.ts'
 import { registerWorkspaceMethods } from './rcp/methods/workspaces.ts'
@@ -130,7 +130,23 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // put it in. The value itself is re-resolved for every enrollment attempt.
   await resolveEnrollSecret(credentials, resolved.enrollSecretKey)
   const identity = await loadOrCreateHostIdentity(credentials)
-  const registry = new PersistentDeviceRegistry()
+  // The paired devices and their per-device notify preferences persist in the
+  // dsh credentials record `remora/devices` (P7-H4; crypto-v1.md §3, §9, §10):
+  // loaded on every start so a restart no longer unpairs every phone, written
+  // through modifyRecord's atomic single-record writes (a revocation deletes
+  // the device's secrets in the same write), and fail closed on a stored
+  // record that cannot be parsed. A failed write is surfaced on the log
+  // instead of being swallowed; the in-memory state stays authoritative for
+  // the running session. The devicePsk/pushKey values cross this boundary
+  // inside the record payload only and are never logged (AGENTS.md §1.8).
+  const registry = await loadPersistentDeviceRegistry(credentials, {
+    onWriteError: (error: unknown) => {
+      ctx.logger.error(
+        'remora: persisting the device registry failed: %s',
+        error instanceof Error ? error.message : 'unknown',
+      )
+    },
+  })
   const hostName = os.hostname()
 
   // Guards the terminal trigger until `beginPairing` has stored its attempt, so
@@ -242,7 +258,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     },
   })
 
-  const notifyPrefsStore = new InMemoryNotifyPrefsStore()
+  // The registry itself is the per-device notify-prefs store: the preferences
+  // live in the same `remora/devices` record and share its serialized write
+  // queue (P7-H4). InMemoryNotifyPrefsStore remains for tests only.
+  const notifyPrefsStore = registry
   registerNotifyMethods(rcpServer, notifyPrefsStore)
 
   const pendingRegistry = new PendingRegistry()
@@ -367,9 +386,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const connectAbort = new AbortController()
   let connecting: Promise<void> = Promise.resolve()
 
-  // Disposer: stop enrolling, zeroize channel keys, then close the relay
-  // socket. Runs when the fiber unloads; dsh waits up to 2 s for it (AGENTS
-  // §7.3) — every wait in the enrollment aborts on `connectAbort`.
+  // Disposer: stop enrolling, zeroize channel keys, persist any pending
+  // registry change (a revoke right before shutdown must not be lost — the
+  // flush is one bounded record write), then close the relay socket. Runs
+  // when the fiber unloads; dsh waits up to 2 s for it (AGENTS §7.3) — every
+  // wait in the enrollment aborts on `connectAbort`.
   ctx.effect(
     () => async () => {
       ctx.logger.info('remora: disposing host plugin')
@@ -379,6 +400,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       disposeBridge()
       channelManager.closeAll()
       await connecting
+      await registry.flush()
       await relay.stop()
     },
     'remora host',

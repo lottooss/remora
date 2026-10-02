@@ -14,10 +14,19 @@
  * WebSocket server that, like the real relay, refuses to authenticate a host
  * it never enrolled), and the credentials fake gains the seam's reference
  * half (`resolve`) for the enrollment secret.
+ *
+ * P7-H4 adds device persistence: the plugin loads the paired-device registry
+ * and the per-device notify preferences from the dsh credentials record
+ * `remora/devices`, so a paired device is still admitted and a revocation
+ * still holds after a remount on the same credentials store. The management
+ * dashboard route (driven through a fake of dsh's `connection` service) is
+ * the observable for what the plugin's registry contains.
  */
 import { Context, type Message } from '@deepseek-ai/cordis'
+import { encodeBase64Url } from '@remora/crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as host from '../src/index.ts'
+import type { ManagementFetchRoute } from '../src/web/routes.ts'
 import {
   createFakeCredentials,
   createFakeStorage,
@@ -27,6 +36,7 @@ import {
 } from './support/dsh-fakes.ts'
 import { createValidHostConfig } from './support/host-config.ts'
 import { createHostCredentials, type FakeHostCredentials } from './relay/fake-credentials.ts'
+import type { FakeGrantRecord } from './identity/fake-credentials.ts'
 import { startFakeRelay, type FakeRelay } from './relay/fake-relay.ts'
 
 /**
@@ -49,6 +59,10 @@ const SECRET_KEY = 'REMORA_RELAY_ENROLL_SECRET'
 const SECRET = 'test-enroll-secret-not-real-0123456789'
 /** The credentials record remembering a successful enrollment (P7-H3). */
 const ENROLLMENT_RECORD_KEY = 'remora/relay-enrollment'
+/** The credentials record holding the paired devices and their prefs (P7-H4). */
+const DEVICES_RECORD_KEY = 'remora/devices'
+/** The management dashboard route (web/routes.ts). */
+const DASHBOARD_PATH = '/api/remora'
 
 const cleanups: Array<() => Promise<void>> = []
 afterEach(async () => {
@@ -146,6 +160,74 @@ async function mountHost(
     if (fiber.state !== FIBER_STATE.DISPOSED) await fiber.dispose()
   })
   return { messages, fiber }
+}
+
+/**
+ * Minimal fake of dsh's `connection` service — the Fetch-route registry the
+ * management page mounts through (`ManagementConnection`) — provided inside
+ * its own fiber like a real dsh service. Returns the routes as the plugin
+ * registers them, so a test can drive the real handlers.
+ */
+async function provideConnectionRoutes(ctx: Context): Promise<Map<string, ManagementFetchRoute>> {
+  const routes = new Map<string, ManagementFetchRoute>()
+  await ctx.plugin({
+    apply: (serviceCtx: Context) => {
+      void serviceCtx.provide('connection', {
+        fetch: {
+          register: (route: ManagementFetchRoute) => {
+            routes.set(route.path, route)
+            return async () => {
+              routes.delete(route.path)
+            }
+          },
+        },
+        requestRejection: () => undefined,
+      })
+    },
+  })
+  return routes
+}
+
+/** mountHost plus the `connection` fake, so the management routes can be driven. */
+async function mountHostWithRoutes(
+  credentials: FakeHostCredentials,
+  relayUrl: string,
+): Promise<{
+  messages: Message[]
+  fiber: Awaited<ReturnType<Context['plugin']>>
+  routes: Map<string, ManagementFetchRoute>
+}> {
+  const ctx = new Context()
+  const messages = captureLogs(ctx)
+  await provideFakeDshServices(ctx, {
+    typertGateway: createFakeTypertGateway(),
+    storage: createFakeStorage(),
+  })
+  await provideCredentialsStore(ctx, credentials)
+  const routes = await provideConnectionRoutes(ctx)
+  const fiber = await ctx.plugin(host, createValidHostConfig({ relayUrl }))
+  cleanups.push(async () => {
+    if (fiber.state !== FIBER_STATE.DISPOSED) await fiber.dispose()
+  })
+  return { messages, fiber, routes }
+}
+
+/** The device list the management dashboard answers with, once its route is up. */
+async function dashboardDevices(
+  routes: Map<string, ManagementFetchRoute>,
+): Promise<Array<{ deviceId: string; name: string; revoked: boolean; pairedAt: number }>> {
+  const registered = await waitFor(() => routes.has(DASHBOARD_PATH))
+  expect(registered, 'the management dashboard route was never registered').toBe(true)
+  const route = routes.get(DASHBOARD_PATH)
+  if (route === undefined) throw new Error('apply harness: dashboard route vanished')
+  const response = await route.fetch(
+    new Request(`http://127.0.0.1${DASHBOARD_PATH}`, { headers: { host: '127.0.0.1', accept: 'application/json' } }),
+  )
+  expect(response.status).toBe(200)
+  const body = (await response.json()) as {
+    devices: Array<{ deviceId: string; name: string; revoked: boolean; pairedAt: number }>
+  }
+  return body.devices
 }
 
 describe('remora host plugin apply() harness', () => {
@@ -365,5 +447,111 @@ describe('remora host plugin apply() harness: relay enrollment (P7-H3)', () => {
     const third = await mountHost(credentials, relay.origin)
     expect(await waitFor(() => relayReadyLog(third.messages) !== undefined)).toBe(true)
     expect(relay.enrollRequests).toHaveLength(2)
+  }, 15_000)
+})
+
+describe('remora host plugin apply() harness: device persistence (P7-H4)', () => {
+  const DEVICE_A_ID = 'd_abcdefghijklmnopqrstuvwxyz'
+  const DEVICE_B_ID = 'd_mzxw6ytboirx24dhmzxw6ytboi'
+  /** Fixed, obviously fake test key material (AGENTS.md §10). */
+  const PSK_SEED = new Uint8Array(32).fill(2)
+  const PUSH_KEY_SEED = new Uint8Array(32).fill(3)
+
+  /**
+   * The devices record a previous session left behind: one paired device with
+   * its PSK and push key (crypto-v1.md §3), one revoked device whose secrets
+   * the revocation write deleted, and the paired device's notify preferences.
+   */
+  function credentialsWithDevicesRecord(): FakeHostCredentials {
+    const devicesRecord: FakeGrantRecord = {
+      kind: 'grant',
+      payload: {
+        v: 1,
+        devices: [
+          {
+            deviceId: DEVICE_A_ID,
+            name: 'Pixel 8',
+            noisePublicKey: encodeBase64Url(new Uint8Array(32).fill(1)),
+            devicePsk: encodeBase64Url(PSK_SEED),
+            pushKey: encodeBase64Url(PUSH_KEY_SEED),
+            approvalPublicKey: encodeBase64Url(new Uint8Array(65).fill(4)),
+            createdAt: 1_000,
+            lastSeenAt: 2_000,
+            revoked: false,
+          },
+          {
+            deviceId: DEVICE_B_ID,
+            name: 'Old Phone',
+            noisePublicKey: encodeBase64Url(new Uint8Array(32).fill(5)),
+            createdAt: 3_000,
+            lastSeenAt: 4_000,
+            revoked: true,
+          },
+        ],
+        notifyPrefs: { [DEVICE_A_ID]: { approval: true, question: true, turnDone: false, turnError: true } },
+      },
+    }
+    return createHostCredentials({
+      references: { [SECRET_KEY]: SECRET },
+      records: { [DEVICES_RECORD_KEY]: devicesRecord },
+    })
+  }
+
+  it('admits a paired device and keeps its revocation across two mounts on the same credentials store', async () => {
+    const credentials = credentialsWithDevicesRecord()
+    const relayUrl = `http://127.0.0.1:${await reserveClosedPort()}`
+
+    const first = await mountHostWithRoutes(credentials, relayUrl)
+    expect(
+      first.fiber.state,
+      `first mount did not reach ACTIVE; log records: ${logSummary(first.messages)}`,
+    ).toBe(FIBER_STATE.ACTIVE)
+    const firstDevices = await dashboardDevices(first.routes)
+    expect(firstDevices).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ deviceId: DEVICE_A_ID, name: 'Pixel 8', revoked: false }),
+        expect.objectContaining({ deviceId: DEVICE_B_ID, name: 'Old Phone', revoked: true }),
+      ]),
+    )
+    await first.fiber.dispose()
+
+    // The restart: a fresh Cordis root over the SAME credentials store.
+    const second = await mountHostWithRoutes(credentials, relayUrl)
+    expect(
+      second.fiber.state,
+      `second mount did not reach ACTIVE; log records: ${logSummary(second.messages)}`,
+    ).toBe(FIBER_STATE.ACTIVE)
+    const secondDevices = await dashboardDevices(second.routes)
+    expect(secondDevices, 'the paired device did not survive the remount').toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ deviceId: DEVICE_A_ID, name: 'Pixel 8', revoked: false }),
+        expect.objectContaining({ deviceId: DEVICE_B_ID, name: 'Old Phone', revoked: true }),
+      ]),
+    )
+
+    // The remount neither clobbered the record nor resurrected the revoked
+    // device's secrets: the paired device keeps its PSK/push key, the revoked
+    // one has none (crypto-v1.md §10).
+    const stored = await credentials.readRecord(DEVICES_RECORD_KEY)
+    expect(stored?.kind).toBe('grant')
+    const payload = (stored as FakeGrantRecord).payload as {
+      devices: Array<{ deviceId: string; devicePsk?: string; pushKey?: string }>
+    }
+    const storedA = payload.devices.find((device) => device.deviceId === DEVICE_A_ID)
+    const storedB = payload.devices.find((device) => device.deviceId === DEVICE_B_ID)
+    expect(storedA?.devicePsk).toBe(encodeBase64Url(PSK_SEED))
+    expect(storedA?.pushKey).toBe(encodeBase64Url(PUSH_KEY_SEED))
+    expect(storedB?.devicePsk).toBeUndefined()
+    expect(storedB?.pushKey).toBeUndefined()
+
+    // The device secrets never reach the plugin's log output (AGENTS.md §1.8).
+    for (const messages of [first.messages, second.messages]) {
+      for (const message of messages) {
+        const text = renderedArgs(message)
+        expect(text, 'device key material leaked into a log record').not.toContain(encodeBase64Url(PSK_SEED))
+        expect(text, 'device key material leaked into a log record').not.toContain(encodeBase64Url(PUSH_KEY_SEED))
+      }
+    }
+    await second.fiber.dispose()
   }, 15_000)
 })
