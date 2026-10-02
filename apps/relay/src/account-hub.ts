@@ -1067,8 +1067,43 @@ export class AccountHub extends DurableObject<Env> {
   private async cancelOfflineTask(hostId: string): Promise<void> {
     const sql = this.ctx.storage.sql
     sql.exec('DELETE FROM tasks WHERE k = ?1', `${OFFLINE_TASK_PREFIX}${hostId}`)
-    const remaining = sql.exec<{ k: string }>('SELECT k FROM tasks WHERE k LIKE ?1', `${OFFLINE_TASK_PREFIX}%`).toArray()
-    if (remaining.length === 0) await this.ctx.storage.deleteAlarm()
+    await this.rearmAlarm()
+  }
+
+  /**
+   * Re-arms the single shared Durable Object alarm after either of its two kinds of
+   * work changed (RLY/1 §3 authentication timeout, RLY/1 §8 host-offline alerts).
+   * The next alarm time is the minimum of: the earliest `connectedAt + authTimeoutMs()`
+   * over unauthenticated sockets (read from their hibernation attachments), and the
+   * earliest due offline task. Deletes the alarm only when neither is pending, so an
+   * unauthenticated socket can never lose its timeout because an offline task was
+   * cancelled or fired (and vice versa).
+   */
+  private async rearmAlarm(): Promise<void> {
+    let next: number | null = null
+
+    for (const ws of this.ctx.getWebSockets()) {
+      const att = parseAttachment(ws)
+      if (att !== null && !att.authed) {
+        const deadline = att.connectedAt + this.authTimeoutMs()
+        if (next === null || deadline < next) next = deadline
+      }
+    }
+
+    const taskRows = this.ctx.storage.sql
+      .exec<{ v: string }>('SELECT v FROM tasks WHERE k LIKE ?1', `${OFFLINE_TASK_PREFIX}%`)
+      .toArray()
+    for (const taskRow of taskRows) {
+      try {
+        const task = JSON.parse(taskRow.v) as { due?: unknown }
+        if (typeof task.due === 'number' && (next === null || task.due < next)) next = task.due
+      } catch {
+        // Malformed task rows are deleted by alarm(); ignore them here.
+      }
+    }
+
+    if (next === null) await this.ctx.storage.deleteAlarm()
+    else await this.ctx.storage.setAlarm(next)
   }
 
   /**
@@ -1114,7 +1149,6 @@ export class AccountHub extends DurableObject<Env> {
       'SELECT k, v FROM tasks WHERE k LIKE ?1',
       `${OFFLINE_TASK_PREFIX}%`,
     ).toArray()
-    let nextDue: number | null = null
     for (const taskRow of taskRows) {
       let task: { hostId?: unknown; due?: unknown } | null = null
       try {
@@ -1127,14 +1161,13 @@ export class AccountHub extends DurableObject<Env> {
         continue
       }
       if (task.due > now) {
-        if (nextDue === null || task.due < nextDue) nextDue = task.due
+        // Not due yet: rearmAlarm() below re-arms the alarm for it.
         continue
       }
       const stillOffline = !this.findSocketsFor(task.hostId).some((s) => this.isAuthed(s))
       if (stillOffline) await this.dispatchHostOfflineAlert(task.hostId)
       sql.exec('DELETE FROM tasks WHERE k = ?1', taskRow.k)
     }
-    if (nextDue !== null) await this.armMinAlarm(nextDue)
-    else await this.ctx.storage.deleteAlarm()
+    await this.rearmAlarm()
   }
 }
