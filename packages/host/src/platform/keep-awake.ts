@@ -9,10 +9,10 @@ export * from './keep-awake-win32.ts'
 export * from './keep-awake-darwin.ts'
 export * from './keep-awake-linux.ts'
 
-export function createKeepAwakeDriver(platform: string = process.platform): KeepAwakeDriver {
+export function createKeepAwakeDriver(platform: string = process.platform, warn?: (message: string) => void): KeepAwakeDriver {
   switch (platform) {
     case 'win32':
-      return new Win32KeepAwakeDriver()
+      return new Win32KeepAwakeDriver(warn === undefined ? {} : { warn })
     case 'darwin':
       return new DarwinKeepAwakeDriver()
     case 'linux':
@@ -26,6 +26,7 @@ export interface KeepAwakeOptions {
   driver?: KeepAwakeDriver
   gracePeriodMs?: number
   enabled?: boolean
+  warn?: (message: string) => void
 }
 
 export class KeepAwakeManager {
@@ -34,15 +35,16 @@ export class KeepAwakeManager {
   private readonly enabled: boolean
   private readonly busyAgents = new Set<string>()
   private graceTimer: ReturnType<typeof setTimeout> | null = null
+  private disposed = false
 
   constructor(options: KeepAwakeOptions = {}) {
-    this.driver = options.driver ?? createKeepAwakeDriver()
+    this.driver = options.driver ?? createKeepAwakeDriver(process.platform, options.warn)
     this.gracePeriodMs = options.gracePeriodMs ?? 120_000
     this.enabled = options.enabled ?? true
   }
 
   handleAgentStatus(agentId: string, status: string): void {
-    if (!this.enabled) return
+    if (!this.enabled || this.disposed) return
 
     const isBusy = status === 'busy' || status === 'running'
     if (isBusy) {
@@ -53,8 +55,8 @@ export class KeepAwakeManager {
       }
       this.driver.acquire()
     } else {
-      this.busyAgents.delete(agentId)
-      if (this.busyAgents.size === 0 && this.driver.isAcquired) {
+      const wasBusy = this.busyAgents.delete(agentId)
+      if (wasBusy && this.busyAgents.size === 0) {
         if (this.graceTimer === null) {
           this.graceTimer = setTimeout(() => {
             this.graceTimer = null
@@ -68,6 +70,7 @@ export class KeepAwakeManager {
   }
 
   dispose(): void {
+    this.disposed = true
     if (this.graceTimer !== null) {
       clearTimeout(this.graceTimer)
       this.graceTimer = null

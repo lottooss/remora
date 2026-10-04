@@ -25,6 +25,7 @@ node scripts/fetch-upstream.mjs          # → .upstream/deepseek-harness at the
 - A profile lives at `$DSH_HOME/profiles/<name>` (`$DSH_HOME` defaults to `~/.dsh`). Its `package.json` field `dsh.profile.bundles` lists bundles; layers apply in order: bundles → profile `cordis.patch.yml` → `$DSH_HOME/cordis.patch.yml` → `--patch` overlays. Source: `apps/cli/reference/README.md` §Profiles, `docs/architecture.md` §Profiles and bundles.
 - `dsh --profile <new> --from-default-profile web` creates a custom profile from the shipped `web` template (custom profiles default to live patch reload).
 - `dsh plugin --profile <name> <pnpm args>` runs pnpm in the profile directory. Relative paths are anchored to the invoking directory (`add ./packages/host` installs a local checkout without build allowances). After every run, dependencies whose manifest declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }` join `dsh.profile.bundles`. Bundle membership changes need a restart; patch edits hot-reload in live profiles. Source: `apps/cli/reference/README.md` §Plugin management.
+- Native dependency installation (P7-H6): arguments such as `add <host.tgz> --allow-build koffi` pass through to pnpm unchanged (`apps/cli/src/plugin.ts:120–134`). pnpm 12's `--allow-build` authorizes the named dependency's install script in that profile. A built host tarball still needs this explicit allowance for its external `koffi` dependency; packing the host does not remove a dependency's script policy. No owner profile is modified by tests.
 - `--dump-config` prints the composed tree with the file that supplied each row.
 - The `desktop` profile is reserved for Electron; the CLI refuses plugin management for it.
 
@@ -244,3 +245,6 @@ commit `90a59c8`: 17 failed / 341 passed. See
 [P7-H10 handoff](../agent-handoffs/P7-H10.md) for post-fix command evidence and
 remaining contract-parity limits.
 
+### 9.3 P7-H6 native dependency installation
+
+On 2026-10-04, source `apps/cli/src/plugin.ts:120–134` for dsh 0.1.5-rc.3 and local `pnpm help add` for pnpm 12.6.0 confirmed `--allow-build koffi`. Installed-tarball `apply()` native acquisition/disposal was exercised by `pnpm -F @remora/host test -- pack` (6 tests passed locally). The owner approved the isolated-profile allowance and Windows workflow; hosted validation remains pending. See [P7-H6 handoff](../agent-handoffs/P7-H6.md) for evidence and CI links.

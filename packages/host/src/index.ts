@@ -408,6 +408,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const keepAwakeManager = new KeepAwakeManager({
     enabled: resolved.keepAwake === 'while-busy',
     gracePeriodMs: 120_000,
+    warn: (message) => ctx.logger.warn('%s', message),
   })
 
   // The dsh event wiring (P7-H5): the handlers are typed against the real dsh
