@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { describe, expect, it, beforeEach, afterEach } from 'vitest'
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 import {
   RCP_ERROR_CODES,
   type Workspace,
@@ -203,16 +203,18 @@ describe('P4-H1: Workspaces, directory browse, and remote session start', () => 
       const adapter = new WorkspaceAdapter({ gateway, policyGuard: guard })
 
       const sentItems: any[] = []
+      const streamAbort = new AbortController()
       const sink = {
-        signal: new AbortController().signal,
+        signal: streamAbort.signal,
         sendItem: async (item: any) => {
           sentItems.push(item)
           return true
         },
+        end: async () => { streamAbort.abort(); return true },
       }
 
       await adapter.follow(sink as any)
-      expect(sentItems.length).toBe(1)
+      await vi.waitFor(() => expect(sentItems.length).toBe(1))
       expect(sentItems[0].type).toBe('baseline')
 
       const wsList: Workspace[] = sentItems[0].workspaces

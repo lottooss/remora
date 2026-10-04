@@ -16,6 +16,7 @@ import { decodeBase64Url } from '@remora/crypto'
 import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
 import { RetryingGateway } from './adapter/gateway.ts'
+import { createSessionActivitySource } from './adapter/session-control.ts'
 import { loadPersistentDeviceRegistry, type DeviceRecord } from './devices/index.ts'
 import { loadOrCreateHostIdentity } from './identity/credentials.ts'
 import { PairingService } from './pairing/index.ts'
@@ -361,6 +362,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     gateway,
     policyGuard,
     workspaceAdapter,
+    activity: createSessionActivitySource(ctx),
   })
   registerSessionMethods(rcpServer, sessionAdapter, (sessionId, deviceId) => {
     notifier.recordSessionDevice(sessionId, deviceId)

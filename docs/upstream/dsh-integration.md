@@ -248,3 +248,29 @@ remaining contract-parity limits.
 ### 9.3 P7-H6 native dependency installation
 
 On 2026-10-04, source `apps/cli/src/plugin.ts:120–134` for dsh 0.1.5-rc.3 and local `pnpm help add` for pnpm 12.6.0 confirmed `--allow-build koffi`. Installed-tarball `apply()` native acquisition/disposal was exercised by `pnpm -F @remora/host test -- pack` (6 tests passed locally). The owner approved the isolated-profile allowance and Windows workflow; hosted validation remains pending. See [P7-H6 handoff](../agent-handoffs/P7-H6.md) for evidence and CI links.
+
+### 9.4 Foreground control stream source inspection (2026-10-05)
+
+Source read from the owner's existing pinned checkout at `a4c74a9`, matching
+`upstream.lock.json`; this entry records source inspection, not a runtime test.
+
+- `packages/api/workspace-controller/src/feed.ts:82` opens an async generator
+  that yields one baseline and then waits for increments until its AbortSignal
+  is cancelled. A Remora RCP handler must return after opening it; awaiting the
+  entire iterator prevents the `sid` response from ever reaching the phone.
+- `packages/api/session-controller/src/types.ts:551–570` defines baseline
+  `value.queues`, `value.jobs`, and `value.projections`, then `queue.items`,
+  `jobs.jobs`, or projection replacement frames. Queue/jobs changes replace only
+  the named component. Each RCP update carries the retained other component.
+- That control stream does not carry live running status. The pinned controller
+  `list.ts:summaryFor` reads `ctx.agents.get(session.id)?.status === 'running'`.
+  Remora uses the same lookup, seeded from `ctx.sessions.list()`, and typed
+  `agent/status` (`{ agent, status }`), `session/created`, and `session/disposed`
+  events. These are the underlying sources also forwarded by Session Controller
+  as `api-session/status`, `api-session/added`, and `api-session/removed`.
+- `src/adapter/session-control.ts` owns all new dsh shape knowledge. Its Cordis
+  listeners unsubscribe on RCP cancellation and stream termination. Pending
+  replacement states coalesce per session and are bounded before serialization.
+
+No upstream package, owner profile, wire schema, or conformance vector changed.
+Build, suite execution, and real-dsh verification are deferred by user request.

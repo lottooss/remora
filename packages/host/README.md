@@ -35,6 +35,20 @@ the scope of P7-T1.
 
 Approval keys from Android are P-256 SubjectPublicKeyInfo (SPKI) DER, and signatures are ECDSA DER. `devices.rotateApprovalKey` accepts SPKI and legacy uncompressed SEC1 points, validates the curve and point with Node crypto, and normalizes the pending/stored value to SPKI before PC confirmation. Existing registry entries are not silently migrated: an older raw SEC1 approval key can be replaced through another PC-confirmed rotation. Pending/duplicate/conflict responses and the required PC confirmation remain unchanged.
 
+### Foreground workspace and session control streams
+
+`workspaces.follow` returns its stream-open response after opening the dsh
+iterator, while a background consumer sends the baseline and later changes.
+Cancellation and channel disposal abort that iterator. Reconnect baselines
+replace the cached workspace set, including rows deleted while disconnected.
+
+`sessions.control` retains queue and job components independently when dsh sends
+replacement frames. Live running state comes from the actual Agent registry and
+typed `agent/status` events; session disposal removes its control row. Activity
+listeners belong to the plugin fiber and are removed when the stream ends.
+These repairs are implemented in the coding-first P7 completion branch; runtime
+and real-dsh verification remain deferred in the associated handoff.
+
 ## Try it in a throwaway dsh profile
 
 Never install into your everyday `web` profile. From the repository root:
