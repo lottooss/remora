@@ -32,6 +32,7 @@ import { printTerminalQr } from './web/index.ts'
 import { registerManagementRoutes } from './web/routes.ts'
 import { PendingRegistry, registerAnswerBridge, runAnswerBridgeSelfCheck } from './interaction/index.ts'
 import { registerInteractionMethods } from './rcp/methods/interaction.ts'
+import { ApprovalKeyRotationManager, registerDevicesMethods } from './rcp/methods/devices.ts'
 import { DefaultPolicyGuard } from './policy/index.ts'
 import { HostNotifier, PresenceTrackingSessionAdapter, registerDshEventBridge } from './notify/index.ts'
 import { registerNotifyMethods } from './rcp/methods/notify.ts'
@@ -64,6 +65,7 @@ export * from './rcp/methods/workspaces.ts'
 export * from './rcp/methods/fs.ts'
 export * from './rcp/methods/files.ts'
 export * from './rcp/methods/diffs.ts'
+export * from './rcp/methods/devices.ts'
 export * from './interaction/index.ts'
 export * from './rcp/methods/interaction.ts'
 export * from './policy/index.ts'
@@ -218,6 +220,39 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     await relay.link.request({ t: 'endpoint.revoke', id: deviceId })
   }
 
+  // Pending one-shot timers of self-unpair relay revokes, tracked so disposal
+  // never leaves one behind (AGENTS.md §7.3: every timer is an effect).
+  const pendingUnpairRevokeTimers = new Set<ReturnType<typeof setTimeout>>()
+
+  /**
+   * Schedules the relay-side endpoint revoke of a self-unpairing device
+   * (crypto-v1.md §10). The relay closes the device's sockets the moment
+   * `endpoint.revoke` lands, dropping anything not yet forwarded, so the
+   * revoke must be queued to the relay only AFTER the `{ ok: true }` reply of
+   * the unpair request has been encoded and handed to the relay link — the
+   * channel layer does exactly that right after the RCP handler returns. A
+   * 0 ms timer defers past that point; a failure is logged and never
+   * undoes the authoritative local revocation.
+   */
+  const scheduleUnpairRelayRevoke = (deviceId: string): void => {
+    const timer = setTimeout(() => {
+      pendingUnpairRevokeTimers.delete(timer)
+      void revokeEndpointOnRelay(deviceId).catch((error: unknown) => {
+        ctx.logger.warn(
+          'remora: relay revoke failed for %s: %s',
+          deviceId.slice(0, 6),
+          error instanceof Error ? error.message : 'unknown',
+        )
+      })
+    }, 0)
+    pendingUnpairRevokeTimers.add(timer)
+  }
+
+  // The pending approval-key rotations are shared state between the
+  // devices.rotateApprovalKey RCP handler and the management page's
+  // Confirm/Reject routes (crypto-v1.md §10), so it is created before both.
+  const approvalRotations = new ApprovalKeyRotationManager({ registry })
+
   const pairingService = new PairingService({
     identity,
     hostName,
@@ -244,6 +279,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     identity,
     hostName,
     revokeEndpointOnRelay,
+    rotations: approvalRotations,
   })
 
   const rcpServer = new RcpServer({
@@ -255,11 +291,27 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     },
   })
 
+  // Observation seam for the method-set parity test (P7-H7): the plugin
+  // exposes its RCP server under this service name so a test that mounts the
+  // real plugin through apply() can assert the registered method set equals
+  // RCP_METHODS (device-callable RCP/1 §4–§10, no host→device entries).
+  ctx.provide('remora-rcp-server', rcpServer)
+
   // The registry itself is the per-device notify-prefs store: the preferences
   // live in the same `remora/devices` record and share its serialized write
   // queue (P7-H4). InMemoryNotifyPrefsStore remains for tests only.
   const notifyPrefsStore = registry
   registerNotifyMethods(rcpServer, notifyPrefsStore)
+
+  // devices.self / devices.unpair / devices.rotateApprovalKey (RCP/1 §7):
+  // self-scoped device management. Unpair goes through the registry's
+  // revocation path above; its channel closure comes from the on-revoke hook
+  // wired to the channel manager below.
+  registerDevicesMethods(rcpServer, {
+    registry,
+    rotations: approvalRotations,
+    scheduleRelayRevoke: scheduleUnpairRelayRevoke,
+  })
 
   const pendingRegistry = new PendingRegistry()
   const disposeBridge = registerAnswerBridge(ctx, {
@@ -393,6 +445,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       detachNotifier()
       keepAwakeManager.dispose()
       disposeBridge()
+      for (const timer of pendingUnpairRevokeTimers) clearTimeout(timer)
+      pendingUnpairRevokeTimers.clear()
       channelManager.closeAll()
       await connecting
       await registry.flush()

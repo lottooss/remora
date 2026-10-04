@@ -277,6 +277,8 @@ describe('P2-H1: management page routes', () => {
     expect([...harness.routes.keys()].sort()).toEqual([
       '/api/remora',
       '/api/remora/devices/revoke',
+      '/api/remora/devices/rotation/confirm',
+      '/api/remora/devices/rotation/reject',
       '/api/remora/pair/confirm',
       '/api/remora/pair/reject',
       '/api/remora/pair/start',

@@ -22,7 +22,7 @@ import { FilesAdapter, MAX_FILE_READ_BYTES } from '../src/adapter/files.ts'
 import { registerFilesMethods } from '../src/rcp/methods/files.ts'
 import { registerDiffsMethods } from '../src/rcp/methods/diffs.ts'
 import { RcpServer } from '../src/rcp/index.ts'
-import type { SessionEvent } from '@remora/protocol'
+import { RCP_ERROR_CODES, type SessionEvent } from '@remora/protocol'
 
 describe('Hardened GitAdapter (P4-H2)', () => {
   let tempDir: string
@@ -490,7 +490,7 @@ describe('RCP Method Handlers (files.* and diffs.*) (P4-H2)', () => {
     expect(listRes.r.entries[0].name).toBe('demo.txt')
   })
 
-  it('handles diffs.status, diffs.get, diffs.file via RCP server dispatch', async () => {
+  it('handles diffs.status and diffs.file via RCP server dispatch; refuses the removed diffs.get', async () => {
     execFileSync('git', ['init'], { cwd: tempDir })
     execFileSync('git', ['config', 'user.name', 'TestUser'], { cwd: tempDir })
     execFileSync('git', ['config', 'user.email', 'test@example.com'], { cwd: tempDir })
@@ -520,7 +520,8 @@ describe('RCP Method Handlers (files.* and diffs.*) (P4-H2)', () => {
     expect(statusRes.r.files.length).toBe(1)
     expect(statusRes.r.files[0].status).toBe('M')
 
-    // diffs.get
+    // diffs.get was removed from the RCP/1 method set by P7-C1 and its host
+    // handler deleted by P7-H7: the server refuses it closed.
     const getRaw = await rcpServer.handleMessage(
       JSON.stringify({
         k: 'req',
@@ -531,11 +532,10 @@ describe('RCP Method Handlers (files.* and diffs.*) (P4-H2)', () => {
       ctx,
     )
     const getRes = JSON.parse(getRaw!)
-    expect(getRes.ok).toBe(true)
-    expect(getRes.r.binary).toBe(false)
-    expect(getRes.r.hunks.length).toBe(1)
+    expect(getRes.ok).toBe(false)
+    expect(getRes.e.code).toBe(RCP_ERROR_CODES.method_not_found)
 
-    // diffs.file (alias for diffs.get)
+    // diffs.file is the spec's name for the same operation (RCP/1 §9).
     const fileRaw = await rcpServer.handleMessage(
       JSON.stringify({
         k: 'req',
