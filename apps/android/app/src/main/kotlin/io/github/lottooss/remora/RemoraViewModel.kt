@@ -25,6 +25,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -219,6 +220,7 @@ class RemoraViewModel @Inject constructor(
     private fun action(runtime: HostRuntime, block: suspend (RcpClient) -> Unit) {
         viewModelScope.launch {
             try { block(selected(runtime)) }
+            catch (_: TimeoutCancellationException) { _notices.emit(R.string.operation_failed) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (error: AuthenticationException) {
                 if (error.reason == AuthenticationFailure.KEY_INVALIDATED) {
@@ -235,7 +237,8 @@ class RemoraViewModel @Inject constructor(
         val accepted = runtime.sessionsService.sendPrompt(selected(runtime), sessionId, text, delivery).getOrThrow()
         if (!accepted) _notices.emit(R.string.operation_failed)
         accepted
-    } catch (cancelled: CancellationException) { throw cancelled }
+    } catch (_: TimeoutCancellationException) { _notices.emit(R.string.operation_failed); false }
+    catch (cancelled: CancellationException) { throw cancelled }
     catch (_: Exception) { _notices.emit(R.string.operation_failed); false }
     fun cancel(runtime: HostRuntime, sessionId: String) = action(runtime) {
         runtime.sessionsService.cancelTurn(it, sessionId).getOrThrow()
