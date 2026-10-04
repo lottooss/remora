@@ -3,10 +3,11 @@ packages:
   - apps/relay
   - apps/cli
 
-# Install scripts allowed to run (pnpm blocks all others). Both are wrangler's
-# platform binaries: esbuild (bundler) and workerd (Workers runtime).
+# Install scripts allowed to run (pnpm blocks all others). esbuild and workerd
+# are wrangler's binaries; koffi loads the native Windows keep-awake API.
 allowBuilds:
   esbuild: true
+  koffi: true
   workerd: true
 
 # pnpm holds back very fresh releases; wrangler ships often and is pinned by the lockfile.
