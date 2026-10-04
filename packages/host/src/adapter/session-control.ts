@@ -77,7 +77,13 @@ export async function openSessionControl(
       } catch {
         await fail()
       }
-    })().finally(() => { drainTask = undefined })
+    })().finally(() => {
+      drainTask = undefined
+      // A listener can enqueue after the last iteration but before this finalizer.
+      if (pending.size > 0 && ready && !finished && !sink.signal.aborted) {
+        void flush().catch(() => { /* The channel may close during the next drain. */ })
+      }
+    })
     return drainTask
   }
   const schedule = (sessionId: string, removed = false): void => {

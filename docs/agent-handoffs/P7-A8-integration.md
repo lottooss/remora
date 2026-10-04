@@ -43,7 +43,10 @@ collected before that instruction and does not validate this combined branch.
 
 - Kotlin `:app:compileDebugKotlin`: passed on the first combined composition.
 - Host package build: passed after streaming and key-format fixes.
-- Final package-build outcomes are recorded below when available.
+- Android `:app:assembleDebug`: passed after transport key-lifetime, conversation
+  acknowledgment and final application wiring changes; 223 Gradle tasks, 1m14s.
+  Artifact: `apps/android/app/build/outputs/apk/debug/app-debug.apk` (81,739,758 bytes).
+  This is a debug package without owner Firebase configuration, not a signed release.
 - `git diff --check`: source whitespace inspection only, not behavioral evidence.
 
 ## Remaining release work
