@@ -3,18 +3,21 @@ package io.github.lottooss.remora.core.security
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import org.junit.runner.RunWith
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 
+@RunWith(AndroidJUnit4::class)
 class KeyStorageTest {
 
     @Test
     fun testSaveAndRetrieveHostKeys() = runBlocking {
-        val storage = SecureKeyStorage(
-            masterSecretKey = ByteArray(32) { (it + 1).toByte() },
-        )
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val storage = SecureKeyStorage(context)
 
         val keys = HostKeyMaterial(
-            hostId = "h_test1234567890123456789012",
-            deviceId = "d_pixel123456789012345678901",
+            hostId = "h_aaaaaaaaaaaaaaaaaaaaaaaaaa",
+            deviceId = "d_bbbbbbbbbbbbbbbbbbbbbbbbbb",
             relayPrivKey = ByteArray(32) { 0x11 },
             relayPubKey = ByteArray(32) { 0x22 },
             noisePrivKey = ByteArray(32) { 0x33 },
@@ -26,7 +29,8 @@ class KeyStorageTest {
 
         storage.saveHostKeys(keys.hostId, keys)
 
-        val retrieved = storage.getHostKeys(keys.hostId)
+        // A new instance must open the persisted, Keystore-wrapped Tink keyset.
+        val retrieved = SecureKeyStorage(context).getHostKeys(keys.hostId)
         assertThat(retrieved).isNotNull()
         assertThat(retrieved!!.hostId).isEqualTo(keys.hostId)
         assertThat(retrieved.deviceId).isEqualTo(keys.deviceId)
@@ -38,8 +42,8 @@ class KeyStorageTest {
         assertThat(retrieved.pushKey).isEqualTo(keys.pushKey)
         assertThat(retrieved.approvalPubSpki).isEqualTo(keys.approvalPubSpki)
 
-        storage.deleteHostKeys(keys.hostId)
-        val afterDelete = storage.getHostKeys(keys.hostId)
+        storage.wipeHost(keys.hostId)
+        val afterDelete = SecureKeyStorage(context).getHostKeys(keys.hostId)
         assertThat(afterDelete).isNull()
     }
 }

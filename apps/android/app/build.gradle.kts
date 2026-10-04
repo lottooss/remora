@@ -64,6 +64,7 @@ dependencies {
     implementation(project(":core:crypto"))
     implementation(project(":core:data"))
     implementation(project(":core:security"))
+    implementation(project(":core:transport"))
     implementation(project(":core:ui"))
     implementation(project(":feature:pairing"))
     implementation(project(":feature:sessions"))
@@ -74,6 +75,8 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.activity.ktx)
+    implementation(libs.androidx.fragment.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)

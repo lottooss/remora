@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -29,16 +30,16 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 
 private data class TopLevelDestination(
     val route: String,
-    val label: String,
+    val label: Int,
     val icon: ImageVector,
 )
 
 private val topLevelDestinations = listOf(
-    TopLevelDestination(Routes.PAIR, "Pair", Icons.Filled.AddCircle),
-    TopLevelDestination(Routes.HOSTS, "Hosts", Icons.Filled.Home),
-    TopLevelDestination(Routes.SESSIONS, "Sessions", Icons.AutoMirrored.Filled.List),
-    TopLevelDestination(Routes.APPROVALS, "Approvals", Icons.Filled.CheckCircle),
-    TopLevelDestination(Routes.SETTINGS, "Settings", Icons.Filled.Settings),
+    TopLevelDestination(Routes.PAIR, R.string.nav_pair, Icons.Filled.AddCircle),
+    TopLevelDestination(Routes.HOSTS, R.string.nav_hosts, Icons.Filled.Home),
+    TopLevelDestination(Routes.SESSIONS, R.string.nav_sessions, Icons.AutoMirrored.Filled.List),
+    TopLevelDestination(Routes.APPROVALS, R.string.nav_approvals, Icons.Filled.CheckCircle),
+    TopLevelDestination(Routes.SETTINGS, R.string.nav_settings, Icons.Filled.Settings),
 )
 
 /**
@@ -47,7 +48,12 @@ private val topLevelDestinations = listOf(
  * pushed destinations such as Conversation, Files and Diagnostics.
  */
 @Composable
-fun RemoraRoot(navController: NavHostController, modifier: Modifier = Modifier) {
+fun RemoraRoot(
+    navController: NavHostController,
+    model: RemoraViewModel,
+    approvalSigner: suspend (String, ByteArray) -> ByteArray,
+    modifier: Modifier = Modifier,
+) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val onTopLevel = currentRoute != null && currentRoute in Routes.TOP_LEVEL
@@ -55,6 +61,8 @@ fun RemoraRoot(navController: NavHostController, modifier: Modifier = Modifier) 
     Column(modifier.fillMaxSize()) {
         RemoraNavHost(
             navController = navController,
+            model = model,
+            approvalSigner = approvalSigner,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxSize(),
@@ -74,7 +82,7 @@ fun RemoraRoot(navController: NavHostController, modifier: Modifier = Modifier) 
                             }
                         },
                         icon = { Icon(destination.icon, contentDescription = null) },
-                        label = { Text(destination.label) },
+                        label = { Text(stringResource(destination.label)) },
                     )
                 }
             }
@@ -82,12 +90,14 @@ fun RemoraRoot(navController: NavHostController, modifier: Modifier = Modifier) 
     }
 }
 
-/**
- * Placeholder lock screen shown while the AppLockGate is LOCKED. The real
- * BiometricPrompt / device-credential prompt lands with task P3-K1.
- */
+/** The only action launches system authentication; this screen cannot unlock the gate. */
 @Composable
-fun AppLockScreen(onUnlock: () -> Unit, modifier: Modifier = Modifier) {
+fun AppLockScreen(
+    onAuthenticate: () -> Unit,
+    authenticating: Boolean,
+    authenticationFailed: Boolean,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier
             .fillMaxSize()
@@ -95,13 +105,16 @@ fun AppLockScreen(onUnlock: () -> Unit, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text("Remora locked", style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.lock_title), style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Biometric / PIN unlock (placeholder gate from core:security).",
+            stringResource(R.string.lock_description),
             style = MaterialTheme.typography.bodyMedium,
         )
-        Button(onClick = onUnlock, modifier = Modifier.fillMaxWidth()) {
-            Text("Unlock (placeholder)")
+        if (authenticationFailed) {
+            Text(stringResource(R.string.lock_failed), color = MaterialTheme.colorScheme.error)
+        }
+        Button(onClick = onAuthenticate, enabled = !authenticating, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(if (authenticating) R.string.lock_waiting else R.string.lock_unlock))
         }
     }
 }

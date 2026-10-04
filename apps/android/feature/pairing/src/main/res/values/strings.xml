@@ -1,0 +1,32 @@
+<resources>
+    <string name="pair_title">Pair with PC</string>
+    <string name="pair_scan_description">Open Remora on your PC and scan its pairing QR code. Keep both screens visible to compare the confirmation code.</string>
+    <string name="pair_camera_description">Pairing QR camera preview</string>
+    <string name="pair_camera_permission">Allow camera access to scan the QR code.</string>
+    <string name="pair_allow_camera">Allow camera</string>
+    <string name="pair_open_settings">Open app settings</string>
+    <string name="pair_camera_failed">The camera could not start. Check camera access and try again.</string>
+    <string name="pair_manual_label">Pairing link (debug)</string>
+    <string name="pair_manual_submit">Use pairing link</string>
+    <string name="pair_connecting">Connecting to %1$s…</string>
+    <string name="pair_confirm_title">Confirm on PC</string>
+    <string name="pair_confirm_description">Check that this code matches the code on %1$s. Confirm only if both codes match.</string>
+    <string name="pair_waiting">Waiting for confirmation on PC…</string>
+    <string name="pair_success_title">Paired</string>
+    <string name="pair_success_description">Pairing keys for %1$s have been saved.</string>
+    <string name="pair_done">Done</string>
+    <string name="pair_cancel">Cancel pairing</string>
+    <string name="pair_back">Back</string>
+    <string name="pair_failed">Pairing failed</string>
+    <string name="pair_retry">Try again</string>
+    <string name="pair_error_invalid">This is not a valid Remora pairing QR code.</string>
+    <string name="pair_error_expired">The QR code has expired. Generate a new one on the PC.</string>
+    <string name="pair_error_insecure">The relay must use HTTPS.</string>
+    <string name="pair_error_already_paired">This PC is already paired. Remove the existing pairing before replacing it.</string>
+    <string name="pair_error_keys">A biometric approval key could not be created. Enroll a strong biometric in device settings and try again.</string>
+    <string name="pair_error_connection">The secure connection failed. Keep the PC online and generate a new pairing code.</string>
+    <string name="pair_error_rejected">Pairing was rejected on the PC.</string>
+    <string name="pair_error_response">The PC returned an invalid pairing response. Generate a new pairing code.</string>
+    <string name="pair_error_storage">Pairing keys could not be saved securely. Generate a new pairing code and try again.</string>
+    <string name="pair_error_timeout">Pairing timed out. Generate a new pairing code on the PC.</string>
+</resources>
