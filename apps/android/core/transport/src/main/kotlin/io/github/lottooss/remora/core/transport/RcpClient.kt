@@ -1,160 +1,146 @@
 package io.github.lottooss.remora.core.transport
 
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-import kotlinx.serialization.json.put
+import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.*
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
-class RcpClientException(
-    val code: String,
-    message: String,
-    val details: JsonElement? = null,
-) : RuntimeException("RCP Error [$code]: $message")
+class RcpClientException(val code: String, message: String, val details: JsonElement? = null) :
+    RuntimeException("RCP error [$code]: $message")
 
-/**
- * RCP/1 client (docs/specs/rcp-v1.md §2–§4) implementing unary calls,
- * stream multiplexing, timeouts, and cancellation over a SecureChannel.
- */
+/** RCP requests and lossless bounded streams. A collector owns and cancels its remote stream. */
 class RcpClient(
     private val channel: SecureChannel,
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + Job()),
+    scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 ) {
-
-    private val json = Json { ignoreUnknownKeys = true }
-    private val nextRequestId = AtomicLong(1L)
-    private val pendingCalls = ConcurrentHashMap<Long, CompletableDeferred<JsonElement>>()
-
-    private val activeStreams = ConcurrentHashMap<Long, MutableSharedFlow<JsonElement>>()
-    private var listenerJob: Job? = null
+    private data class Stream(val items: Channel<JsonElement>, var sequence: Long = 0)
+    private data class Pending(val result: CompletableDeferred<JsonElement>, val stream: Stream? = null)
+    private val job = SupervisorJob(scope.coroutineContext[Job])
+    private val clientScope = CoroutineScope(scope.coroutineContext + job)
+    private val nextId = AtomicLong(1)
+    private val pending = ConcurrentHashMap<Long, Pending>()
+    private val streams = ConcurrentHashMap<Long, Stream>()
+    private val earlyFrames = ConcurrentHashMap<Long, MutableList<JsonObject>>()
+    private val closed = AtomicBoolean(false)
 
     init {
-        listenerJob = scope.launch {
-            channel.incomingMessages.collect { messageJson ->
-                handleIncomingMessage(messageJson)
-            }
+        clientScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            channel.incomingMessages.collect { handle(it) }
         }
+        clientScope.launch { channel.closed.await(); close() }
     }
 
-    suspend fun call(
-        method: String,
-        params: JsonElement? = null,
-        timeoutMs: Long = 10_000,
-    ): JsonElement {
-        val id = nextRequestId.getAndIncrement()
-        val deferred = CompletableDeferred<JsonElement>()
-        pendingCalls[id] = deferred
+    suspend fun call(method: String, params: JsonElement? = null, timeoutMs: Long = 30_000): JsonElement =
+        request(method, params, timeoutMs)
 
-        val requestObj = buildJsonObject {
-            put("k", "req")
-            put("id", id)
-            put("m", method)
-            if (params != null) {
-                put("p", params)
-            } else {
-                put("p", buildJsonObject {})
-            }
-        }
+    private suspend fun request(method: String, params: JsonElement?, timeoutMs: Long, stream: Stream? = null): JsonElement {
+        check(!closed.get()) { "RCP channel closed" }
+        check(pending.size < 64) { "Too many pending requests" }
+        val id = nextId.getAndUpdate { if (it >= 0xffffffffL) 1 else it + 1 }
+        val item = Pending(CompletableDeferred(), stream)
+        check(pending.putIfAbsent(id, item) == null) { "Request id collision" }
+        try {
+            channel.sendTransport(buildJsonObject {
+                put("k", "req"); put("id", id); put("m", method)
+                put("p", params ?: buildJsonObject {})
+            }.toString())
+            return withTimeout(timeoutMs) { item.result.await() }
+        } finally { pending.remove(id) }
+    }
 
-        channel.sendTransport(requestObj.toString())
-
-        return try {
-            withTimeout(timeoutMs) {
-                deferred.await()
-            }
+    fun openStream(method: String, params: JsonElement? = null): Flow<JsonElement> = flow {
+        check(streams.size < 10) { "Too many open streams" }
+        val stream = Stream(Channel(128))
+        var sid: Long? = null
+        try {
+            sid = request(method, params, 30_000, stream).jsonObject["sid"]?.jsonPrimitive?.longOrNull
+                ?: throw RcpClientException("bad_response", "Missing stream id")
+            for (item in stream.items) emit(item)
         } finally {
-            pendingCalls.remove(id)
-        }
-    }
-
-    fun openStream(method: String, params: JsonElement? = null): Flow<JsonElement> {
-        val flow = MutableSharedFlow<JsonElement>(
-            extraBufferCapacity = 128,
-            onBufferOverflow = BufferOverflow.DROP_OLDEST,
-        )
-
-        scope.launch {
-            try {
-                val res = call(method, params)
-                val sid = res.jsonObject["sid"]?.jsonPrimitive?.longOrNull
-                    ?: throw RcpClientException("invalid_response", "Stream open did not return sid")
-
-                activeStreams[sid] = flow
-            } catch (e: Exception) {
-                // If stream open failed, we can complete or throw in caller
+            // A response may have registered the stream just before this collector was cancelled.
+            val registered = sid ?: streams.entries.firstOrNull { it.value === stream }?.key
+            if (registered != null) withContext(NonCancellable) {
+                withTimeoutOrNull(1_000) { runCatching { cancelStream(registered) } }
             }
+            if (registered == null) channel.close()
+            stream.items.cancel()
         }
-
-        return flow.asSharedFlow()
     }
 
     suspend fun cancelStream(sid: Long) {
-        activeStreams.remove(sid)
-        val cancelObj = buildJsonObject {
-            put("k", "cancel")
-            put("sid", sid)
-        }
-        channel.sendTransport(cancelObj.toString())
+        streams.remove(sid)?.items?.close()
+        if (!closed.get()) channel.sendTransport(buildJsonObject { put("k", "cancel"); put("sid", sid) }.toString())
     }
 
     fun close() {
-        listenerJob?.cancel()
-        val ex = RcpClientException("channel_closed", "RCP Client closed")
-        pendingCalls.values.forEach { it.completeExceptionally(ex) }
-        pendingCalls.clear()
-        activeStreams.clear()
+        if (!closed.compareAndSet(false, true)) return
+        val error = RcpClientException("channel_closed", "Connection closed")
+        pending.values.forEach { it.result.completeExceptionally(error); it.stream?.items?.close(error) }
+        pending.clear()
+        streams.values.forEach { it.items.close(error) }
+        streams.clear(); earlyFrames.clear()
+        job.cancel()
     }
 
-    private fun handleIncomingMessage(text: String) {
+    private fun handle(text: String) {
         try {
-            val root = json.parseToJsonElement(text).jsonObject
-            val kind = root["k"]?.jsonPrimitive?.content
-
-            when (kind) {
+            val root = Json.parseToJsonElement(text).jsonObject
+            when (root["k"]?.jsonPrimitive?.content) {
                 "res" -> {
-                    val id = root["id"]?.jsonPrimitive?.longOrNull ?: return
-                    val deferred = pendingCalls[id] ?: return
-                    val ok = root["ok"]?.jsonPrimitive?.booleanOrNull ?: false
-                    if (ok) {
+                    val id = root["id"]?.jsonPrimitive?.longOrNull ?: error("Missing request id")
+                    val p = pending[id] ?: return
+                    if (root["ok"]?.jsonPrimitive?.booleanOrNull == true) {
                         val result = root["r"] ?: buildJsonObject {}
-                        deferred.complete(result)
+                        if (p.stream != null) {
+                            val sid = result.jsonObject["sid"]?.jsonPrimitive?.longOrNull ?: error("Missing stream id")
+                            require(sid in 0..0xffffffffL && streams.putIfAbsent(sid, p.stream) == null)
+                            earlyFrames.remove(sid)?.forEach { handle(it.toString()) }
+                        }
+                        // Register before waking the caller: the next frame can already be a baseline.
+                        p.result.complete(result)
                     } else {
-                        val errObj = root["e"]?.jsonObject
-                        val code = errObj?.get("code")?.jsonPrimitive?.content ?: "internal_error"
-                        val msg = errObj?.get("message")?.jsonPrimitive?.content ?: "RCP call failed"
-                        val details = errObj?.get("details")
-                        deferred.completeExceptionally(RcpClientException(code, msg, details))
+                        p.result.completeExceptionally(wireError(root["e"]))
                     }
                 }
-
                 "item" -> {
-                    val sid = root["sid"]?.jsonPrimitive?.longOrNull ?: return
-                    val data = root["d"] ?: return
-                    activeStreams[sid]?.tryEmit(data)
+                    val sid = root["sid"]?.jsonPrimitive?.longOrNull ?: error("Missing stream id")
+                    val stream = streams[sid] ?: run { bufferEarly(sid, root); return }
+                    val sequence = root["n"]?.jsonPrimitive?.longOrNull ?: error("Missing stream sequence")
+                    require(sequence == stream.sequence++)
+                    if (!stream.items.trySend(root["d"] ?: error("Missing stream data")).isSuccess) {
+                        // Losing a durable event is unsafe; reconnect and resume from the durable cursor.
+                        channel.close()
+                    }
                 }
-
                 "end" -> {
-                    val sid = root["sid"]?.jsonPrimitive?.longOrNull ?: return
-                    activeStreams.remove(sid)
+                    val sid = root["sid"]?.jsonPrimitive?.longOrNull ?: error("Missing stream id")
+                    val stream = streams.remove(sid) ?: run { bufferEarly(sid, root); return }
+                    stream.items.close(
+                        if (root["ok"]?.jsonPrimitive?.booleanOrNull == true) null else wireError(root["e"]),
+                    )
                 }
+                "evt" -> if (root["e"]?.jsonPrimitive?.content == "host.shutdown") channel.close()
             }
-        } catch (_: Exception) {}
+        } catch (_: Exception) { channel.close() }
+    }
+
+    private fun bufferEarly(sid: Long, frame: JsonObject) {
+        // Current hosts may send their baseline while the stream-open handler is still returning.
+        if (pending.values.none { it.stream != null }) return
+        require(earlyFrames.size < 10 || earlyFrames.containsKey(sid))
+        require(earlyFrames.values.sumOf { it.size } < 128)
+        earlyFrames.computeIfAbsent(sid) { mutableListOf() }.add(frame)
+    }
+
+    private fun wireError(element: JsonElement?): RcpClientException {
+        val obj = element as? JsonObject
+        val code = obj?.get("code")?.jsonPrimitive?.content?.takeIf { it.matches(Regex("[a-z_]{1,40}")) } ?: "internal"
+        // Remote message/details are not displayed or recorded; they can contain untrusted content.
+        return RcpClientException(code, "Request failed")
     }
 }

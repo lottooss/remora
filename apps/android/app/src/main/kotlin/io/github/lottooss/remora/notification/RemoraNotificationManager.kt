@@ -9,6 +9,10 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import io.github.lottooss.remora.MainActivity
+import io.github.lottooss.remora.R
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 
 class RemoraNotificationManager(private val context: Context) {
 
@@ -20,11 +24,11 @@ class RemoraNotificationManager(private val context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val manager = context.getSystemService(NotificationManager::class.java)
             listOf(
-                ChannelSpec(CHANNEL_APPROVALS, "Approvals", NotificationManager.IMPORTANCE_HIGH, "High-priority approvals"),
-                ChannelSpec(CHANNEL_QUESTIONS, "Questions", NotificationManager.IMPORTANCE_HIGH, "High-priority questions"),
-                ChannelSpec(CHANNEL_TURNS, "Turn Events", NotificationManager.IMPORTANCE_DEFAULT, "Turn completion events"),
-                ChannelSpec(CHANNEL_ERRORS, "Errors", NotificationManager.IMPORTANCE_HIGH, "High-priority errors"),
-                ChannelSpec(CHANNEL_HOST_OFFLINE, "Host Offline", NotificationManager.IMPORTANCE_HIGH, "High-priority host offline alerts"),
+                ChannelSpec(CHANNEL_APPROVALS, context.getString(R.string.notification_approvals), NotificationManager.IMPORTANCE_HIGH),
+                ChannelSpec(CHANNEL_QUESTIONS, context.getString(R.string.notification_questions), NotificationManager.IMPORTANCE_HIGH),
+                ChannelSpec(CHANNEL_TURNS, context.getString(R.string.notification_turns), NotificationManager.IMPORTANCE_DEFAULT),
+                ChannelSpec(CHANNEL_ERRORS, context.getString(R.string.notification_errors), NotificationManager.IMPORTANCE_DEFAULT),
+                ChannelSpec(CHANNEL_HOST_OFFLINE, context.getString(R.string.notification_host_offline), NotificationManager.IMPORTANCE_LOW),
             ).forEach { spec ->
                 manager.createNotificationChannel(
                     NotificationChannel(spec.id, spec.name, spec.importance).apply {
@@ -42,8 +46,10 @@ class RemoraNotificationManager(private val context: Context) {
         deepLink: String,
         notificationId: Int,
     ) {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(deepLink)).apply {
-            setPackage(context.packageName)
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            data = Uri.parse(deepLink)
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pendingIntent = PendingIntent.getActivity(
@@ -57,6 +63,7 @@ class RemoraNotificationManager(private val context: Context) {
             .setContentTitle(title)
             .setContentText(body)
             .setContentIntent(pendingIntent)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
             .setAutoCancel(true)
             .build()
         val manager = context.getSystemService(NotificationManager::class.java)

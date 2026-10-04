@@ -1,0 +1,8 @@
+<resources>
+    <string name="notification_approvals">Approvals</string>
+    <string name="notification_questions">Questions</string>
+    <string name="notification_turns">Completed turns</string>
+    <string name="notification_errors">Turn errors</string>
+    <string name="notification_host_offline">PC offline</string>
+    <string name="notification_host_offline_body">%1$s is offline</string>
+</resources>

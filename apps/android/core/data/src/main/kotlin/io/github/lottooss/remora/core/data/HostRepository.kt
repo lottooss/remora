@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.serialization.json.*
 
 interface HostRepository {
     val hosts: StateFlow<List<Host>>
@@ -48,7 +49,7 @@ class DefaultHostRepository(
         inMemoryHosts[host.id.value] = host
         saveHosts()
         if (_activeHost.value == null) {
-            _activeHost.value = host
+            setActiveHost(host.id)
         }
     }
 
@@ -67,7 +68,7 @@ class DefaultHostRepository(
         keyStorage?.wipeHost(hostId.value)
         saveHosts()
         if (_activeHost.value?.id == hostId) {
-            _activeHost.value = inMemoryHosts.values.firstOrNull()
+            setActiveHost(inMemoryHosts.values.firstOrNull()?.id)
         }
     }
 
@@ -77,6 +78,7 @@ class DefaultHostRepository(
         } else {
             _activeHost.value = inMemoryHosts[hostId.value]
         }
+        prefs?.edit()?.putString("active_host", _activeHost.value?.id?.value)?.apply()
     }
 
     private fun loadHosts() {
@@ -85,7 +87,7 @@ class DefaultHostRepository(
             val list = deserializeHosts(serialized)
             list.forEach { inMemoryHosts[it.id.value] = it }
             _hosts.value = inMemoryHosts.values.toList()
-            _activeHost.value = list.firstOrNull()
+            _activeHost.value = list.firstOrNull { it.id.value == prefs?.getString("active_host", null) } ?: list.firstOrNull()
         } else {
             _hosts.value = inMemoryHosts.values.toList()
         }
@@ -97,14 +99,26 @@ class DefaultHostRepository(
         prefs?.edit()?.putString(KEY_HOSTS_LIST, serializeHosts(currentList))?.apply()
     }
 
-    private fun serializeHosts(hosts: List<Host>): String {
-        return hosts.joinToString("\n---\n") { h ->
-            "${h.id.value}\n${h.name}\n${h.relayOrigin}\n${encodeBase64Url(h.hostNoisePub)}\n${h.isOnline}\n${h.lastSeenAt}"
+    private fun serializeHosts(hosts: List<Host>): String = JsonArray(hosts.map { h ->
+        buildJsonObject {
+            put("id", h.id.value); put("name", h.name); put("relayOrigin", h.relayOrigin)
+            put("noisePub", encodeBase64Url(h.hostNoisePub)); put("lastSeenAt", h.lastSeenAt)
         }
-    }
+    }).toString()
 
     private fun deserializeHosts(raw: String): List<Host> {
-        if (raw.isBlank()) return emptyList()
+        if (raw.isBlank() || raw.length > 131_072) return emptyList()
+        if (raw.startsWith("[")) return try {
+            Json.parseToJsonElement(raw).jsonArray.take(32).map { value ->
+                val obj = value.jsonObject
+                val publicKey = decodeBase64Url(obj.getValue("noisePub").jsonPrimitive.content)
+                require(publicKey.size == 32)
+                Host(HostId(obj.getValue("id").jsonPrimitive.content), obj.getValue("name").jsonPrimitive.content,
+                    obj.getValue("relayOrigin").jsonPrimitive.content, publicKey,
+                    isOnline = false, lastSeenAt = obj["lastSeenAt"]?.jsonPrimitive?.longOrNull ?: 0)
+            }
+        } catch (_: Exception) { emptyList() }
+        // Upgrade the original on-disk format on the next write.
         val entries = raw.split("\n---\n")
         return entries.mapNotNull { entry ->
             try {
@@ -115,7 +129,7 @@ class DefaultHostRepository(
                     name = lines[1],
                     relayOrigin = lines[2],
                     hostNoisePub = decodeBase64Url(lines[3]),
-                    isOnline = lines[4].toBoolean(),
+                    isOnline = false,
                     lastSeenAt = lines[5].toLong(),
                 )
             } catch (_: Exception) {

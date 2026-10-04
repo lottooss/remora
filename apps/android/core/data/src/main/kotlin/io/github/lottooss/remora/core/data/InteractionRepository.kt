@@ -15,13 +15,9 @@ import kotlinx.coroutines.flow.map
 class InteractionRepository {
 
     private val _interactions = MutableStateFlow<Map<String, PendingInteraction>>(emptyMap())
-    val pendingInteractions: StateFlow<List<PendingInteraction>> =
-        MutableStateFlow<List<PendingInteraction>>(emptyList()).also { stateFlow ->
-            // Update backing list whenever map updates
-        }
-
     private val _interactionsList = MutableStateFlow<List<PendingInteraction>>(emptyList())
     val allPending: StateFlow<List<PendingInteraction>> = _interactionsList.asStateFlow()
+    val pendingInteractions: StateFlow<List<PendingInteraction>> = allPending
 
     private val _resolvedEvents = MutableSharedFlow<ResolvedNotice>(replay = 1, extraBufferCapacity = 64)
     val resolvedEvents: SharedFlow<ResolvedNotice> = _resolvedEvents.asSharedFlow()
@@ -32,12 +28,14 @@ class InteractionRepository {
         }
     }
 
+    @Synchronized
     fun setPending(items: List<PendingInteraction>) {
         val map = items.associateBy { it.id }
         _interactions.value = map
         _interactionsList.value = items
     }
 
+    @Synchronized
     fun addOrUpdate(item: PendingInteraction) {
         val current = _interactions.value.toMutableMap()
         current[item.id] = item
@@ -45,6 +43,7 @@ class InteractionRepository {
         _interactionsList.value = current.values.toList()
     }
 
+    @Synchronized
     fun resolve(id: String, by: String) {
         val current = _interactions.value.toMutableMap()
         if (current.remove(id) != null) {
@@ -54,6 +53,7 @@ class InteractionRepository {
         }
     }
 
+    @Synchronized
     fun clear() {
         _interactions.value = emptyMap()
         _interactionsList.value = emptyList()

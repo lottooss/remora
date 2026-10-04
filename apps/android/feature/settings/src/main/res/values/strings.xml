@@ -1,0 +1,32 @@
+<resources>
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_security">Security and privacy</string>
+    <string name="settings_screenshots">Block screenshots and recent-task previews</string>
+    <string name="settings_app_lock">Lock the app when inactive</string>
+    <string name="settings_enforced">These protections are enforced by this app.</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_approval">Approvals</string>
+    <string name="settings_question">Questions</string>
+    <string name="settings_turn_done">Completed turns</string>
+    <string name="settings_turn_error">Turn errors</string>
+    <string name="settings_offline_alert">PC offline alerts</string>
+    <string name="settings_push_unavailable">Push notifications are unavailable in this build.</string>
+    <string name="settings_disconnected">Connect to a paired PC to change its settings.</string>
+    <string name="settings_failed">The operation could not finish. Reconnect and try again.</string>
+    <string name="settings_device">This phone</string>
+    <string name="settings_device_id">Device %1$s</string>
+    <string name="settings_paired_at">Paired %1$s</string>
+    <string name="settings_hardware_verified">Hardware backing confirmed by the PC</string>
+    <string name="settings_hardware_unknown">Hardware backing not confirmed by the PC</string>
+    <string name="settings_rotate">Replace approval key</string>
+    <string name="settings_rotation_pending">Confirm the key change on the PC, then activate it on this phone.</string>
+    <string name="settings_unpair">Unpair this phone</string>
+    <string name="settings_unpair_confirm">Revoke this phone on the PC and remove its local keys?</string>
+    <string name="settings_cancel">Cancel</string>
+    <string name="settings_diagnostics">Diagnostics</string>
+    <string name="diagnostics_copy">Copy report</string>
+    <string name="diagnostics_privacy">Connection events and versions only. Session content, paths, tokens, and keys are excluded.</string>
+    <string name="settings_activate_pending_key">I confirmed on the PC</string>
+    <string name="settings_pending_fingerprint">New key fingerprint: %1$s</string>
+</resources>

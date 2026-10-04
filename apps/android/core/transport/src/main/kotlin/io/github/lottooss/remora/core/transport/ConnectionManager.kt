@@ -7,7 +7,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
+import kotlinx.serialization.json.*
 
 data class HostConnectionInfo(
     val hostId: String,
@@ -43,103 +45,122 @@ data class HostConnectionInfo(
     }
 
     override fun toString(): String {
-        return "HostConnectionInfo(hostId=$hostId, deviceId=$deviceId, relayOrigin=$relayOrigin, [REDACTED])"
+        return "HostConnectionInfo(hostId=${hostId.take(6)}, deviceId=${deviceId.take(6)}, [REDACTED])"
     }
 }
 
-/**
- * Manages foreground host connection, secure channel establishment, and RCP client lifecycle.
- */
+/** Owns one foreground host connection and disposes each previous channel before reconnecting. */
 class ConnectionManager(
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + Job()),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    private val appVersion: String = "1.0.0",
 ) {
-
-    private val _connectionState = MutableStateFlow(ConnectionState.Idle)
-    val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
-
-    private val _activeHostId = MutableStateFlow<String?>(null)
-    val activeHostId: StateFlow<String?> = _activeHostId.asStateFlow()
-
-    private val _rcpClient = MutableStateFlow<RcpClient?>(null)
-    val rcpClient: StateFlow<RcpClient?> = _rcpClient.asStateFlow()
-
-    private var currentRelayClient: RelayClient? = null
-    private var currentSecureChannel: SecureChannel? = null
+    private val state = MutableStateFlow(ConnectionState.Idle)
+    val connectionState: StateFlow<ConnectionState> = state.asStateFlow()
+    private val host = MutableStateFlow<String?>(null)
+    val activeHostId: StateFlow<String?> = host.asStateFlow()
+    private val client = MutableStateFlow<RcpClient?>(null)
+    val rcpClient: StateFlow<RcpClient?> = client.asStateFlow()
+    private val relay = MutableStateFlow<RelayClient?>(null)
+    val relayClient: StateFlow<RelayClient?> = relay.asStateFlow()
+    private val greeting = MutableStateFlow<JsonObject?>(null)
+    val hello: StateFlow<JsonObject?> = greeting.asStateFlow()
+    private val peers = MutableSharedFlow<RelayPeer>(extraBufferCapacity = 32)
+    val presence: SharedFlow<RelayPeer> = peers.asSharedFlow()
     private var connectionJob: Job? = null
+    private var secureChannel: SecureChannel? = null
+    private var currentRcp: RcpClient? = null
+    @Volatile private var generation = 0L
 
     fun connect(info: HostConnectionInfo) {
         disconnect()
-        _activeHostId.value = info.hostId
-        _connectionState.value = ConnectionState.Connecting
-
-        connectionJob = scope.launch {
+        val currentGeneration = ++generation
+        // The caller may wipe its storage result immediately after connect returns.
+        val owned = info.copy(
+            hostNoisePub = info.hostNoisePub.copyOf(), relayPrivateKey = info.relayPrivateKey.copyOf(),
+            noiseKeypair = Keypair(info.noiseKeypair.secretKey.copyOf(), info.noiseKeypair.publicKey.copyOf()),
+            devicePsk = info.devicePsk.copyOf(),
+        )
+        host.value = owned.hostId
+        state.value = ConnectionState.Connecting
+        connectionJob = scope.launch(Dispatchers.IO) {
+            var ownedRelay: RelayClient? = null
             try {
-                val relayClient = RelayClient(
-                    relayOrigin = info.relayOrigin,
-                    deviceId = info.deviceId,
-                    relayPrivateKey = info.relayPrivateKey,
-                )
-                currentRelayClient = relayClient
-
-                // Observe relay state
-                launch {
-                    relayClient.connectionState.collect { rlyState ->
-                        if (rlyState == ConnectionState.Ready && _connectionState.value != ConnectionState.Ready) {
-                            _connectionState.value = ConnectionState.Handshaking
-                            openSecureChannel(info, relayClient)
-                        } else if (rlyState == ConnectionState.Backoff || rlyState == ConnectionState.Idle) {
-                            _connectionState.value = rlyState
+                coroutineScope {
+                    val rly = RelayClient(owned.relayOrigin, owned.deviceId, owned.relayPrivateKey, appVersion, scope = this)
+                    ownedRelay = rly
+                    relay.value = rly
+                    launch(start = CoroutineStart.UNDISPATCHED) { rly.presenceFlow.collect { peers.emit(it) } }
+                    launch(start = CoroutineStart.UNDISPATCHED) {
+                        rly.connectionState.collectLatest { relayState ->
+                            if (currentGeneration != generation) return@collectLatest
+                            disposeChannel()
+                            if (relayState != ConnectionState.Ready) {
+                                state.value = relayState
+                                return@collectLatest
+                            }
+                            var retry = 500L
+                            while (isActive && currentGeneration == generation) {
+                                try {
+                                    state.value = ConnectionState.Handshaking
+                                    val channel = SecureChannel(hostId = owned.hostId, deviceId = owned.deviceId,
+                                        hostNoisePub = owned.hostNoisePub, deviceNoiseKeypair = owned.noiseKeypair,
+                                        relayClient = rly, scope = this)
+                                    secureChannel = channel
+                                    channel.handshake("session", owned.devicePsk,
+                                        buildJsonObject { put("v", 1); put("purpose", "session"); put("app", buildJsonObject { put("version", appVersion) }) }.toString())
+                                    val rcp = RcpClient(channel, this)
+                                    currentRcp = rcp
+                                    val response = rcp.call("hello", buildJsonObject {
+                                        put("rcp", JsonArray(listOf(JsonPrimitive(1))))
+                                        put("app", buildJsonObject { put("name", "remora-android"); put("version", appVersion) })
+                                    }).jsonObject
+                                    require(response["rcp"]?.jsonPrimitive?.intOrNull == 1)
+                                    require(response["host"]?.jsonObject?.get("id")?.jsonPrimitive?.content == owned.hostId)
+                                    greeting.value = response
+                                    client.value = rcp
+                                    state.value = ConnectionState.Ready
+                                    retry = 500L
+                                    withTimeoutOrNull(86_400_000) { channel.closed.await() }
+                                } catch (_: TimeoutCancellationException) { state.value = ConnectionState.Backoff }
+                                catch (cancelled: CancellationException) { throw cancelled }
+                                catch (_: Exception) { state.value = ConnectionState.Backoff }
+                                finally { if (currentGeneration == generation) disposeChannel() }
+                                state.value = ConnectionState.Backoff
+                                delay(retry)
+                                retry = (retry * 2).coerceAtMost(30_000)
+                            }
                         }
                     }
+                    rly.connect()
+                    awaitCancellation()
                 }
-
-                relayClient.connect()
-            } catch (e: Exception) {
-                _connectionState.value = ConnectionState.Idle
+            } finally {
+                ownedRelay?.disconnect()
+                if (currentGeneration == generation) {
+                    disposeChannel()
+                    relay.value = null
+                    state.value = ConnectionState.Idle
+                }
+                owned.relayPrivateKey.fill(0); owned.noiseKeypair.secretKey.fill(0); owned.devicePsk.fill(0)
             }
+        }
+        connectionJob?.invokeOnCompletion {
+            owned.relayPrivateKey.fill(0); owned.noiseKeypair.secretKey.fill(0); owned.devicePsk.fill(0)
         }
     }
 
-    private suspend fun openSecureChannel(info: HostConnectionInfo, relayClient: RelayClient) {
-        try {
-            val channel = SecureChannel(
-                hostId = info.hostId,
-                deviceId = info.deviceId,
-                hostNoisePub = info.hostNoisePub,
-                deviceNoiseKeypair = info.noiseKeypair,
-                relayClient = relayClient,
-            )
-            currentSecureChannel = channel
-
-            val sessionPayload = """{"v":1,"purpose":"session","app":{"version":"1.0.0"}}"""
-            channel.handshake(
-                purpose = "session",
-                psk = info.devicePsk,
-                msg1PayloadJson = sessionPayload,
-            )
-
-            val rcp = RcpClient(channel)
-            _rcpClient.value = rcp
-            _connectionState.value = ConnectionState.Ready
-        } catch (e: Exception) {
-            _connectionState.value = ConnectionState.Backoff
-        }
+    private fun disposeChannel() {
+        currentRcp?.close(); currentRcp = null; client.value = null
+        secureChannel?.close(); secureChannel = null
     }
 
     fun disconnect() {
-        connectionJob?.cancel()
-        connectionJob = null
-
-        _rcpClient.value?.close()
-        _rcpClient.value = null
-
-        currentSecureChannel?.close()
-        currentSecureChannel = null
-
-        currentRelayClient?.disconnect()
-        currentRelayClient = null
-
-        _activeHostId.value = null
-        _connectionState.value = ConnectionState.Idle
+        generation++
+        connectionJob?.cancel(); connectionJob = null
+        disposeChannel()
+        relay.value?.disconnect(); relay.value = null
+        greeting.value = null
+        host.value = null
+        state.value = ConnectionState.Idle
     }
 }

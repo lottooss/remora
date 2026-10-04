@@ -23,6 +23,18 @@ class SessionRepository(
     private val eventFlows = ConcurrentHashMap<String, MutableStateFlow<List<SessionEvent>>>()
     private val hasOlderMap = ConcurrentHashMap<String, Boolean>()
 
+    private val controls = MutableStateFlow<Map<String, ControlState>>(emptyMap())
+    val controlStates: StateFlow<Map<String, ControlState>> = controls.asStateFlow()
+
+    fun setControlStates(states: List<ControlState>) { controls.value = states.associateBy { it.sessionId } }
+    fun updateControlState(state: ControlState) { controls.value = controls.value + (state.sessionId to state) }
+    fun removeControlState(sessionId: String) { controls.value = controls.value - sessionId }
+    fun clear() {
+        _sessions.value = emptyList()
+        eventFlows.values.forEach { it.value = emptyList() }
+        eventFlows.clear(); hasOlderMap.clear(); controls.value = emptyMap()
+    }
+
     fun setSessions(list: List<SessionSummary>) {
         _sessions.value = list.sortedByDescending { it.updatedAt }
     }

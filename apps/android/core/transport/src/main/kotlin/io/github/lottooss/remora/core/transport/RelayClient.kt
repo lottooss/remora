@@ -1,6 +1,5 @@
 package io.github.lottooss.remora.core.transport
 
-import io.github.lottooss.remora.core.crypto.decodeBase64Url
 import io.github.lottooss.remora.core.crypto.encodeBase64Url
 import io.github.lottooss.remora.core.crypto.signRelayChallenge
 import io.github.lottooss.remora.core.protocol.DataFrame
@@ -13,6 +12,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,22 +71,25 @@ class RelayClient(
     val relayPrivateKey: ByteArray,
     private val appVersion: String = "1.0.0",
     private val webSocketFactory: WebSocketFactory = DefaultWebSocketFactory(OkHttpClient()),
-    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + Job()),
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
     private val minBackoffMs: Long = 500,
     private val maxBackoffMs: Long = 30_000,
 ) {
 
     private val json = Json { ignoreUnknownKeys = true }
-    private var webSocket: WebSocket? = null
-    private var isClosedManually = false
+    @Volatile private var webSocket: WebSocket? = null
+    @Volatile private var isClosedManually = false
     private var backoffMs = minBackoffMs
     private var reconnectJob: Job? = null
     private var pingJob: Job? = null
+    private var authenticationJob: Job? = null
+    @Volatile private var generation = 0L
+    private var lastPongAt = 0L
 
     private val _connectionState = MutableStateFlow(ConnectionState.Idle)
     val connectionState: StateFlow<ConnectionState> = _connectionState.asStateFlow()
 
-    private val _incomingDataFrames = MutableSharedFlow<DataFrame>(replay = 16, extraBufferCapacity = 64)
+    private val _incomingDataFrames = MutableSharedFlow<DataFrame>(extraBufferCapacity = 128)
     val incomingDataFrames: SharedFlow<DataFrame> = _incomingDataFrames.asSharedFlow()
 
     private val _presenceFlow = MutableSharedFlow<RelayPeer>(replay = 16, extraBufferCapacity = 16)
@@ -108,6 +111,8 @@ class RelayClient(
     }
 
     fun disconnect() {
+        generation++
+        authenticationJob?.cancel()
         isClosedManually = true
         reconnectJob?.cancel()
         pingJob?.cancel()
@@ -121,6 +126,7 @@ class RelayClient(
     }
 
     suspend fun sendData(channel: Long, peerKind: PeerKind, peerId: ByteArray, payload: ByteArray) {
+        check(_connectionState.value == ConnectionState.Ready) { "Relay disconnected" }
         val frameBytes = encodeDataFrame(channel, peerKind, peerId, payload)
         val ws = webSocket ?: throw IllegalStateException("Relay WebSocket not connected")
         val success = ws.send(frameBytes.toByteString())
@@ -133,6 +139,8 @@ class RelayClient(
         if (_connectionState.value != ConnectionState.Ready) {
             throw IllegalStateException("RelayClient not in Ready state (current: ${_connectionState.value})")
         }
+        check(pendingRequests.size < 32) { "Too many pending relay requests" }
+        require(params["t"] == null && params["rid"] == null) { "Reserved relay field" }
         val rid = "r_${reqCounter.getAndIncrement()}"
         val deferred = CompletableDeferred<JsonObject>()
         pendingRequests[rid] = deferred
@@ -143,16 +151,21 @@ class RelayClient(
             params.forEach { (k, v) -> put(k, v) }
         }
 
-        val ws = webSocket ?: throw IllegalStateException("Relay WebSocket not connected")
-        ws.send(wireObj.toString())
-
-        return kotlinx.coroutines.withTimeout(timeoutMs) {
-            deferred.await()
-        }
+        try {
+            val ws = webSocket ?: throw IllegalStateException("Relay disconnected")
+            check(ws.send(wireObj.toString())) { "Relay send failed" }
+            val response = kotlinx.coroutines.withTimeout(timeoutMs) { deferred.await() }
+            check(response["t"]?.jsonPrimitive?.content != "error") { "Relay request rejected" }
+            return response
+        } finally { pendingRequests.remove(rid) }
     }
 
     private fun initiateConnection() {
+        val connectionGeneration = ++generation
         _connectionState.value = ConnectionState.Connecting
+        val origin = java.net.URI(relayOrigin)
+        require(origin.scheme == "https" || (origin.scheme == "http" && origin.host in setOf("127.0.0.1", "10.0.2.2"))) { "Invalid relay origin" }
+        require(origin.rawUserInfo == null && origin.rawQuery == null && origin.rawFragment == null && (origin.path.isNullOrEmpty() || origin.path == "/"))
 
         val wsUrl = relayOrigin.replaceFirst("^http:".toRegex(), "ws:")
             .replaceFirst("^https:".toRegex(), "wss:")
@@ -165,34 +178,57 @@ class RelayClient(
 
         webSocket = webSocketFactory.createWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                // Wait for challenge from relay
+                if (connectionGeneration != generation) { webSocket.cancel(); return }
+                this@RelayClient.webSocket = webSocket
+                if (response.header("Sec-WebSocket-Protocol") != RLY_SUBPROTOCOL) {
+                    isClosedManually = true
+                    webSocket.cancel()
+                    handleConnectionLoss()
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
-                handleControlMessage(text)
+                if (connectionGeneration == generation) handleControlMessage(text)
             }
 
             override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-                handleDataMessage(bytes.toByteArray())
+                if (connectionGeneration == generation) handleDataMessage(bytes.toByteArray())
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                webSocket.close(code, null)
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                if (connectionGeneration != generation) return
+                if (code in setOf(4401, 4403, 4409, 4426)) isClosedManually = true
                 handleConnectionLoss()
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                handleConnectionLoss()
+                if (connectionGeneration == generation) handleConnectionLoss()
             }
         })
+        authenticationJob?.cancel()
+        authenticationJob = scope.launch {
+            delay(10_000)
+            if (connectionGeneration == generation && _connectionState.value != ConnectionState.Ready) {
+                webSocket?.cancel()
+                handleConnectionLoss()
+            }
+        }
     }
 
     private fun handleControlMessage(text: String) {
         try {
+            require(text.toByteArray().size <= 65_536)
             val root = json.parseToJsonElement(text).jsonObject
             val type = root["t"]?.jsonPrimitive?.content ?: return
 
             when (type) {
                 "challenge" -> {
+                    require(_connectionState.value == ConnectionState.Connecting)
+                    require(root["v"]?.jsonPrimitive?.intOrNull == RLY_VERSION)
                     _connectionState.value = ConnectionState.Authenticating
                     val nonce = root["nonce"]?.jsonPrimitive?.content ?: return
                     val sig = signRelayChallenge(relayPrivateKey, nonce)
@@ -211,6 +247,11 @@ class RelayClient(
                 }
 
                 "ready" -> {
+                    require(_connectionState.value == ConnectionState.Authenticating)
+                    require(root["v"]?.jsonPrimitive?.intOrNull == RLY_VERSION)
+                    require(root["id"]?.jsonPrimitive?.content == deviceId)
+                    authenticationJob?.cancel()
+                    lastPongAt = System.nanoTime()
                     _connectionState.value = ConnectionState.Ready
                     backoffMs = minBackoffMs
                     startPingLoop()
@@ -238,7 +279,7 @@ class RelayClient(
                 }
 
                 "pong" -> {
-                    // Keep-alive acknowledged
+                    lastPongAt = System.nanoTime()
                 }
 
                 else -> {
@@ -249,17 +290,25 @@ class RelayClient(
                     }
                 }
             }
-        } catch (_: Exception) {}
+        } catch (_: Exception) { webSocket?.cancel(); handleConnectionLoss() }
     }
 
     private fun handleDataMessage(bytes: ByteArray) {
         try {
             val frame = decodeDataFrame(bytes)
-            _incomingDataFrames.tryEmit(frame)
-        } catch (_: Exception) {}
+            if (!_incomingDataFrames.tryEmit(frame)) {
+                webSocket?.cancel(); handleConnectionLoss()
+            }
+        } catch (_: Exception) { webSocket?.cancel(); handleConnectionLoss() }
     }
 
+    @Synchronized
     private fun handleConnectionLoss() {
+        if (_connectionState.value == ConnectionState.Backoff || (_connectionState.value == ConnectionState.Idle && isClosedManually)) return
+        generation++
+        webSocket?.cancel()
+        webSocket = null
+        authenticationJob?.cancel()
         pingJob?.cancel()
         failPendingRequests(Exception("Connection lost"))
         if (isClosedManually) {
@@ -274,7 +323,7 @@ class RelayClient(
     private fun scheduleReconnect() {
         reconnectJob?.cancel()
         reconnectJob = scope.launch {
-            val jitter = Random.nextLong(0, min(backoffMs / 2, 1000))
+            val jitter = Random.nextLong(0, min(backoffMs / 2, 1000).coerceAtLeast(1))
             delay(backoffMs + jitter)
             backoffMs = min(backoffMs * 2, maxBackoffMs)
             if (!isClosedManually) {
@@ -289,7 +338,10 @@ class RelayClient(
             while (_connectionState.value == ConnectionState.Ready) {
                 delay(25_000)
                 try {
-                    webSocket?.send("""{"t":"ping"}""")
+                    if (System.nanoTime() - lastPongAt > 60_000_000_000L || webSocket?.send("""{"t":"ping"}""") != true) {
+                        handleConnectionLoss()
+                        break
+                    }
                 } catch (_: Exception) {
                     break
                 }
@@ -329,7 +381,7 @@ class RelayClient(
                 .post(requestBody)
                 .build()
 
-            val response = client.newCall(request).execute()
+            client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) {
                 throw IllegalStateException("Device enrollment failed: HTTP ${response.code}")
             }
@@ -338,6 +390,7 @@ class RelayClient(
             val deviceId = root["id"]?.jsonPrimitive?.content ?: throw IllegalStateException("Missing deviceId")
             val hostId = root["hostId"]?.jsonPrimitive?.content ?: throw IllegalStateException("Missing hostId")
             deviceId to hostId
+            }
         }
     }
 }

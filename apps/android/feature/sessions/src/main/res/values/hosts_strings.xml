@@ -1,0 +1,17 @@
+<resources>
+    <string name="hosts_title">Your PCs</string>
+    <string name="hosts_pair">Pair a PC</string>
+    <string name="hosts_empty">Pair your PC to continue sessions from your phone.</string>
+    <string name="hosts_online">Online</string>
+    <string name="hosts_offline">Offline</string>
+    <string name="hosts_selected">Selected PC</string>
+    <string name="hosts_last_seen">Last seen %1$s</string>
+    <string name="hosts_never_seen">Waiting for presence</string>
+    <string name="hosts_open">Open sessions</string>
+    <string name="hosts_unpair">Unpair</string>
+    <string name="hosts_unpair_title">Unpair %1$s?</string>
+    <string name="hosts_unpair_body">The PC must be connected to revoke this phone. Pair again from the PC to restore access.</string>
+    <string name="hosts_cancel">Cancel</string>
+    <string name="hosts_back">Back</string>
+    <string name="hosts_error">The operation could not finish. Reconnect to the PC and try again.</string>
+</resources>

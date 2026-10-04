@@ -23,6 +23,7 @@ fun parsePushPayload(json: String): PushPayload? {
     return try {
         val obj = Json.parseToJsonElement(json).jsonObject
         val version = obj["v"]?.jsonPrimitive?.int ?: return null
+        if (version != 1 || json.toByteArray().size > 2_048) return null
         val kindStr = obj["kind"]?.jsonPrimitive?.contentOrNull ?: return null
         val kind = when (kindStr) {
             "approval" -> PushKind.APPROVAL
@@ -48,9 +49,14 @@ fun channelForKind(kind: PushKind): RemoraNotificationChannel = when (kind) {
     PushKind.TURN_ERROR -> RemoraNotificationChannel.ERRORS
 }
 
-fun deepLinkForPayload(payload: PushPayload): String = when (payload.kind) {
-    PushKind.APPROVAL -> "remora://approvals"
-    PushKind.QUESTION -> "remora://session/${payload.sessionId.orEmpty()}"
-    PushKind.TURN_DONE -> "remora://session/${payload.sessionId.orEmpty()}"
-    PushKind.TURN_ERROR -> "remora://session/${payload.sessionId.orEmpty()}"
+/** Every action link binds its paired host; an unbound legacy payload goes to host selection. */
+fun deepLinkForPayload(payload: PushPayload, hostId: String? = null): String {
+    if (hostId == null || !hostId.matches(Regex("h_[a-z2-7]{26}"))) return "remora://hosts"
+    val base = "remora://host/$hostId"
+    return when (payload.kind) {
+        PushKind.APPROVAL, PushKind.QUESTION -> "$base/approvals"
+        PushKind.TURN_DONE, PushKind.TURN_ERROR -> payload.sessionId?.let {
+            "$base/session/${java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")}" 
+        } ?: "remora://hosts"
+    }
 }

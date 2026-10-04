@@ -53,7 +53,7 @@ class FilesService(
         path: String = "",
         rcpClient: RcpClient? = null,
     ): Result<FileListResult> {
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("sessionId", sessionId)
                 put("path", path)
@@ -92,7 +92,7 @@ class FilesService(
             return Result.failure(IllegalArgumentException("limit must be between 1 and 400"))
         }
 
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("sessionId", sessionId)
                 put("path", path)
@@ -129,7 +129,7 @@ class FilesService(
         sessionId: String,
         rcpClient: RcpClient? = null,
     ): Result<DiffStatusResult> {
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("sessionId", sessionId)
             }
@@ -171,7 +171,7 @@ class FilesService(
             return Result.failure(IllegalArgumentException("fromHunk must be >= 0"))
         }
 
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("sessionId", sessionId)
                 put("path", path)
