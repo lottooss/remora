@@ -151,6 +151,59 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 
 ## 9. Verification log
 
+### 9.1 Real-dsh fixture recording procedure (P7-H10)
+
+The fixtures under `packages/host/test/fixtures/dsh-0.1.5-rc.3/` are recorded
+bytes, not hand-written shapes. They were produced on the worker's machine
+against the **pinned** `@deepseek-ai/dsh@0.1.5-rc.3` with a scripted mock LLM,
+inside a temporary `DSH_HOME` (the owner's `~/.dsh` is never touched); CI
+replays the committed bytes. The recording tooling is a throwaway bundle under
+`.scratch/` (never imported by production code); this section is the procedure.
+
+Recording setup (one driver script, modeled on the P0-S2 spike):
+
+1. Install the pinned dsh and the mock server into a scratch prefix:
+   `npm install --no-fund --no-audit @deepseek-ai/dsh@0.1.5-rc.3 @deepseek-ai/dsh-llm-mock-server@0.1.5-rc.3`.
+2. Create a temporary home (`mkdtemp`) and initialize the profile from the web
+   template: `DSH_HOME=<temp> dsh --profile remora-rec --from-default-profile web --dump-config`.
+3. Add the recorder bundle to that profile:
+   `DSH_HOME=<temp> dsh plugin --profile remora-rec add <recorder-dir>`.
+4. Start the scripted LLM:
+   `startMockLlmServer({ sequence: ['tool_call_success', 'success'], toolName, toolArguments, apiKey })`
+   from `@deepseek-ai/dsh-llm-mock-server` (no published bin).
+5. Boot real dsh against it:
+   `DSH_HOME=<temp> DEEPSEEK_BASE_URL=<mock>/v1 DEEPSEEK_API_KEY=<key> dsh --profile remora-rec --no-open --port 7731`,
+   plus `P7H10_OUT` (output dir) and `P7H10_SCENARIO` (`tool-approval` | `question`).
+6. The recorder plugin drives the scenario in-process through the typert
+   gateway (§4): create a temp workspace, create a session, open a
+   `session/follow` stream, then `session/prompt` so the mock LLM emits the
+   scripted tool call, and collect frames until `turn/end`.
+
+Two scenarios were recorded:
+
+- **tool-approval** — the mock calls a registered `bash` tool with
+  `{"command":"echo remora-p7-h10 && uptime"}`. The recorder returns
+  `{ kind: 'ask', reason }` from a prepend `tools/pre-execute` hook for the
+  tool (the same seam P0-S2 verified), so dsh's **real** approval service
+  appends durable `approval/asked` / `approval/decided` events and dispatches
+  the real `approval/request` waterfall. The recorder answers `allowed-once`
+  (ADR-0008 answer-first, derived-`AbortSignal` withdrawal of the PC chain) so
+  the tool executes and a real `tool/result` follows.
+- **question** — the mock calls the real `ask_user_question` tool, which fires
+  the real `user-questions/request` waterfall; the recorder answers the first
+  option of the scripted question.
+
+Recorded artifacts per scenario: `follow-<scenario>.jsonl` (the durable
+`session/follow` frames, including `tool/call`, `approval/asked`,
+`approval/decided`, `tool/result`), `approval-request.json` /
+`question-request.json` (the raw waterfall payload, agent identity reduced to
+`{ id }`), `recorder-log.jsonl`, and `report.json`. The committed fixtures are
+exactly these files.
+
+Verified fact reinforced by the recording: `tool/call` data is
+`{ turn, step, callId, name, arguments }` where `arguments` is the raw **JSON
+string** the model produced — any preview logic must parse it.
+
 | Date | dsh version | Verified by | Scope | Result |
 |---|---|---|---|---|
 | 2026-09-24 | 0.1.5-rc.3 (source reading) | Integrator | §2–§7 | as documented; runtime behavior pending P0 spikes |
@@ -158,5 +211,6 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 | 2026-09-24 | 0.1.5-rc.3 | Host role (P0-S2) | Q5–Q7 | Verified: waterfall prepend ordering, AbortSignal withdrawal, and Session tool-call argument inspection |
 | 2026-09-24 | Windows 11 / Node v24 | Host role (P0-S6) | Q9 | Verified: SetThreadExecutionState via in-process koffi & non-elevated logon autostart |
 | 2026-09-25 | 0.1.5-rc.3 (source reading) | Host role (P2-H1) | §7 fetch/webserver seams re-read for the management routes | as documented; `fetch.register` exact routes inherit the `/api` fence, `webServer.register` exact matches beat prefix matches |
+| 2026-10-04 | 0.1.5-rc.3 | Host role (P7-H10) | §9.1 fixture recording (Windows 11 / Node v24, temp DSH_HOME) | Verified: real bash-tool approval and real ask_user_question flows recorded with the mock LLM; durable events match §5 event types; `tool/call.arguments` confirmed to be a JSON string |
 
 

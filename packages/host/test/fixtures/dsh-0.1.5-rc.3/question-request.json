@@ -1,0 +1,38 @@
+{
+  "scenario": "question",
+  "recordedAt": 1790956339951,
+  "request": {
+    "questions": [
+      {
+        "id": "deploy-mode",
+        "question": "Which deploy mode should Remora use for this session?",
+        "header": "Deploy",
+        "options": [
+          {
+            "label": "Supervised",
+            "description": "Ask on every shell command"
+          },
+          {
+            "label": "Autonomous",
+            "description": "Only ask for high-risk commands"
+          }
+        ]
+      }
+    ],
+    "hasSignal": true,
+    "agent": {
+      "id": "session-de3104dd-d1be-4d6d-b64e-897a4566b2f0"
+    },
+    "sessionId": "session-de3104dd-d1be-4d6d-b64e-897a4566b2f0"
+  },
+  "answerReturned": {
+    "answers": [
+      {
+        "id": "deploy-mode",
+        "selected": [
+          "Supervised"
+        ]
+      }
+    ]
+  }
+}
