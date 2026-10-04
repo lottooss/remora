@@ -52,6 +52,7 @@ class ApprovalKeyManager(private val context: Context) {
         KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
     }
 
+    @Synchronized
     fun getOrCreateApprovalKey(hostId: String): ApprovalKeyInfo {
         val alias = activeAlias(hostId)
         return getOrCreateKey(alias)
@@ -103,6 +104,7 @@ class ApprovalKeyManager(private val context: Context) {
         )
     }
 
+    @Synchronized
     fun createCryptoObject(hostId: String): BiometricPrompt.CryptoObject {
         val alias = activeAlias(hostId)
         val privateKey = keyStore.getKey(alias, null) as? PrivateKey
@@ -113,6 +115,7 @@ class ApprovalKeyManager(private val context: Context) {
         return BiometricPrompt.CryptoObject(signature)
     }
 
+    @Synchronized
     fun isKeyValid(hostId: String): Boolean {
         val alias = activeAlias(hostId)
         return try {
@@ -128,6 +131,7 @@ class ApprovalKeyManager(private val context: Context) {
         }
     }
 
+    @Synchronized
     fun deleteApprovalKey(hostId: String) {
         val base = Security.approvalKeyAlias(hostId)
         val entries = keyStore.aliases().toList().filter { it == base || it.startsWith(base + "_pending_") }
@@ -138,6 +142,7 @@ class ApprovalKeyManager(private val context: Context) {
     }
 
     /** Generates a candidate without replacing the host's currently registered signing key. */
+    @Synchronized
     fun createPendingApprovalKey(hostId: String): ApprovalKeyInfo {
         pendingApprovalKey(hostId)?.let { return it }
         val alias = Security.approvalKeyAlias(hostId) + "_pending_" + UUID.randomUUID()
@@ -150,6 +155,7 @@ class ApprovalKeyManager(private val context: Context) {
     }
 
     /** Reads a candidate across process restarts without silently regenerating it. */
+    @Synchronized
     fun pendingApprovalKey(hostId: String): ApprovalKeyInfo? {
         val alias = aliases.getString("pending_$hostId", null) ?: return null
         checkedAlias(hostId, alias)
@@ -159,6 +165,7 @@ class ApprovalKeyManager(private val context: Context) {
     }
 
     /** Activate only after the owner confirms the pending change on the PC. */
+    @Synchronized
     fun activatePendingApprovalKey(hostId: String, expectedPublicKeySpkiDer: ByteArray) {
         val pending = aliases.getString("pending_$hostId", null)
             ?: throw IllegalStateException("No pending approval key")
@@ -174,6 +181,7 @@ class ApprovalKeyManager(private val context: Context) {
     }
 
     /** Cancels only the unregistered candidate, preserving the active signing key. */
+    @Synchronized
     fun discardPendingApprovalKey(hostId: String) {
         val pending = aliases.getString("pending_$hostId", null) ?: return
         checkedAlias(hostId, pending)
