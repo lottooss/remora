@@ -1,13 +1,15 @@
 /**
  * RCP method registration for files.* methods (RCP/1 §9).
  * - files.read
- * - files.readBytes
  * - files.list
  * - files.stat
  * - files.changes (stream)
+ *
+ * `files.readBytes` was an off-spec host extra: P7-C1 removed it from the
+ * method set, P7-H7 deleted the host handler (the adapter's readBytes remains
+ * for the FilesAdapter API only).
  */
 import {
-  FilesReadBytesParamsSchema,
   FilesReadParamsSchema,
   RCP_ERROR_CODES,
   createRcpError,
@@ -62,21 +64,6 @@ export function registerFilesMethods(rcpServer: RcpServer, adapter: FilesAdapter
       sessionId: parsed.data.sessionId,
       path: parsed.data.path,
       ...(parsed.data.offset !== undefined ? { offset: parsed.data.offset } : {}),
-      ...(parsed.data.limit !== undefined ? { limit: parsed.data.limit } : {}),
-    })
-  })
-
-  rcpServer.registerMethod('files.readBytes', async (p) => {
-    const parsed = FilesReadBytesParamsSchema.safeParse(p)
-    if (!parsed.success) {
-      throw new RcpMethodError(
-        createRcpError(RCP_ERROR_CODES.invalid_params, 'invalid files.readBytes params'),
-      )
-    }
-    return await adapter.readBytes({
-      sessionId: parsed.data.sessionId,
-      path: parsed.data.path,
-      offset: parsed.data.offset,
       ...(parsed.data.limit !== undefined ? { limit: parsed.data.limit } : {}),
     })
   })

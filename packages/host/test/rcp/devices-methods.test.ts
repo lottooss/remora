@@ -308,8 +308,6 @@ describe('devices.unpair (P7-H7, RCP/1 §7, crypto-v1.md §10)', () => {
       apply: (serviceCtx: Context) => void serviceCtx.provide('credentials', credentials),
     })
     const messages = captureLogs(ctx)
-    const routes = await provideConnectionRoutes(ctx)
-    void routes
     const fiber = await ctx.plugin(
       host,
       createValidHostConfig({ relayUrl: `http://127.0.0.1:${await reserveClosedPort()}` }),
@@ -417,7 +415,7 @@ describe('devices.rotateApprovalKey (P7-H7, crypto-v1.md §10)', () => {
     expect(lateConfirm.status).toBe(409)
   }, 15_000)
 
-  it('validates the key, honors the requestId exactly-once, and allows one pending rotation per device', async () => {
+  it('validates the approval public key shape and encoding (fail closed)', async () => {
     const { server } = await mountHostWithPairedDevice()
 
     const notP256 = await request(server, DEVICE_A_ID, 1, 'devices.rotateApprovalKey', {
@@ -440,15 +438,21 @@ describe('devices.rotateApprovalKey (P7-H7, crypto-v1.md §10)', () => {
     })
     expect(garbage.ok).toBe(false)
     expect(garbage.e?.code).toBe('invalid_params')
+  }, 15_000)
 
-    const first = await request(server, DEVICE_A_ID, 4, 'devices.rotateApprovalKey', {
+  // Own mount: the per-device limit is 5 mutating requests/s (RCP/1 §11), and
+  // this test sends three of its own.
+  it('honors the requestId exactly-once and allows one pending rotation per device', async () => {
+    const { server } = await mountHostWithPairedDevice()
+
+    const first = await request(server, DEVICE_A_ID, 1, 'devices.rotateApprovalKey', {
       approvalPub: encodeBase64Url(KEY_NEW),
       requestId: ROTATION_REQUEST_ID,
     })
     expect(first.ok).toBe(true)
 
     // A retry with the SAME requestId is the same request (exactly-once).
-    const retry = await request(server, DEVICE_A_ID, 5, 'devices.rotateApprovalKey', {
+    const retry = await request(server, DEVICE_A_ID, 2, 'devices.rotateApprovalKey', {
       approvalPub: encodeBase64Url(KEY_NEW),
       requestId: ROTATION_REQUEST_ID,
     })
@@ -456,7 +460,7 @@ describe('devices.rotateApprovalKey (P7-H7, crypto-v1.md §10)', () => {
     expect(retry.r).toEqual({ status: 'pending_pc_confirmation' })
 
     // A different requestId while one is pending conflicts.
-    const second = await request(server, DEVICE_A_ID, 6, 'devices.rotateApprovalKey', {
+    const second = await request(server, DEVICE_A_ID, 3, 'devices.rotateApprovalKey', {
       approvalPub: encodeBase64Url(KEY_NEW),
       requestId: ROTATION_REQUEST_ID_2,
     })

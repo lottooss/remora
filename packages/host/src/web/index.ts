@@ -79,6 +79,14 @@ export async function generateQrSvg(qrText: string): Promise<string> {
   return await QRCode.toString(qrText, { type: 'svg', margin: 2 })
 }
 
+/** One pending approval-key rotation as the management page shows it. */
+export interface PendingRotationView {
+  deviceId: string
+  name: string
+  requestedAt: number
+  expiresAt: number
+}
+
 /** Data the management dashboard renders; assembled by the `/api/remora` route. */
 export interface ManagementDashboardData {
   hostId: string
@@ -86,6 +94,11 @@ export interface ManagementDashboardData {
   relayStatus: string
   devices: Array<{ deviceId: string; name: string; pairedAt: number; revoked: boolean }>
   activePairing: { sasCode?: string; expiresAt: number; state: string } | null
+  /**
+   * Approval-key rotations awaiting PC confirmation (crypto-v1.md §10).
+   * Optional: callers that predate P7-H7 omit it and the page renders none.
+   */
+  pendingRotations?: PendingRotationView[]
   qrSvg?: string
 }
 
@@ -135,6 +148,30 @@ export function renderDashboardHtml(data: ManagementDashboardData): string {
          </div>`
     : `<button class="primary" onclick="startPairing()">Pair New Device</button>`
 
+  const rotationSection =
+    (data.pendingRotations ?? []).length === 0
+      ? ''
+      : `<div class="card">
+           <h2>Approval Key Rotation</h2>
+           <p class="hint">A device asked to replace its approval key. The new key becomes
+           active only after you confirm it here (Crypto/1 §10).</p>
+           <ul>${(data.pendingRotations ?? [])
+             .map(
+               (rotation) =>
+                 `<li>
+                   <div class="device-info">
+                     <strong>${escapeHtml(rotation.name)}</strong>
+                     <span class="id">${escapeHtml(rotation.deviceId)}</span>
+                   </div>
+                   <div class="actions">
+                     <button class="primary" onclick="confirmRotation('${escapeHtml(rotation.deviceId)}')">Confirm</button>
+                     <button class="danger" onclick="rejectRotation('${escapeHtml(rotation.deviceId)}')">Reject</button>
+                   </div>
+                 </li>`,
+             )
+             .join('')}</ul>
+         </div>`
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -174,6 +211,7 @@ export function renderDashboardHtml(data: ManagementDashboardData): string {
       <h2>Paired Devices</h2>
       ${devicesList}
     </div>
+    ${rotationSection}
     <div class="card">
       <h2>Device Pairing</h2>
       ${pairingSection}
@@ -205,6 +243,22 @@ export function renderDashboardHtml(data: ManagementDashboardData): string {
         });
         location.reload();
       }
+    }
+    async function confirmRotation(deviceId) {
+      await fetch('/api/remora/devices/rotation/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId })
+      });
+      location.reload();
+    }
+    async function rejectRotation(deviceId) {
+      await fetch('/api/remora/devices/rotation/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId })
+      });
+      location.reload();
     }
   </script>
 </body>

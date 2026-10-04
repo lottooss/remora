@@ -4,7 +4,6 @@ import {
   SessionsCreateParamsSchema,
   SessionsEventTextParamsSchema,
   SessionsFollowParamsSchema,
-  SessionsGetParamsSchema,
   SessionsListParamsSchema,
   SessionsPageParamsSchema,
   SessionsPromptParamsSchema,
@@ -51,30 +50,6 @@ export function registerSessionMethods(
       throw new RcpMethodError(createRcpError(RCP_ERROR_CODES.invalid_params, 'invalid sessions.list params'))
     }
     return await adapter.list(parsed.data)
-  })
-
-  rcpServer.registerMethod('sessions.get', async (p) => {
-    const parsed = SessionsGetParamsSchema.safeParse(p)
-    if (!parsed.success) {
-      throw new RcpMethodError(createRcpError(RCP_ERROR_CODES.invalid_params, 'invalid sessions.get params'))
-    }
-    const page = await adapter.page({
-      sessionId: parsed.data.sessionId,
-      beforeSeq: Number.MAX_SAFE_INTEGER,
-      limit: 50,
-    })
-    const listRes = await adapter.list({ limit: 100 })
-    const found = listRes.items.find((s) => s.id === parsed.data.sessionId)
-    if (!found) {
-      throw new RcpMethodError(
-        createRcpError(RCP_ERROR_CODES.not_found, `session '${parsed.data.sessionId}' not found`),
-      )
-    }
-    return {
-      session: found,
-      events: page.events,
-      hasOlder: page.hasOlder,
-    }
   })
 
   rcpServer.registerMethod('sessions.search', async (p) => {

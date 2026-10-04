@@ -11,12 +11,14 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 import type { DeviceRegistry } from '../devices/index.ts'
+import type { ApprovalKeyRotationManager, PendingApprovalKeyRotation } from '../rcp/methods/devices.ts'
 import {
   generateQrSvg,
   printTerminalQr,
   renderDashboardHtml,
   type ManagementContext,
   type ManagementDashboardData,
+  type PendingRotationView,
   type TerminalQrStream,
 } from './index.ts'
 
@@ -60,6 +62,12 @@ export interface ManagementWebServer {
 export interface ManagementRouteDeps extends ManagementContext {
   /** Revokes the device's relay endpoint after the local revoke; a failure answers 502. */
   revokeEndpointOnRelay?: (deviceId: string) => Promise<void>
+  /**
+   * Pending approval-key rotations, shared with the devices.rotateApprovalKey
+   * RCP method (crypto-v1.md §10). Absent → the Confirm/Reject routes answer
+   * 409 and the page lists nothing (fail closed).
+   */
+  rotations?: ApprovalKeyRotationManager
   /** Terminal sink for the printed pairing QR; defaults to `process.stdout`. */
   terminalStdout?: TerminalQrStream
 }
@@ -87,13 +95,15 @@ const HTML_HEADERS = {
   'x-content-type-options': 'nosniff',
 } as const
 
-/** Fetch handlers for the five management routes, already origin-guarded. */
+/** Fetch handlers for the management routes, already origin-guarded. */
 interface ManagementHandlers {
   dashboard: (request: Request) => Promise<Response>
   pairStart: (request: Request) => Promise<Response>
   pairConfirm: (request: Request) => Promise<Response>
   pairReject: (request: Request) => Promise<Response>
   deviceRevoke: (request: Request) => Promise<Response>
+  rotationConfirm: (request: Request) => Promise<Response>
+  rotationReject: (request: Request) => Promise<Response>
 }
 
 /** Parsed action body, or the error response that refused it. */
@@ -169,6 +179,18 @@ function registerFetchRoutes(
       requestBody: 'buffered',
       fetch: handlers.deviceRevoke,
     }),
+    connection.fetch.register({
+      path: `${DASHBOARD_PATH}/devices/rotation/confirm`,
+      methods: ['POST'],
+      requestBody: 'buffered',
+      fetch: handlers.rotationConfirm,
+    }),
+    connection.fetch.register({
+      path: `${DASHBOARD_PATH}/devices/rotation/reject`,
+      methods: ['POST'],
+      requestBody: 'buffered',
+      fetch: handlers.rotationReject,
+    }),
   ]
   return async () => {
     await Promise.all(disposers.map((dispose) => dispose()))
@@ -202,7 +224,7 @@ function registerAliasRoute(connection: ManagementConnection, webServer: Managem
 }
 
 /**
- * Builds the origin-guarded handlers for the five routes.
+ * Builds the origin-guarded handlers for the management routes.
  * @param ctx - context used for failure logging.
  * @param deps - route state.
  * @returns the handler map handed to Connection.
@@ -223,6 +245,17 @@ function createHandlers(ctx: Context, deps: ManagementRouteDeps): ManagementHand
         return jsonResponse(500, { error: 'internal-error' })
       }
     }
+
+  /** The page's view of the pending approval-key rotations (P7-H7). */
+  const pendingRotations = (): PendingRotationView[] =>
+    deps.rotations?.listPending().map(
+      (pending: PendingApprovalKeyRotation): PendingRotationView => ({
+        deviceId: pending.deviceId,
+        name: deps.registry.getDeviceById(pending.deviceId)?.name ?? 'Unknown device',
+        requestedAt: pending.requestedAt,
+        expiresAt: pending.expiresAt,
+      }),
+    ) ?? []
 
   return {
     dashboard: guard(async (request) => {
@@ -250,6 +283,7 @@ function createHandlers(ctx: Context, deps: ManagementRouteDeps): ManagementHand
           revoked: device.revoked,
         })),
         activePairing,
+        pendingRotations: pendingRotations(),
         ...(qrSvg === undefined ? {} : { qrSvg }),
       }
       if (prefersHtml(request)) {
@@ -268,6 +302,7 @@ function createHandlers(ctx: Context, deps: ManagementRouteDeps): ManagementHand
                 expiresAt: activePairing.expiresAt,
                 ...(activePairing.sasCode === undefined ? {} : { sas: activePairing.sasCode }),
               },
+        pendingRotations: pendingRotations(),
       })
     }),
 
@@ -333,6 +368,34 @@ function createHandlers(ctx: Context, deps: ManagementRouteDeps): ManagementHand
         }
       }
       return jsonResponse(200, { ok: true })
+    }),
+
+    // PC confirmation of a devices.rotateApprovalKey request (crypto-v1.md
+    // §10): the new approval key becomes active ONLY here, through the
+    // registry's atomic record write inside the rotation manager.
+    rotationConfirm: guard(async (request) => {
+      const body = await readActionBody(request)
+      if (!body.ok) return body.response
+      const deviceId = body.fields['deviceId']
+      if (deviceId === undefined || !DEVICE_ID_PATTERN.test(deviceId)) {
+        return jsonResponse(400, { error: 'invalid-device-id' })
+      }
+      if (deps.rotations === undefined || deps.rotations.confirm(deviceId) === 'no-pending') {
+        return jsonResponse(409, { error: 'no-pending-rotation' })
+      }
+      ctx.logger.info('remora: approval key rotation confirmed on the PC for %s', deviceId.slice(0, 6))
+      return jsonResponse(200, { ok: true })
+    }),
+
+    rotationReject: guard(async (request) => {
+      const body = await readActionBody(request)
+      if (!body.ok) return body.response
+      const deviceId = body.fields['deviceId']
+      if (deviceId === undefined || !DEVICE_ID_PATTERN.test(deviceId)) {
+        return jsonResponse(400, { error: 'invalid-device-id' })
+      }
+      const rejected = deps.rotations?.reject(deviceId) === 'resolved'
+      return jsonResponse(200, { ok: true, rejected })
     }),
   }
 }
