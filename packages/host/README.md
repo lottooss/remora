@@ -10,6 +10,29 @@ The PC side of Remora: an out-of-tree **DeepSeek Harness bundle** (`package.json
 
 `apply()` validates configuration (`relayUrl` required, https except loopback, absolute roots), then starts the host: it dials the relay, terminates the end-to-end channel for paired phones, serves RCP/1, adapts dsh sessions through the gateway (P2-H2), and runs pairing (P2-H1). The management page is served on the dsh web origin at `/api/remora/` (exact route plus a 303 from the trailing-slash alias); when the host has no paired device, the first pairing attempt opens automatically as soon as the relay connects and its QR is printed to an attached TTY.
 
+### Approval and question bridge
+
+The AnswerBridge uses typed dsh waterfalls and races the PC answerer against
+paired phones. Startup awaits an ordering self-check whose probe stops before
+ordinary listeners; failure refuses plugin startup before opening relay resources.
+When the phone wins, the bridge aborts the derived request signal to withdraw the
+PC prompt without cancelling the parent turn.
+
+Real dsh approval requests identify a tool call but do not carry its arguments.
+The bridge reads the matching call from the real Session journal, preserving the
+Session method receiver, and parses the model's JSON arguments. Display previews
+are limited to 2 KiB per field. Risk classification receives the complete parsed
+arguments before truncation. Missing, malformed, or mismatched call metadata is
+high risk. The configured `approvalBiometric` policy is enforced by the host's
+actual approval handler, and `approvalTimeoutMs` bounds the bridge's waits for
+approvals and questions.
+
+`test/interaction/journal-policy.test.ts` exercises the pinned dsh Session class;
+`test/apply.test.ts` checks production wiring and rejects unsigned or invalidly
+signed approvals through the real RCP handler. Recorded-fixture tests also cover
+tool event mapping and PC-chain withdrawal. Full phone-to-host scenarios remain
+the scope of P7-T1.
+
 ## Try it in a throwaway dsh profile
 
 Never install into your everyday `web` profile. From the repository root:

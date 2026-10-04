@@ -2,11 +2,18 @@ import { randomUUID } from 'node:crypto'
 import { computeArgsDigest } from '@remora/crypto'
 import type { PendingRegistry } from './pending.ts'
 import type { PolicyGuard } from '../policy/index.ts'
+import { SHELL_COMMAND_TOOLS } from '../policy/risk.ts'
+
+/** Journal call data: bounded display bytes and separate full policy arguments. */
+export interface ApprovalToolCall {
+  preview: { text: string; json: string }
+  arguments?: Record<string, unknown> | undefined
+}
 
 export interface RaceApprovalOptions {
   approvalTimeoutMs?: number | undefined
   policyGuard?: PolicyGuard | undefined
-  findPreview?: (agent: unknown, callId: string) => { text: string; json: string } | undefined
+  findToolCall?: (agent: unknown, callId: string, toolName: string) => ApprovalToolCall | undefined
   hasPairedDevices?: () => boolean
 }
 
@@ -90,13 +97,7 @@ export function isDshQuestionAnswer(value: unknown): value is DshQuestionAnswer 
  */
 function extractPreview(
   req: DshApprovalRequest,
-  findPreview?: (agent: unknown, callId: string) => { text: string; json: string } | undefined,
 ): { text: string; json: string } {
-  if (req.callId && findPreview && req.agent) {
-    const live = findPreview(req.agent, req.callId)
-    if (live) return live
-  }
-
   // Fallback to direct request arguments or toolName
   const rawArgs = req.arguments ?? req.params
   let text = req.toolName
@@ -120,6 +121,17 @@ function extractPreview(
   return { text, json }
 }
 
+/** Missing or malformed command metadata cannot become a normal-risk approval. */
+function classifyApprovalRisk(toolName: string, args: unknown, policyGuard: PolicyGuard): 'normal' | 'high' {
+  if (!isRecord(args)) return 'high'
+  if (SHELL_COMMAND_TOOLS.has(toolName)) {
+    // Match the Policy Guard's command aliases, before it classifies patterns.
+    const command = args['CommandLine'] ?? args['commandLine'] ?? args['command'] ?? args['cmd'] ?? args['script']
+    if (typeof command !== 'string' || command.trim().length === 0) return 'high'
+  }
+  return policyGuard.classifyRisk(toolName, args)
+}
+
 export async function raceApproval(
   req: DshApprovalRequest,
   next: () => Promise<string>,
@@ -128,13 +140,19 @@ export async function raceApproval(
 ): Promise<string> {
   const timeoutMs = options.approvalTimeoutMs ?? 3600_000
   const id = randomUUID()
-  const preview = extractPreview(req, options.findPreview)
+  const toolCall = req.agent && req.callId
+    ? options.findToolCall?.(req.agent, req.callId, req.toolName)
+    : undefined
+  const preview = toolCall?.preview ?? extractPreview(req)
   const argsDigest = computeArgsDigest(preview)
 
-  const riskEval = options.policyGuard
-    ? options.policyGuard.classifyRisk(req.toolName, req.arguments ?? req.params)
+  // Real dsh approval requests contain only the call identity. The complete
+  // journal arguments, never the truncated preview, are the policy input.
+  // A failed journal lookup must not fall back to unrelated request fields.
+  const policyArguments = options.findToolCall ? toolCall?.arguments : req.arguments ?? req.params
+  const risk = options.policyGuard
+    ? classifyApprovalRisk(req.toolName, policyArguments, options.policyGuard)
     : 'normal'
-  const risk = riskEval
   const requiresSignature = options.policyGuard
     ? (options.policyGuard.approvalBiometric === 'all' || (options.policyGuard.approvalBiometric === 'high' && risk === 'high'))
     : false

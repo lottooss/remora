@@ -114,6 +114,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     },
   }
   ctx.logger.exporter(consoleBridge)
+  // Check the Cordis seam before creating credentials, listeners, or relay
+  // resources. A failed ordering check must prevent the plugin from starting.
+  if (!(await runAnswerBridgeSelfCheck(ctx))) {
+    throw new Error('remora: AnswerBridge waterfall self-check failed; host startup refused')
+  }
   // The identity persists in the dsh credentials record `remora/host-identity`
   // (crypto-v1.md §3): generated exactly once, reloaded on every restart, so
   // restarting dsh no longer breaks every pairing. `inject` above guarantees
@@ -313,19 +318,20 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     scheduleRelayRevoke: scheduleUnpairRelayRevoke,
   })
 
-  const pendingRegistry = new PendingRegistry()
-  const disposeBridge = registerAnswerBridge(ctx, {
-    registry,
-    pendingRegistry,
-  })
-
-  void runAnswerBridgeSelfCheck(ctx)
-
   const policyGuard = new DefaultPolicyGuard({
     remoteRoots: resolved.remoteRoots,
     approvalBiometric: resolved.approvalBiometric,
     approvalAuth: resolved.approvalAuth,
     allowRemoteSessionStart: resolved.allowRemoteSessionStart,
+  })
+
+  const pendingRegistry = new PendingRegistry()
+  const disposeBridge = registerAnswerBridge(ctx, {
+    registry,
+    pendingRegistry,
+    policyGuard,
+    approvalTimeoutMs: resolved.approvalTimeoutMs,
+    questionTimeoutMs: resolved.approvalTimeoutMs,
   })
 
   registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)

@@ -197,8 +197,9 @@ Recorded artifacts per scenario: `follow-<scenario>.jsonl` (the durable
 `session/follow` frames, including `tool/call`, `approval/asked`,
 `approval/decided`, `tool/result`), `approval-request.json` /
 `question-request.json` (the raw waterfall payload, agent identity reduced to
-`{ id }`), `recorder-log.jsonl`, and `report.json`. The committed fixtures are
-exactly these files.
+`{ id }`), `recorder-log.jsonl`, and `report.json`. The follow streams and raw
+request payloads are committed as fixtures; the recorder logs and report are
+local recording artifacts.
 
 Verified fact reinforced by the recording: `tool/call` data is
 `{ turn, step, callId, name, arguments }` where `arguments` is the raw **JSON
@@ -213,4 +214,33 @@ string** the model produced — any preview logic must parse it.
 | 2026-09-25 | 0.1.5-rc.3 (source reading) | Host role (P2-H1) | §7 fetch/webserver seams re-read for the management routes | as documented; `fetch.register` exact routes inherit the `/api` fence, `webServer.register` exact matches beat prefix matches |
 | 2026-10-04 | 0.1.5-rc.3 | Host role (P7-H10) | §9.1 fixture recording (Windows 11 / Node v24, temp DSH_HOME) | Verified: real bash-tool approval and real ask_user_question flows recorded with the mock LLM; durable events match §5 event types; `tool/call.arguments` confirmed to be a JSON string |
 
+### 9.2 P7-H10 review: real Session receiver and approval metadata
+
+The pinned `Session.snapshotEvents()` method is an instance method: its default
+range reads `this.seq`, and its body reads `this.log` (`core/session/src/index.ts`
+§ `Session.snapshotEvents`). Calling a detached copy of the method throws. The
+host preserves that receiver with `snapshotEvents.call(session)`; the regression
+test creates an actual `Session` from `@deepseek-ai/dsh-session@0.1.5-rc.3` and
+appends the recorded tool call through its public API. An arrow-function journal
+reconstruction cannot establish this behavior.
+
+`ApprovalRequestEvent` carries `agent`, `toolName`, optional `callId`, `reason`,
+and `signal`; it has neither `arguments` nor `params`. Policy therefore reads the
+complete JSON arguments from the journal event matching both `callId` and
+`toolName`. Display truncation happens separately. Missing or invalid metadata
+is treated as high risk. The configured Policy Guard and timeout are passed from
+the real plugin entry point to the bridge.
+
+The real Cordis `internal/listener` hook can intercept a listener registration.
+The apply regression uses that hook to suppress the approval probes without
+mocking `apply()` or waterfall dispatch. Startup must reject, leave the fiber
+failed, and make no enrollment request when the self-check cannot run. The
+self-check executes before host resources are created and disposes its probes
+in `finally`, including after registration errors.
+
+Review regression CI before these fixes:
+[run 37236875362](https://github.com/lottooss/remora/actions/runs/37236875362),
+commit `90a59c8`: 17 failed / 341 passed. See
+[P7-H10 handoff](../agent-handoffs/P7-H10.md) for post-fix command evidence and
+remaining contract-parity limits.
 

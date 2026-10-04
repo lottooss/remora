@@ -23,7 +23,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { truncateUtf8 } from '../adapter/event-map.ts'
 import type { DeviceRegistry } from '../devices/index.ts'
 import type { PendingRegistry } from './pending.ts'
-import { raceApproval, raceQuestion, isDshQuestionAnswer } from './race.ts'
+import { raceApproval, raceQuestion, isDshQuestionAnswer, type ApprovalToolCall } from './race.ts'
 import type { PolicyGuard } from '../policy/index.ts'
 
 export interface AnswerBridgeOptions {
@@ -59,25 +59,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 export async function runAnswerBridgeSelfCheck(ctx: Context): Promise<boolean> {
   const order: string[] = []
-
-  const bridge = ctx.on(
-    'approval/request',
-    async function bridgeProbe(_req: ApprovalRequestEvent): Promise<ApprovalOutcome> {
-      order.push('bridge-prepend')
-      return 'unavailable'
-    },
-    { prepend: true },
-  )
-
-  const sentinel = ctx.on(
-    'approval/request',
-    async function sentinelProbe(_req: ApprovalRequestEvent): Promise<ApprovalOutcome> {
-      order.push('sentinel-ordinary')
-      return 'unavailable'
-    },
-  )
+  let bridge: (() => void) | undefined
+  let sentinel: (() => void) | undefined
+  let dispatched = false
 
   try {
+    bridge = ctx.on(
+      'approval/request',
+      async function bridgeProbe(_req: ApprovalRequestEvent): Promise<ApprovalOutcome> {
+        order.push('bridge-prepend')
+        return 'unavailable'
+      },
+      { prepend: true },
+    )
+    sentinel = ctx.on(
+      'approval/request',
+      async function sentinelProbe(_req: ApprovalRequestEvent): Promise<ApprovalOutcome> {
+        order.push('sentinel-ordinary')
+        return 'unavailable'
+      },
+    )
     await ctx.waterfall(
       'approval/request',
       {
@@ -93,16 +94,17 @@ export async function runAnswerBridgeSelfCheck(ctx: Context): Promise<boolean> {
         return 'unavailable'
       },
     )
+    dispatched = true
   } catch {
-    // A dispatch error counts as a failed check; the observed order decides.
+    // Registration and dispatch errors both fail startup closed.
   } finally {
-    bridge()
-    sentinel()
+    bridge?.()
+    sentinel?.()
   }
 
   // Pass only if the prepend probe ran first and no ordinary listener ran:
   // an empty order (waterfall could not dispatch at all) fails closed.
-  const passed = order[0] === 'bridge-prepend' && !order.includes('sentinel-ordinary')
+  const passed = dispatched && order[0] === 'bridge-prepend' && !order.includes('sentinel-ordinary')
   if (!passed) {
     ctx.logger.error(
       'CRITICAL: Remora AnswerBridge listener is NOT ordered first in Cordis waterfall (or the probe leaked): observed order: %j',
@@ -124,34 +126,22 @@ export async function runAnswerBridgeSelfCheck(ctx: Context): Promise<boolean> {
  * parsed-and-re-serialized arguments, truncated per the RCP/1 §5 args budget;
  * malformed JSON falls back to the raw string on both fields.
  */
-function buildPreview(rawArguments: unknown, toolName: unknown): { text: string; json: string } {
-  if (rawArguments === undefined || rawArguments === null) {
-    return { text: typeof toolName === 'string' ? toolName : '', json: '{}' }
-  }
-
-  let parsed: unknown = rawArguments
-  if (typeof rawArguments === 'string') {
-    try {
-      parsed = JSON.parse(rawArguments)
-    } catch {
-      // Malformed model JSON: both preview fields carry the raw string.
-      const raw = truncateUtf8(rawArguments, PREVIEW_MAX_BYTES)
-      return { text: raw, json: raw }
-    }
-  }
-
-  let serialized: string
+function buildToolCall(rawArguments: string): ApprovalToolCall {
+  let parsed: unknown
   try {
-    serialized = JSON.stringify(parsed) ?? ''
+    parsed = JSON.parse(rawArguments)
   } catch {
-    // Non-JSON arguments (cycle or bigint): the raw text is the best preview.
-    const raw = typeof rawArguments === 'string' ? rawArguments : ''
-    return { text: truncateUtf8(raw, PREVIEW_MAX_BYTES), json: '{}' }
+    // Malformed model JSON can be displayed, but is not valid policy input.
+    const raw = truncateUtf8(rawArguments, PREVIEW_MAX_BYTES)
+    return { preview: { text: raw, json: raw } }
   }
-
+  const serialized = JSON.stringify(parsed)
   const command = isRecord(parsed) ? parsed['command'] : undefined
   const text = typeof command === 'string' && command.length > 0 ? command : serialized
-  return { text: truncateUtf8(text, PREVIEW_MAX_BYTES), json: truncateUtf8(serialized, PREVIEW_MAX_BYTES) }
+  return {
+    preview: { text: truncateUtf8(text, PREVIEW_MAX_BYTES), json: truncateUtf8(serialized, PREVIEW_MAX_BYTES) },
+    ...(isRecord(parsed) ? { arguments: parsed } : {}),
+  }
 }
 
 /**
@@ -160,7 +150,7 @@ function buildPreview(rawArguments: unknown, toolName: unknown): { text: string;
  * at dispatch time (verified by P0-S2 Q7), so the access is structural
  * narrowing over `unknown` — the type-level `Agent` carries no `session`.
  */
-function findPreview(agent: unknown, callId: string): { text: string; json: string } | undefined {
+function findToolCall(agent: unknown, callId: string, toolName: string): ApprovalToolCall | undefined {
   if (!isRecord(agent)) return undefined
   const session = agent['session']
   if (!isRecord(session)) return undefined
@@ -169,7 +159,7 @@ function findPreview(agent: unknown, callId: string): { text: string; json: stri
 
   let snapshot: unknown
   try {
-    snapshot = snapshotEvents()
+    snapshot = snapshotEvents.call(session)
   } catch {
     return undefined
   }
@@ -181,7 +171,10 @@ function findPreview(agent: unknown, callId: string): { text: string; json: stri
     if (!isRecord(event) || event['type'] !== 'tool/call') continue
     const data = event['data']
     if (!isRecord(data) || data['callId'] !== callId) continue
-    return buildPreview(data['arguments'], data['name'])
+    // Bind the arguments to BOTH the call id and the tool being approved.
+    // Do not fall back to an older call if the newest matching data is invalid.
+    if (data['name'] !== toolName || typeof data['arguments'] !== 'string') return undefined
+    return buildToolCall(data['arguments'])
   }
   return undefined
 }
@@ -206,7 +199,7 @@ export function registerAnswerBridge(ctx: Context, options: AnswerBridgeOptions)
       const outcome = await raceApproval(req, next, options.pendingRegistry, {
         approvalTimeoutMs: options.approvalTimeoutMs,
         policyGuard: options.policyGuard,
-        findPreview,
+        findToolCall,
         hasPairedDevices,
       })
       // dsh's approval waterfall closes over the ApprovalOutcome vocabulary.

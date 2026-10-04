@@ -25,7 +25,7 @@
 import { Context, type Message } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval/types'
-import { encodeBase64Url } from '@remora/crypto'
+import { encodeBase64Url, hexToBytes } from '@remora/crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as host from '../src/index.ts'
 import type { ManagementFetchRoute } from '../src/web/routes.ts'
@@ -677,6 +677,12 @@ describe('remora host plugin apply() harness: device persistence (P7-H4)', () =>
 
 describe('remora host plugin apply() harness: AnswerBridge policy (P7-H10)', () => {
   const DEVICE_ID = 'd_abcdefghijklmnopqrstuvwxyz'
+  // P-256 generator point (test private scalar 1), encoded as SPKI DER.
+  const APPROVAL_PUBLIC_KEY = hexToBytes(
+    '3059301306072a8648ce3d020106082a8648ce3d03010703420004' +
+    '6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296' +
+    '4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5',
+  )
 
   async function mountBridge(config: Partial<host.Config> = {}) {
     const ctx = new Context()
@@ -689,6 +695,7 @@ describe('remora host plugin apply() harness: AnswerBridge policy (P7-H10)', () 
       noisePublicKey: new Uint8Array(32).fill(1),
       devicePsk: new Uint8Array(32).fill(2),
       pushKey: new Uint8Array(32).fill(3),
+      approvalPublicKey: APPROVAL_PUBLIC_KEY,
       createdAt: 1,
       lastSeenAt: 1,
       revoked: false,
@@ -746,6 +753,20 @@ describe('remora host plugin apply() harness: AnswerBridge policy (P7-H10)', () 
       }), { deviceId: DEVICE_ID, channelId: 1 })
       expect(JSON.parse(reply ?? '{}')).toMatchObject({ ok: false, e: { code: 'signature_required' } })
       expect(approval.requiresSignature).toBe(true)
+      const invalidSignatureReply = await server.handleMessage(JSON.stringify({
+        v: 1,
+        k: 'req',
+        id: 3,
+        m: 'approvals.answer',
+        p: {
+          id: approval.id,
+          outcome: 'allowed-once',
+          argsDigest: approval.argsDigest,
+          issuedAt: Date.now(),
+          sig: encodeBase64Url(new Uint8Array(70).fill(9)),
+        },
+      }), { deviceId: DEVICE_ID, channelId: 1 })
+      expect(JSON.parse(invalidSignatureReply ?? '{}')).toMatchObject({ ok: false, e: { code: 'signature_invalid' } })
     } finally {
       controller.abort()
       await outcome
@@ -790,8 +811,11 @@ describe('remora host plugin apply() harness: AnswerBridge policy (P7-H10)', () 
     })
     await provideCredentialsStore(ctx, credentialsWithSecret())
     const relay = await startRelay()
-    const fiber = await ctx.plugin(host, createValidHostConfig({ relayUrl: relay.origin }))
+    const fiber = ctx.plugin(host, createValidHostConfig({ relayUrl: relay.origin }))
     cleanups.push(async () => { await fiber.dispose() })
+    const failure = await fiber.then(() => undefined, (error: unknown) => error)
+    expect(failure).toBeInstanceOf(Error)
+    expect(String(failure)).toContain('AnswerBridge waterfall self-check failed')
     expect(fiber.state).toBe(FIBER_STATE.FAILED)
     expect(messages.some((message) => firstArgString(message)?.startsWith('remora: host started'))).toBe(false)
     expect(relay.enrollRequests).toHaveLength(0)
