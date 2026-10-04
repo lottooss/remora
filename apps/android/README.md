@@ -40,9 +40,27 @@ Build with JDK 21 (set `sdk.dir` in the git-ignored `local.properties`, or `ANDR
 - **Gradle check:** `./gradlew checkModuleDependencyRules` fails when a `:feature:*` module declares a dependency outside `:core:ui`, `:core:data`, `:core:model`, or pulls in OkHttp, Room (`androidx.room`/`androidx.room3`) or Tink. It also runs as part of each feature module's `check`.
 - **Source-review rule (not expressible in Gradle):** `android.security.keystore` / `KeyGenParameterSpec` APIs may appear only under `core/security/**`; features and other cores go through `:core:security`. Reviewers reject Keystore imports elsewhere.
 
-## App shell (P1-K2)
+## Application composition (P7)
 
-- Navigation graph in `:app` (`Routes.kt`, `RemoraNavHost.kt`): `Pair`, `Hosts`, `Sessions`, `Conversation/{sessionId}`, `NewSession`, `Files/{sessionId}`, `Approvals`, `Settings` (+ `settings/diagnostics`), with placeholder screens in their feature modules and a bottom bar on top-level destinations.
+- `RemoraViewModel` owns one runtime per paired host. Each runtime has its own connection,
+  session/interaction/workspace repositories and services. Conversation, files and notification
+  routes carry the host id explicitly; mutations validate the current selection again before dispatch.
+- `RemoraNavHost` supplies real services and callbacks to pairing, hosts, sessions, conversation,
+  new-session, files, approvals, settings and diagnostics screens. Models and remote-start policy
+  come from the authenticated host instead of a sample catalog.
+- Foreground connections survive a 30-second activity transition grace period. Backgrounding
+  beyond that disconnects them; foregrounding restores global and visible-session streams.
+  Pairing and push registration reserve the relay identity to avoid replacing the pairing socket.
 - Material 3 theme in `:core:ui` (`Theme.kt`, `Color.kt`, `Type.kt`) — dark mode + dynamic color (Android 12+), plus `StatusDot` status components.
-- App-lock gate placeholder in `:core:security` (`AppLockGate`): locked on cold start, re-locks after 5 min in background; BiometricPrompt wiring lands in P3-K1.
+- `AppLockGate` requires the real system authentication prompt on cold start and after five minutes
+  in the background. High-risk approvals use a biometric-bound signing operation and revalidate
+  the displayed text/JSON digest and pending request after authentication.
+- Approval-key rotation preserves the active key while the PC confirms the candidate. The user
+  then explicitly acknowledges PC confirmation in Settings before activating the phone's candidate.
+  RCP currently provides no automatic confirmation event; premature activation fails signature
+  verification on the host and is not reported as proof of PC acceptance.
 - Backup is off: `android:allowBackup="false"` plus `dataExtractionRules`/`fullBackupContent` excluding all data.
+
+The implementation pass is distinct from release evidence. Android tests, installed-app checks,
+Firebase delivery, physical biometrics and the frozen-spec reconciliation remain tracked in the
+P7 handoffs. No Firebase configuration, signing key or deployment credential is committed.

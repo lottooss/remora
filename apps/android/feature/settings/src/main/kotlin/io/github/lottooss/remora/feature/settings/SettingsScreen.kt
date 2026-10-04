@@ -87,8 +87,9 @@ fun SettingsScreen(
                             Text(stringResource(R.string.settings_activate_pending_key))
                         }
                     }
-                    Button(onClick = onRotateApprovalKey, enabled = enabled && !state.rotationPending && state.device != null,
-                        modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.settings_rotate)) }
+                    Button(onClick = onRotateApprovalKey, enabled = enabled && state.device != null,
+                        modifier = Modifier.fillMaxWidth()) { Text(stringResource(
+                            if (state.rotationPending) R.string.settings_retry_rotation else R.string.settings_rotate)) }
                     OutlinedButton(onClick = { unpairConfirmation = true }, enabled = enabled && state.device != null,
                         modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.settings_unpair)) }
                 }

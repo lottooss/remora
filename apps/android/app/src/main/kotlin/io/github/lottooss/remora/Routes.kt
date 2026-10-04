@@ -9,18 +9,23 @@ object Routes {
     const val PAIR = "pair"
     const val HOSTS = "hosts"
     const val SESSIONS = "sessions"
-    const val NEW_SESSION = "new_session"
+    const val NEW_SESSION = "new_session/{hostId}"
     const val APPROVALS = "approvals"
     const val SETTINGS = "settings"
     const val DIAGNOSTICS = "settings/diagnostics"
 
-    const val CONVERSATION = "conversation/{sessionId}"
-    const val FILES = "files/{sessionId}"
+    const val CONVERSATION = "host/{hostId}/conversation/{sessionId}"
+    const val FILES = "host/{hostId}/files/{sessionId}"
+    const val HOST_APPROVALS = "host/{hostId}/approvals"
+    const val HOST_ID_ARG = "hostId"
     const val SESSION_ID_ARG = "sessionId"
 
     /** Destinations shown with the bottom navigation bar. */
     val TOP_LEVEL = setOf(PAIR, HOSTS, SESSIONS, APPROVALS, SETTINGS)
 
-    fun conversation(sessionId: String): String = "conversation/$sessionId"
-    fun files(sessionId: String): String = "files/$sessionId"
+    fun conversation(hostId: String, sessionId: String): String =
+        "host/${android.net.Uri.encode(hostId)}/conversation/${android.net.Uri.encode(sessionId)}"
+    fun files(hostId: String, sessionId: String): String =
+        "host/${android.net.Uri.encode(hostId)}/files/${android.net.Uri.encode(sessionId)}"
+    fun newSession(hostId: String): String = "new_session/${android.net.Uri.encode(hostId)}"
 }

@@ -29,4 +29,5 @@
     <string name="diagnostics_privacy">Connection events and versions only. Session content, paths, tokens, and keys are excluded.</string>
     <string name="settings_activate_pending_key">I confirmed on the PC</string>
     <string name="settings_pending_fingerprint">New key fingerprint: %1$s</string>
+    <string name="settings_retry_rotation">Retry PC confirmation</string>
 </resources>

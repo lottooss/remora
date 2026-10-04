@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="operation_failed">The request could not be completed. Check the host connection and try again.</string>
+    <string name="connection_unavailable">Could not open a secure connection. Check the PC or pair again if its keys changed.</string>
+    <string name="choose_host">Choose a paired PC to continue.</string>
+    <string name="open_hosts">Choose PC</string>
+    <string name="loading_host">Connecting to your PC…</string>
+    <string name="no_model_selected">No model selected</string>
+    <string name="interaction_already_resolved">This request was already resolved or expired.</string>
+    <string name="approval_key_needs_rotation">Your biometric key changed. Open Settings and confirm the replacement key on the PC.</string>
+</resources>
