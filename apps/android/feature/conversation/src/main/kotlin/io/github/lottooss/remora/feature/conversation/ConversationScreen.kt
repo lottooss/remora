@@ -42,11 +42,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -54,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import io.github.lottooss.remora.core.data.ControlState
 import io.github.lottooss.remora.core.data.InteractionRepository
 import io.github.lottooss.remora.core.data.LiveDeltaOverlay
 import io.github.lottooss.remora.core.data.ModelRef
@@ -66,6 +69,8 @@ import io.github.lottooss.remora.core.data.SessionRepository
 import io.github.lottooss.remora.core.data.SyncEngine
 import io.github.lottooss.remora.core.ui.ConnectionStatus
 import io.github.lottooss.remora.core.ui.StatusDot
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * Conversation screen providing smooth transcript rendering, live streaming bubbles,
@@ -86,7 +91,7 @@ fun ConversationScreen(
     availableModels: List<ModelRef> = emptyList(),
     selectedModel: ModelRef? = null,
     onSelectModel: ((ModelRef) -> Unit)? = null,
-    onSendPrompt: ((text: String, delivery: String) -> Unit)? = null,
+    onSendPrompt: (suspend (text: String, delivery: String) -> Boolean)? = null,
     onCancelTurn: (() -> Unit)? = null,
     onLoadOlder: (() -> Unit)? = null,
     interactionRepository: InteractionRepository? = null,
@@ -96,6 +101,10 @@ fun ConversationScreen(
 ) {
     val repoEvents by sessionRepository?.getEventsFlow(sessionId)?.collectAsState()
         ?: remember { mutableStateOf(initialEvents ?: emptyList()) }
+
+    val controlStates by sessionRepository?.controlStates?.collectAsState()
+        ?: remember { mutableStateOf(emptyMap<String, ControlState>()) }
+    val control = controlStates[sessionId]
 
     val liveOverlay by syncEngine?.getLiveOverlay(sessionId)?.collectAsState()
         ?: remember { mutableStateOf(null) }
@@ -118,11 +127,15 @@ fun ConversationScreen(
     val hasOlder = sessionRepository?.hasOlder(sessionId) ?: false
 
     val events = repoEvents.ifEmpty { initialEvents ?: emptyList() }
-    val isRunning = events.any { it is SessionEvent.TurnStart } &&
-        events.none { it is SessionEvent.TurnEnd && it.seq > events.filterIsInstance<SessionEvent.TurnStart>().maxOf { s -> s.seq } }
+    val latestTurnStart = events.filterIsInstance<SessionEvent.TurnStart>().maxOfOrNull { it.seq }
+    val latestTurnEnd = events.filterIsInstance<SessionEvent.TurnEnd>().maxOfOrNull { it.seq }
+    val isRunning = control?.running ?: (latestTurnStart != null && (latestTurnEnd == null || latestTurnStart > latestTurnEnd))
 
-    var inputText by remember { mutableStateOf("") }
-    var deliveryMode by remember { mutableStateOf("queue") } // "queue" or "steer"
+    var inputText by remember(sessionRepository, sessionId) { mutableStateOf("") }
+    var deliveryMode by remember(sessionRepository, sessionId) { mutableStateOf("queue") }
+    var isSending by remember(sessionRepository, sessionId) { mutableStateOf(false) }
+    val sendScope = rememberCoroutineScope()
+    val unconfirmedMessage = stringResource(R.string.conversation_send_unconfirmed)
     var modelMenuExpanded by remember { mutableStateOf(false) }
 
     val isOnline = connectionStatus == ConnectionStatus.ONLINE
@@ -255,6 +268,31 @@ fun ConversationScreen(
                         LiveStreamBubble(overlay = liveOverlay!!)
                     }
                 }
+
+                val queue = control?.queue.orEmpty()
+                if (queue.isNotEmpty()) {
+                    item(key = "control_queue_header") {
+                        Text(stringResource(R.string.conversation_queued_messages, queue.size), style = MaterialTheme.typography.titleSmall)
+                    }
+                    items(queue, key = { "queue_${it.itemId}" }) { queued ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(stringResource(if (queued.delivery == "steer") R.string.conversation_delivery_steer else R.string.conversation_delivery_queue),
+                                    style = MaterialTheme.typography.labelSmall)
+                                Text(queued.text, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+                val jobs = control?.jobs.orEmpty()
+                if (jobs.isNotEmpty()) {
+                    item(key = "control_jobs_header") {
+                        Text(stringResource(R.string.conversation_background_jobs), style = MaterialTheme.typography.titleSmall)
+                    }
+                    items(jobs, key = { "job_${it.id}" }) { job ->
+                        Text(stringResource(R.string.conversation_job_status, job.title, job.state), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
             }
 
             // Approval / Question Takeover or Composer bar
@@ -279,11 +317,32 @@ fun ConversationScreen(
                     onDeliveryChange = { deliveryMode = it },
                     isEnabled = isOnline,
                     isRunning = isRunning,
+                    isSending = isSending,
+                    canSend = onSendPrompt != null,
                     onSend = {
-                        val prompt = inputText.trim()
-                        if (prompt.isNotBlank() && isOnline) {
-                            onSendPrompt?.invoke(prompt, deliveryMode)
-                            inputText = ""
+                        val draft = inputText
+                        val prompt = draft.trim()
+                        val submit = onSendPrompt
+                        val delivery = deliveryMode
+                        if (prompt.isNotBlank() && isOnline && !isSending && submit != null) {
+                            isSending = true
+                            sendScope.launch {
+                                val acknowledged = try {
+                                    submit(prompt, delivery)
+                                } catch (cancelled: CancellationException) {
+                                    throw cancelled
+                                } catch (_: Exception) {
+                                    false
+                                } finally {
+                                    isSending = false
+                                }
+                                if (acknowledged) {
+                                    // Editing a new draft during the request must not erase that draft.
+                                    if (inputText == draft) inputText = ""
+                                } else {
+                                    snackbarHostState.showSnackbar(unconfirmedMessage)
+                                }
+                            }
                         }
                     },
                     onStop = {
@@ -586,6 +645,8 @@ fun ComposerBar(
     onSend: () -> Unit,
     onStop: () -> Unit,
     modifier: Modifier = Modifier,
+    isSending: Boolean = false,
+    canSend: Boolean = true,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -645,9 +706,9 @@ fun ComposerBar(
 
                 Button(
                     onClick = onSend,
-                    enabled = isEnabled && text.isNotBlank(),
+                    enabled = isEnabled && canSend && !isSending && text.isNotBlank(),
                 ) {
-                    Text("Send")
+                    Text(stringResource(if (isSending) R.string.conversation_sending else R.string.conversation_send))
                 }
             }
         }

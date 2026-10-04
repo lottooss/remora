@@ -36,3 +36,7 @@ All packet test/evidence checkboxes remain unchecked. Build and behavioral verif
 ## Source-review follow-up
 
 Added an explicit temporaryConnectionsAllowed callback to the registrar so the composition root can reserve foreground/pairing identities before their sockets exist. Removed the unused duplicate settings rotation method; InteractionService is the single rotation implementation. No build or test execution was added.
+
+## Conversation follow-up (2026-10-05)
+
+ConversationScreen now awaits a suspend Boolean prompt callback, retains drafts after unconfirmed/error responses, prevents concurrent sends, and clears only the acknowledged draft (without erasing edits made while waiting). Running state prefers sessions.control; queued messages and background jobs are displayed from that repository. New text is localized. The conversation module declares its existing workspace coroutine dependency explicitly. This change follows the approval worker commit locally; the Integrator should cherry-pick only the new conversation commit, not duplicate the approval commit. No tests or build were run.
