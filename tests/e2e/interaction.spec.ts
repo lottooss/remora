@@ -1,4 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest'
+import { createFixtureHostRuntime } from '../helpers/host-runtime.ts'
 import {
   ChannelManager,
   HostRelayConnection,
@@ -54,6 +55,7 @@ describe('End-to-End Interaction & AnswerBridge (P3-H1)', () => {
     const rcpServer = new RcpServer({
       hostId: hostIdentity.hostId,
       hostName: 'E2E-Interaction-Host',
+      runtimeProvider: createFixtureHostRuntime(['interaction']),
     })
 
     // Register interaction RCP methods

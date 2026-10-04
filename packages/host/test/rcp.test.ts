@@ -2,7 +2,7 @@ import { MAX_RCP_MESSAGE_BYTES, RCP_ERROR_CODES, createRcpError } from '@remora/
 import { describe, expect, it } from 'vitest'
 import { RcpMethodError, RcpServer, type RcpContext } from '../src/rcp/index.ts'
 
-const HOST_ID = 'h_test0000000000000000000000'
+const HOST_ID = 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
 const DEVICE_A: RcpContext = { deviceId: 'd_device_a', channelId: 1 }
 const DEVICE_B: RcpContext = { deviceId: 'd_device_b', channelId: 2 }
 
@@ -10,9 +10,13 @@ function createServer(now: () => number = () => Date.now()): RcpServer {
   return new RcpServer({
     hostId: HOST_ID,
     hostName: 'Test Host',
-    statusProvider: {
-      isRelayConnected: () => true,
-      getPairedDevicesCount: () => 2,
+    runtimeProvider: {
+      hello: () => ({
+        os: 'linux', pathSeparator: '/', versions: { remora: '1.0.0-test', dsh: '0.0.0-test' },
+        features: ['sessions', 'files', 'diffs.git'], roots: ['/test'],
+        policy: { approvalBiometric: 'high', allowRemoteSessionStart: false },
+      }),
+      status: () => ({ agentsRunning: 2, keepAwake: true, dsh: { version: '0.0.0-test', profile: 'remora-test' } }),
     },
     now,
   })
@@ -37,15 +41,16 @@ async function request(
 
 describe('RcpServer', () => {
   it('answers hello with the host identity, capabilities, and limits', async () => {
-    const res = await request(createServer(), DEVICE_A, 1, 'hello')
+    const res = await request(createServer(), DEVICE_A, 1, 'hello', { rcp: [1], app: { name: 'remora-testkit', version: '1.0.0-test' } })
     expect(res.k).toBe('res')
     expect(res.id).toBe(1)
     expect(res.ok).toBe(true)
-    expect(res.r.host).toEqual({ id: HOST_ID, name: 'Test Host', version: expect.any(String) })
-    expect(res.r.rcp).toEqual([1])
-    expect(res.r.features).toEqual(['sessions', 'files', 'diffs'])
-    expect(res.r.policy).toEqual({ maxMessageBytes: MAX_RCP_MESSAGE_BYTES })
-    expect(res.r.policy.maxMessageBytes).toBe(49_152)
+    expect(res.r.host).toEqual({ id: HOST_ID, name: 'Test Host', os: 'linux', pathSeparator: '/', versions: { remora: '1.0.0-test', dsh: '0.0.0-test' } })
+    expect(res.r.rcp).toBe(1)
+    expect(res.r.features).toEqual(['sessions', 'files', 'diffs.git'])
+    expect(res.r.policy).toEqual({ approvalBiometric: 'high', allowRemoteSessionStart: false })
+    expect(res.r.limits).toEqual({ maxMessageBytes: MAX_RCP_MESSAGE_BYTES, maxStreams: 10 })
+    expect(res.r.roots).toEqual(['/test'])
   })
 
   it('answers ping with the echoed t and the host clock', async () => {
@@ -67,7 +72,7 @@ describe('RcpServer', () => {
     clock = 6_000
     const res = await request(server, DEVICE_A, 3, 'host.status')
     expect(res.ok).toBe(true)
-    expect(res.r).toEqual({ relayConnected: true, pairedDevicesCount: 2, uptimeMs: 5_000 })
+    expect(res.r).toEqual({ agentsRunning: 2, keepAwake: true, uptimeMs: 5_000, dsh: { version: '0.0.0-test', profile: 'remora-test' } })
   })
 
   it('answers method_not_found for methods without a handler', async () => {

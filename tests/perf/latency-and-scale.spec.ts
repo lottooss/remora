@@ -21,6 +21,7 @@
  * network-resilience suite and the full-stack tests here.
  */
 import { describe, expect, it, beforeAll, afterAll } from 'vitest'
+import { createFixtureHostRuntime } from '../helpers/host-runtime.ts'
 import { randomUUID } from 'node:crypto'
 import {
   ChannelManager,
@@ -200,10 +201,7 @@ async function startHost(env: E2eEnvironment, name: string): Promise<HostHarness
   const rcpServer = new RcpServer({
     hostId: identity.hostId,
     hostName: name,
-    statusProvider: {
-      isRelayConnected: () => hostRelay?.isConnected ?? false,
-      getPairedDevicesCount: () => registry.listDevices().filter((d) => !d.revoked).length,
-    },
+    runtimeProvider: createFixtureHostRuntime(),
   })
   const sessionAdapter = new SessionAdapter({ gateway, streamCoalesceMs: 150 })
   registerSessionMethods(rcpServer, sessionAdapter)

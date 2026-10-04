@@ -274,3 +274,33 @@ Source read from the owner's existing pinned checkout at `a4c74a9`, matching
 
 No upstream package, owner profile, wire schema, or conformance vector changed.
 Build, suite execution, and real-dsh verification are deferred by user request.
+
+### 9.4 Handshake runtime metadata source inspection (2026-10-05)
+
+Source-only inspection of the same pinned `a4c74a9` checkout:
+
+- `packages/boot/app-boot/src/index.ts:boot` initializes `ctx.baseUrl` to the
+  file URL of `dirname(absoluteConfigPath)`, before mounting Loader/plugins.
+  `vendor/cordis/src/context.ts` exposes `ctx.root` as the unchanged application
+  root, including from child plugin contexts.
+- `apps/cli/src/profile-boot.ts:runProfile` passes
+  `<composed.profile.dir>/cordis.yml` to `boot`. The profile name is its directory
+  basename (`packages/boot/app-boot/src/profile.ts:loadProfileDirectory`).
+  The adapter checks the root directory's package manifest contains
+  `dsh.profile.bundles` before reporting that basename.
+- `apps/cli/src/bin.ts:readVersion` reads `../package.json` relative to its
+  source `src/bin.ts` or installed `lib/bin.js`. The adapter resolves the running
+  `process.argv[1]` through symlinks, applies that same layout, and validates the
+  manifest's `name: @deepseek-ai/dsh` and nonempty version. It never substitutes
+  the pinned lock version for the running version. Unknown launchers/packaged
+  executables without this layout fail metadata calls closed.
+- `packages/core/agent/src/index.ts:Agents.list` returns all live Agent objects.
+  `agent.status === 'running'` provides the live count independently of the
+  keep-awake configuration. Cordis injection now declares `agents` and
+  `sessions`, which the foreground activity adapter also requires.
+
+Only the adapter reads these dsh-specific seams. Production composition supplies
+the real Remora package version, registered capability names, Policy Guard roots
+and policy, and the keep-awake driver's current acquisition state. The RCP server
+validates both input and output against the existing shared schemas. No shared
+schema/spec, upstream file, or owner profile changed. Builds/tests remain deferred.

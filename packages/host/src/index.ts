@@ -4,6 +4,7 @@
  * (`cordis.patch.yml`).
  */
 import os from 'node:os'
+import manifest from '../package.json' with { type: 'json' }
 import { Logger, type Context, type Exporter, type Message } from '@deepseek-ai/cordis'
 // Declaration merging: this type-only import teaches the compiler that
 // `ctx.typertGateway` (api-gateway) exists on the Cordis Context. The dsh
@@ -17,7 +18,8 @@ import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
 import { RetryingGateway } from './adapter/gateway.ts'
 import { createSessionActivitySource } from './adapter/session-control.ts'
-import { loadPersistentDeviceRegistry, type DeviceRecord } from './devices/index.ts'
+import { createDshRuntimeProvider } from './adapter/runtime.ts'
+import { loadPersistentDeviceRegistry } from './devices/index.ts'
 import { loadOrCreateHostIdentity } from './identity/credentials.ts'
 import { PairingService } from './pairing/index.ts'
 import { RcpServer } from './rcp/index.ts'
@@ -84,7 +86,7 @@ export const name = 'remora'
  * fiber — see the P0-S1 spike). The optional web connection is NOT here:
  * the management routes register through `ctx.inject(['connection'], ...)`.
  */
-export const inject: string[] = ['typertGateway', 'credentials', 'storage']
+export const inject: string[] = ['typertGateway', 'credentials', 'storage', 'agents', 'sessions']
 
 /**
  * Plugin body: resolve configuration, load-or-create the persistent host
@@ -288,13 +290,22 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     rotations: approvalRotations,
   })
 
+  const policyGuard = new DefaultPolicyGuard({
+    remoteRoots: resolved.remoteRoots,
+    approvalBiometric: resolved.approvalBiometric,
+    approvalAuth: resolved.approvalAuth,
+    allowRemoteSessionStart: resolved.allowRemoteSessionStart,
+  })
+
   const rcpServer = new RcpServer({
     hostId: identity.hostId,
     hostName,
-    statusProvider: {
-      isRelayConnected: () => relay.isConnected,
-      getPairedDevicesCount: () => registry.listDevices().filter((d: DeviceRecord) => !d.revoked).length,
-    },
+    runtimeProvider: createDshRuntimeProvider(ctx, {
+      remoraVersion: manifest.version,
+      features: ['sessions', 'interaction', 'workspaces', 'files', 'diffs.git', 'notify', 'models'],
+      policyGuard,
+      isKeepAwakeAcquired: () => keepAwakeManager.isAcquired,
+    }),
   })
 
   // Observation seam for the method-set parity test (P7-H7): the plugin
@@ -317,13 +328,6 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     registry,
     rotations: approvalRotations,
     scheduleRelayRevoke: scheduleUnpairRelayRevoke,
-  })
-
-  const policyGuard = new DefaultPolicyGuard({
-    remoteRoots: resolved.remoteRoots,
-    approvalBiometric: resolved.approvalBiometric,
-    approvalAuth: resolved.approvalAuth,
-    allowRemoteSessionStart: resolved.allowRemoteSessionStart,
   })
 
   const pendingRegistry = new PendingRegistry()

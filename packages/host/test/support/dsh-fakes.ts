@@ -1,15 +1,16 @@
 /**
  * Fakes of the dsh side of the plugin boundary for the `apply()` harness
  * (docs/tasks/P7-H1.md). Only the services dsh itself provides may be faked
- * here: `ctx.typertGateway`, `ctx.credentials`, `ctx.storage` (docs/upstream/
+ * here: `ctx.typertGateway`, `ctx.credentials`, `ctx.storage`, `ctx.agents`,
+ * `ctx.sessions` (docs/upstream/
  * dsh-integration.md §4, §7). The unit under test — the host plugin mounted
  * through `apply()` on a real `@deepseek-ai/cordis` Context — is never faked.
  *
  * Services are provided inside their own plugin fibers, the way real dsh
  * provides its services, so the plugin under test resolves them through the
- * Cordis `inject` contract exactly as in the real process. Every fake fails
- * loudly when called: plugin boot must not use these services, and an
- * unexpected call must fail the test instead of passing silently.
+ * Cordis `inject` contract exactly as in the real process. Gateway and
+ * persistence fakes refuse unexpected calls; activity registries default to
+ * an explicitly empty fake runtime for tests that do not create agents.
  */
 import type { Context } from '@deepseek-ai/cordis'
 import type { TypertGateway } from '../../src/adapter/gateway.ts'
@@ -60,21 +61,27 @@ export function createFakeStorage(): { domain: { open: () => never } } {
   }
 }
 
-/** The fake dsh services a test asks for; absent keys stay unprovided. */
+/** Gateway/persistence omissions stay unprovided; activity registries default empty. */
 export interface FakeDshServices {
   typertGateway?: TypertGateway
   credentials?: ReturnType<typeof createFakeCredentials>
   storage?: ReturnType<typeof createFakeStorage>
+  agents?: { list(): readonly unknown[]; get(id: string): unknown }
+  sessions?: { list(): readonly unknown[]; get(id: string): unknown }
 }
 
 /**
  * Provides the requested fake services on the given context, each inside its
  * own plugin fiber like a real dsh service. Returns once every service fiber
- * is active, so a plugin mounted afterwards sees them (or, for the names left
- * out, stays pending).
+ * is active. Gateway/persistence omissions keep dependent plugins pending;
+ * callers can override the empty activity registries when exercising agents.
  */
 export async function provideFakeDshServices(ctx: Context, services: FakeDshServices): Promise<void> {
-  const entries = Object.entries(services).filter((entry): entry is [string, object] => entry[1] !== undefined)
+  const entries = Object.entries({
+    agents: { list: () => [], get: () => undefined },
+    sessions: { list: () => [], get: () => undefined },
+    ...services,
+  }).filter((entry): entry is [string, object] => entry[1] !== undefined)
   await Promise.all(
     entries.map(([name, value]) => ctx.plugin({ apply: (serviceCtx: Context) => void serviceCtx.provide(name, value) })),
   )

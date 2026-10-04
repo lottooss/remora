@@ -13,6 +13,7 @@ import {
 } from '@remora/host'
 import { decodeBase64Url } from '@remora/crypto'
 import { E2eEnvironment, FakeDevice } from '@remora/testkit'
+import { createFixtureHostRuntime } from '../helpers/host-runtime.ts'
 
 describe('End-to-End Vertical Slice (P2-T1)', () => {
   let env: E2eEnvironment | null = null
@@ -45,6 +46,7 @@ describe('End-to-End Vertical Slice (P2-T1)', () => {
     const rcpServer = new RcpServer({
       hostId: hostIdentity.hostId,
       hostName: 'E2E-Pairing-Host',
+      runtimeProvider: createFixtureHostRuntime(),
     })
 
     hostRelay = new HostRelayConnection({
@@ -146,10 +148,7 @@ describe('End-to-End Vertical Slice (P2-T1)', () => {
     const rcpServer = new RcpServer({
       hostId: hostIdentity.hostId,
       hostName: 'E2E-FullSlice-Host',
-      statusProvider: {
-        isRelayConnected: () => hostRelay?.isConnected ?? false,
-        getPairedDevicesCount: () => registry.listDevices().filter((d) => !d.revoked).length,
-      },
+      runtimeProvider: createFixtureHostRuntime(),
     })
 
     let promptCount = 0
@@ -428,7 +427,8 @@ describe('End-to-End Vertical Slice (P2-T1)', () => {
     })
 
     const statusAfterReconnect = await reconnectedChannel.hostStatus()
-    expect(statusAfterReconnect.pairedDevicesCount).toBe(1)
+    expect(registry.listDevices().filter((d) => !d.revoked)).toHaveLength(1)
+    expect(statusAfterReconnect.dsh).toEqual({ version: 'fake-dsh', profile: 'remora-e2e' })
 
     // 11. Cold recovery: host restarts, device re-establishes session without re-pairing
     await hostRelay.stop()

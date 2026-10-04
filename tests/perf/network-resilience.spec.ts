@@ -20,6 +20,7 @@
  * what a network change looks like on the wire.
  */
 import { describe, expect, it, beforeAll, afterAll, afterEach } from 'vitest'
+import { createFixtureHostRuntime } from '../helpers/host-runtime.ts'
 import {
   ChannelManager,
   HostRelayConnection,
@@ -199,10 +200,7 @@ async function startHost(
   const rcpServer = new RcpServer({
     hostId: identity.hostId,
     hostName: name,
-    statusProvider: {
-      isRelayConnected: () => hostRelay?.isConnected ?? false,
-      getPairedDevicesCount: () => registry.listDevices().filter((d) => !d.revoked).length,
-    },
+    runtimeProvider: createFixtureHostRuntime(),
   })
   const sessionAdapter = new SessionAdapter({ gateway, streamCoalesceMs: 150 })
   registerSessionMethods(rcpServer, sessionAdapter)

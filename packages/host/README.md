@@ -10,6 +10,17 @@ The PC side of Remora: an out-of-tree **DeepSeek Harness bundle** (`package.json
 
 `apply()` validates configuration (`relayUrl` required, https except loopback, absolute roots), then starts the host: it dials the relay, terminates the end-to-end channel for paired phones, serves RCP/1, adapts dsh sessions through the gateway (P2-H2), and runs pairing (P2-H1). The management page is served on the dsh web origin at `/api/remora/` (exact route plus a 303 from the trailing-slash alias); when the host has no paired device, the first pairing attempt opens automatically as soon as the relay connects and its QR is printed to an attached TTY.
 
+### Handshake and runtime status
+
+`hello` validates the phone's RCP version offer and returns the shared RCP/1
+schema, including the real host platform, package versions, configured policy
+and canonical allowed roots. `host.status` reads the current Agent registry and
+the keep-awake driver's acquired state. Its uptime measures this RCP server's
+lifetime. Version/profile discovery uses the pinned dsh CLI manifest and the
+root Cordis profile URL inside `src/adapter/runtime.ts`; missing metadata fails
+the call instead of announcing a guessed version or profile. Other dsh launchers
+need a separately verified metadata seam. Runtime verification is deferred.
+
 ### Approval and question bridge
 
 The AnswerBridge uses typed dsh waterfalls and races the PC answerer against
