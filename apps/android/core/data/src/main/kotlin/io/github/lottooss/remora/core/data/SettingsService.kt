@@ -1,6 +1,5 @@
 package io.github.lottooss.remora.core.data
 
-import io.github.lottooss.remora.core.crypto.encodeBase64Url
 import io.github.lottooss.remora.core.transport.RcpClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
@@ -44,13 +43,6 @@ class SettingsService {
     suspend fun unpair(client: RcpClient?, requestId: String = UUID.randomUUID().toString()): Result<Unit> = result {
         val obj = requireClient(client).call("devices.unpair", buildJsonObject { put("requestId", requestId) }).jsonObject
         check(obj["ok"]?.jsonPrimitive?.booleanOrNull == true) { "Unpair not acknowledged" }
-    }
-    suspend fun rotateApprovalKey(client: RcpClient?, publicKeySpki: ByteArray,
-        requestId: String = UUID.randomUUID().toString()): Result<Unit> = result {
-        val obj = requireClient(client).call("devices.rotateApprovalKey", buildJsonObject {
-            put("approvalPub", encodeBase64Url(publicKeySpki)); put("requestId", requestId)
-        }).jsonObject
-        check(obj["status"]?.jsonPrimitive?.content == "pending_pc_confirmation") { "Rotation not acknowledged" }
     }
     private fun parsePreferences(obj: JsonObject) = NotifyPreferences(
         obj.getValue("approval").jsonPrimitive.boolean, obj.getValue("question").jsonPrimitive.boolean,

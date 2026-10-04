@@ -32,3 +32,7 @@ Root integrates InteractionCodecs/InteractionModels/InteractionService from the 
 ## Acceptance and deferred work
 
 All packet test/evidence checkboxes remain unchecked. Build and behavioral verification, instrumented security review, real phone pairing/reconnect/push tests, Firebase configuration and production evidence remain pending. Existing transport fixtures omit required relay version/id fields and will need updates to realistic envelopes during the requested verification pass; validation was not weakened to preserve those fixtures.
+
+## Source-review follow-up
+
+Added an explicit temporaryConnectionsAllowed callback to the registrar so the composition root can reserve foreground/pairing identities before their sockets exist. Removed the unused duplicate settings rotation method; InteractionService is the single rotation implementation. No build or test execution was added.

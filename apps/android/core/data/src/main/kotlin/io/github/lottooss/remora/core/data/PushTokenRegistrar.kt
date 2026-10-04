@@ -17,6 +17,7 @@ class PushTokenRegistrar(
     private val keys: KeyStorage,
     private val relayForHost: (String) -> RelayClient? = { null },
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
+    private val temporaryConnectionsAllowed: () -> Boolean = { true },
 ) {
     private val prefs = context.applicationContext.getSharedPreferences("remora_push", Context.MODE_PRIVATE)
     private val lock = Mutex()
@@ -68,11 +69,15 @@ class PushTokenRegistrar(
                     withTimeout(12_000) { existing.connectionState.first { it == ConnectionState.Ready } }
                     registerReady(host.id.value, existing)
                 } else {
+                    // Foreground/pairing owns the identity even before its relay socket exists.
+                    // A competing temporary socket would replace it with relay close code 4409.
+                    if (!temporaryConnectionsAllowed()) continue
                     val material = keys.getHostKeys(host.id.value) ?: continue
                     try {
                         coroutineScope {
                             val temporary = RelayClient(host.relayOrigin, material.deviceId, material.relayPrivKey, scope = this)
                             try {
+                                if (!temporaryConnectionsAllowed()) return@coroutineScope
                                 temporary.connect()
                                 withTimeout(12_000) { temporary.connectionState.first { it == ConnectionState.Ready } }
                                 registerReady(host.id.value, temporary)
