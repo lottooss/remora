@@ -18,7 +18,7 @@ export interface DshApprovalRequest {
   params?: unknown
   agent?: {
     id?: string | undefined
-    session?: { id: string; title?: string | null; snapshotEvents?: () => Array<{ type: string; data?: any }> }
+    session?: { id: string; title?: string | null; snapshotEvents?: () => ReadonlyArray<{ type: string; data?: unknown }> }
   } | undefined
   signal?: AbortSignal | undefined
 }
@@ -38,6 +38,51 @@ export interface DshQuestionRequest {
     session?: { id: string; title?: string | null }
   } | undefined
   signal?: AbortSignal | undefined
+}
+
+/**
+ * One structured answer of the `user-questions/request` PC chain, mirroring
+ * the upstream `AskUserQuestionAnswerItem` shape structurally (this module
+ * stays free of `@deepseek-ai/*` imports).
+ */
+export interface DshQuestionAnswerItem {
+  id: string
+  selected: string[]
+  custom?: string
+}
+
+/** Structural answer of the `user-questions/request` PC chain (upstream `AskUserQuestionAnswer`). */
+export interface DshQuestionAnswer {
+  answers: DshQuestionAnswerItem[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/** Fails closed: anything that is not an `{ id, selected[] }` item is dropped. */
+function isQuestionAnswerItem(value: unknown): value is DshQuestionAnswerItem {
+  return (
+    isRecord(value) &&
+    typeof value['id'] === 'string' &&
+    Array.isArray(value['selected']) &&
+    value['selected'].every((entry) => typeof entry === 'string')
+  )
+}
+
+/** Structured answers of a PC-chain question result; `[]` when it is not one. */
+function readQuestionAnswerItems(value: unknown): DshQuestionAnswerItem[] {
+  if (!isRecord(value) || !Array.isArray(value['answers'])) return []
+  return value['answers'].filter(isQuestionAnswerItem)
+}
+
+/**
+ * Whether `value` is a structured question answer. The real dsh chain
+ * resolves only with `AskUserQuestionAnswer` (or rejects); this guard keeps
+ * anything else from reaching dsh as a fabricated user answer.
+ */
+export function isDshQuestionAnswer(value: unknown): value is DshQuestionAnswer {
+  return isRecord(value) && Array.isArray(value['answers']) && value['answers'].every(isQuestionAnswerItem)
 }
 
 /**
@@ -273,7 +318,7 @@ export async function raceQuestion(
   const phoneAnswer = pendingRegistry.waitForResolution<{
     outcome: string
     by: 'phone' | 'pc' | 'system'
-    answers?: Array<{ id: string; selected: string[]; custom?: string | undefined }>
+    answers?: DshQuestionAnswerItem[] | undefined
   }>(id)
 
   let timeoutTimer: NodeJS.Timeout | null = null
@@ -314,7 +359,7 @@ export async function raceQuestion(
           return winner.value
         }
 
-        const answers = (winner.value as any)?.answers ?? []
+        const answers = readQuestionAnswerItems(winner.value)
         pendingRegistry.resolveQuestion(id, answers, 'pc')
         return winner.value
       }
