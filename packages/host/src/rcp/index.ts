@@ -181,6 +181,16 @@ export class RcpServer {
     return this.streamsByDevice.get(deviceId)?.size ?? 0
   }
 
+  /**
+   * Names of every registered method, in registration order. Observation seam
+   * for the P7-H7 method-set parity test: after `apply()` the host must have
+   * registered exactly the device-callable method set (`RCP_METHODS` of
+   * @remora/protocol) — no off-spec extras, none missing.
+   */
+  registeredMethodNames(): string[] {
+    return [...this.handlers.keys()]
+  }
+
   /** Subscription for `sid`, or `undefined` once cancelled or released. */
   getStream(sid: number): RcpStream | undefined {
     return this.streams.get(sid)

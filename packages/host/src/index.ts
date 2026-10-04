@@ -255,6 +255,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     },
   })
 
+  // Observation seam for the method-set parity test (P7-H7): the plugin
+  // exposes its RCP server under this service name so a test that mounts the
+  // real plugin through apply() can assert the registered method set equals
+  // RCP_METHODS (device-callable RCP/1 §4–§10, no host→device entries).
+  ctx.provide('remora-rcp-server', rcpServer)
+
   // The registry itself is the per-device notify-prefs store: the preferences
   // live in the same `remora/devices` record and share its serialized write
   // queue (P7-H4). InMemoryNotifyPrefsStore remains for tests only.
