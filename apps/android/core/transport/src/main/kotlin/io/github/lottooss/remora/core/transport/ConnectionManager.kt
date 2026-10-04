@@ -114,8 +114,7 @@ class ConnectionManager(
                                         put("rcp", JsonArray(listOf(JsonPrimitive(1))))
                                         put("app", buildJsonObject { put("name", "remora-android"); put("version", appVersion) })
                                     }).jsonObject
-                                    require(response["rcp"]?.jsonPrimitive?.intOrNull == 1)
-                                    require(response["host"]?.jsonObject?.get("id")?.jsonPrimitive?.content == owned.hostId)
+                                    validateHello(response, owned.hostId)
                                     greeting.value = response
                                     client.value = rcp
                                     state.value = ConnectionState.Ready
@@ -147,6 +146,47 @@ class ConnectionManager(
         connectionJob?.invokeOnCompletion {
             owned.relayPrivateKey.fill(0); owned.noiseKeypair.secretKey.fill(0); owned.devicePsk.fill(0)
         }
+    }
+
+    /** Validate the complete hello boundary before UI/services can access its nested fields. */
+    private fun validateHello(response: JsonObject, expectedHost: String) {
+        fun JsonObject.objectField(name: String): JsonObject = this[name] as? JsonObject
+            ?: throw SecureChannelException("Incomplete host hello")
+        fun JsonObject.textField(name: String, maxLength: Int = 128): String {
+            val value = this[name] as? JsonPrimitive ?: throw SecureChannelException("Incomplete host hello")
+            require(value.isString && value.content.isNotEmpty() && value.content.length <= maxLength) { "Invalid host hello" }
+            return value.content
+        }
+        fun JsonObject.numberField(name: String): Long {
+            val value = this[name] as? JsonPrimitive ?: throw SecureChannelException("Incomplete host hello")
+            require(!value.isString) { "Invalid host hello" }
+            return value.longOrNull ?: throw SecureChannelException("Invalid host hello")
+        }
+        require(response.numberField("rcp") == 1L) { "Unsupported RCP version" }
+        val hostInfo = response.objectField("host")
+        require(hostInfo.textField("id") == expectedHost) { "Host identity mismatch" }
+        hostInfo.textField("name", 256)
+        hostInfo.textField("os")
+        require(hostInfo.textField("pathSeparator") in setOf("/", "\\")) { "Invalid host path separator" }
+        val versions = hostInfo.objectField("versions")
+        versions.textField("remora"); versions.textField("dsh")
+        val roots = response["roots"] as? JsonArray ?: throw SecureChannelException("Missing host roots")
+        require(roots.size <= 256 && roots.all {
+            it is JsonPrimitive && it.isString && it.content.isNotBlank() && it.content.length <= 32_768 && '\u0000' !in it.content
+        }) { "Invalid host roots" }
+        val features = response["features"] as? JsonArray ?: throw SecureChannelException("Missing host features")
+        require(features.size <= 64 && features.all {
+            it is JsonPrimitive && it.isString && it.content.length in 1..64
+        }) { "Invalid host features" }
+        val policy = response.objectField("policy")
+        require(policy.textField("approvalBiometric") in setOf("high", "all", "never")) { "Unsupported approval policy" }
+        val remoteStart = policy["allowRemoteSessionStart"] as? JsonPrimitive
+            ?: throw SecureChannelException("Missing remote session policy")
+        require(!remoteStart.isString && remoteStart.booleanOrNull != null) { "Invalid remote session policy" }
+        val limits = response.objectField("limits")
+        require(limits.numberField("maxMessageBytes") in 1L..49_152L) { "Invalid RCP message limit" }
+        require(limits.numberField("maxStreams") in 1L..10L) { "Invalid RCP stream limit" }
+        require(response.numberField("time") in 0L..9_007_199_254_740_991L) { "Invalid host clock" }
     }
 
     private fun disposeChannel() {

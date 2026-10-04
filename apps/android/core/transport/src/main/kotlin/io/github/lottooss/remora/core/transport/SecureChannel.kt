@@ -56,18 +56,28 @@ class SecureChannel(
     suspend fun handshake(purpose: String, psk: ByteArray, msg1PayloadJson: String, timeoutMs: Long = 10_000): Pair<HandshakeResult, String?> {
         check(handshakeState == null && !isClosed.get()) { "Channel handshake already started" }
         require(purpose == "pair" || purpose == "session")
-        val handshake = HandshakeState(
-            initiator = true,
-            prologue = "remora/1\u0000$purpose\u0000$hostId\u0000$deviceId".toByteArray(),
-            staticKeypair = deviceNoiseKeypair, remoteStatic = hostNoisePub, psk = psk,
-        )
-        handshakeState = handshake
+        // HandshakeState zeroizes its static private key when it finishes. It must never own
+        // the reusable device key retained for pair.complete persistence or reconnection.
+        val handshakeKeys = Keypair(deviceNoiseKeypair.secretKey.copyOf(), deviceNoiseKeypair.publicKey.copyOf())
+        val handshakePsk = psk.copyOf()
         try {
+            val handshake = HandshakeState(
+                initiator = true,
+                prologue = "remora/1\u0000$purpose\u0000$hostId\u0000$deviceId".toByteArray(),
+                staticKeypair = handshakeKeys, remoteStatic = hostNoisePub, psk = handshakePsk,
+            )
+            handshakeState = handshake
             val record = byteArrayOf(RECORD_TYPE_HANDSHAKE_MSG1) + handshake.writeMessage(msg1PayloadJson.toByteArray())
             relayClient.sendData(channelId, PeerKind.HOST, hostRawId, record)
             val result = withTimeout(timeoutMs) { handshakeReady.await() }
             return result to if (purpose == "pair") deriveSasCode(hostNoisePub, deviceNoiseKeypair.publicKey, psk) else null
         } catch (error: Exception) { close(); throw error }
+        finally {
+            synchronized(cipherLock) {
+                handshakeKeys.secretKey.fill(0)
+                handshakePsk.fill(0)
+            }
+        }
     }
 
     suspend fun sendTransport(payloadUtf8: String) = sendMutex.withLock {
@@ -109,14 +119,13 @@ class SecureChannel(
             require(frame.payload.isNotEmpty())
             when (frame.payload[0]) {
                 RECORD_TYPE_HANDSHAKE_MSG2 -> {
-                    check(!handshakeReady.isCompleted)
-                    val handshake = handshakeState ?: error("Unexpected handshake")
-                    handshake.readMessage(frame.payload.copyOfRange(1, frame.payload.size))
-                    val result = handshake.result
-                    // Install ciphers on the frame reader before the next pair.complete can arrive.
-                    synchronized(cipherLock) {
-                        if (isClosed.get()) { result.send.zeroize(); result.recv.zeroize(); return }
-                        sendCipher = result.send; recvCipher = result.recv
+                    val result = synchronized(cipherLock) {
+                        if (isClosed.get()) return
+                        check(!handshakeReady.isCompleted)
+                        val handshake = handshakeState ?: error("Unexpected handshake")
+                        handshake.readMessage(frame.payload.copyOfRange(1, frame.payload.size))
+                        // Install ciphers before the next pair.complete can arrive.
+                        handshake.result.also { sendCipher = it.send; recvCipher = it.recv }
                     }
                     handshakeReady.complete(result)
                 }

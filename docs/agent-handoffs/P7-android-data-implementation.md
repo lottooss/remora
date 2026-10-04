@@ -40,3 +40,7 @@ Added an explicit temporaryConnectionsAllowed callback to the registrar so the c
 ## Conversation follow-up (2026-10-05)
 
 ConversationScreen now awaits a suspend Boolean prompt callback, retains drafts after unconfirmed/error responses, prevents concurrent sends, and clears only the acknowledged draft (without erasing edits made while waiting). Running state prefers sessions.control; queued messages and background jobs are displayed from that repository. New text is localized. The conversation module declares its existing workspace coroutine dependency explicitly. This change follows the approval worker commit locally; the Integrator should cherry-pick only the new conversation commit, not duplicate the approval commit. No tests or build were run.
+
+## Handshake ownership and hello boundary (2026-10-05)
+
+SecureChannel gives HandshakeState independent copies of its private key and PSK. Noise finishHandshake wipes only the private-key copy; finally wipes both copies on success, failure and cancellation. The owner device key and PSK are preserved for pairing persistence, SAS and reconnect. Hello now validates roots, policy, identity, versions, feature strings, limits and clock before exposing the RCP client to UI/services. This is source-reviewed implementation, not runtime evidence; no tests/build ran.
