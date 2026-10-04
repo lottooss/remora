@@ -54,8 +54,8 @@ fun deepLinkForPayload(payload: PushPayload, hostId: String? = null): String {
     if (hostId == null || !hostId.matches(Regex("h_[a-z2-7]{26}"))) return "remora://hosts"
     val base = "remora://host/$hostId"
     return when (payload.kind) {
-        PushKind.APPROVAL, PushKind.QUESTION -> "$base/approvals"
-        PushKind.TURN_DONE, PushKind.TURN_ERROR -> payload.sessionId?.let {
+        PushKind.APPROVAL -> "$base/approvals"
+        PushKind.QUESTION, PushKind.TURN_DONE, PushKind.TURN_ERROR -> payload.sessionId?.takeIf { it.isNotBlank() }?.let {
             "$base/session/${java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")}" 
         } ?: "remora://hosts"
     }
