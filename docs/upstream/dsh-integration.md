@@ -25,6 +25,7 @@ node scripts/fetch-upstream.mjs          # → .upstream/deepseek-harness at the
 - A profile lives at `$DSH_HOME/profiles/<name>` (`$DSH_HOME` defaults to `~/.dsh`). Its `package.json` field `dsh.profile.bundles` lists bundles; layers apply in order: bundles → profile `cordis.patch.yml` → `$DSH_HOME/cordis.patch.yml` → `--patch` overlays. Source: `apps/cli/reference/README.md` §Profiles, `docs/architecture.md` §Profiles and bundles.
 - `dsh --profile <new> --from-default-profile web` creates a custom profile from the shipped `web` template (custom profiles default to live patch reload).
 - `dsh plugin --profile <name> <pnpm args>` runs pnpm in the profile directory. Relative paths are anchored to the invoking directory (`add ./packages/host` installs a local checkout without build allowances). After every run, dependencies whose manifest declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }` join `dsh.profile.bundles`. Bundle membership changes need a restart; patch edits hot-reload in live profiles. Source: `apps/cli/reference/README.md` §Plugin management.
+- Native dependency installation (P7-H6): arguments such as `add <host.tgz> --allow-build koffi` pass through to pnpm unchanged (`apps/cli/src/plugin.ts:120–134`). pnpm 12's `--allow-build` authorizes the named dependency's install script in that profile. A built host tarball still needs this explicit allowance for its external `koffi` dependency; packing the host does not remove a dependency's script policy. No owner profile is modified by tests.
 - `--dump-config` prints the composed tree with the file that supplied each row.
 - The `desktop` profile is reserved for Electron; the CLI refuses plugin management for it.
 
@@ -158,5 +159,4 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 | 2026-09-24 | 0.1.5-rc.3 | Host role (P0-S2) | Q5–Q7 | Verified: waterfall prepend ordering, AbortSignal withdrawal, and Session tool-call argument inspection |
 | 2026-09-24 | Windows 11 / Node v24 | Host role (P0-S6) | Q9 | Verified: SetThreadExecutionState via in-process koffi & non-elevated logon autostart |
 | 2026-09-25 | 0.1.5-rc.3 (source reading) | Host role (P2-H1) | §7 fetch/webserver seams re-read for the management routes | as documented; `fetch.register` exact routes inherit the `/api` fence, `webServer.register` exact matches beat prefix matches |
-
-
+| 2026-10-04 | 0.1.5-rc.3 / pnpm 12.6.0 | Host role (P7-H6) | Plugin pnpm argument forwarding; external native dependency | Source `apps/cli/src/plugin.ts:120–134` and local `pnpm help add` confirm `--allow-build koffi`; installed tarball `apply()` native acquisition/disposal: local `pnpm -F @remora/host test -- pack`, 6 tests passed. Owner approved the isolated-profile allowance and Windows workflow; hosted validation remains pending. Evidence and CI links: `docs/agent-handoffs/P7-H6.md`. |

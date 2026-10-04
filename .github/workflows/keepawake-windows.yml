@@ -1,0 +1,41 @@
+name: keepawake-windows
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: keepawake-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  keepawake-windows:
+    name: Windows native keep-awake
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -F @remora/host run build
+      - run: pnpm -F @remora/host test -- platform pack
+      - name: Observe the native SYSTEM request and its release
+        shell: pwsh
+        run: |
+          $probeName = "remora-keepawake-${{ github.run_id }}-${{ github.run_attempt }}.exe"
+          $probeNode = Join-Path $env:RUNNER_TEMP $probeName
+          Copy-Item -LiteralPath (Get-Command node).Source -Destination $probeNode
+          try {
+            & $probeNode packages/host/test/platform/verify-windows-power-request.mjs
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Remove-Item -LiteralPath $probeNode
+          }

@@ -20,7 +20,7 @@ import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
@@ -228,4 +228,14 @@ describe('P7-H8 self-contained host tarball (clean checkout)', () => {
     expect(result.status).not.toBe(0)
     expect(result.output).toContain('@remora/crypto')
   })
+
+  if (IS_WINDOWS) {
+    it('acquires and releases the native API through the installed host apply() on real Cordis', () => {
+      const probe = fs.readFileSync(path.join(REPO_ROOT, 'packages/host/test/platform/packed-host-probe.mjs'), 'utf8')
+      const support = pathToFileURL(path.join(REPO_ROOT, 'packages/host/test/')).href
+      const result = run(process.execPath, ['--input-type=module', '--eval', probe, support], consumerDir)
+      expect(result.output, 'Installed tarball native API probe failed').toContain('packed host native acquisition and disposal complete')
+      expect(result.status).toBe(0)
+    })
+  }
 })

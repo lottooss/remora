@@ -261,7 +261,7 @@ export class RealDshHarness {
     }
     const res = runSync(
       this.dshBin,
-      ['plugin', '--profile', E2E_PROFILE, 'add', HOST_TARBALL],
+      ['plugin', '--profile', E2E_PROFILE, 'add', HOST_TARBALL, '--allow-build', 'koffi'],
       { cwd: REPO_ROOT, env: this.dshEnv(), timeout: 600_000 },
     )
     log.push(`dsh plugin add ${HOST_TARBALL} -> status ${res.status}\n${res.stdout}\n${res.stderr}`)
