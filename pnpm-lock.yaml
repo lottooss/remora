@@ -266,6 +266,9 @@ importers:
       tsdown:
         specifier: ^0.23.0
         version: 0.23.0(typescript@6.0.3)
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
 
   packages/protocol:
     dependencies:

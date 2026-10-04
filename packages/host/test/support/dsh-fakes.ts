@@ -81,7 +81,7 @@ export async function provideFakeDshServices(ctx: Context, services: FakeDshServ
     agents: { list: () => [], get: () => undefined },
     sessions: { list: () => [], get: () => undefined },
     ...services,
-  }).filter((entry): entry is [string, object] => entry[1] !== undefined)
+  }).filter(([, value]) => value !== undefined)
   await Promise.all(
     entries.map(([name, value]) => ctx.plugin({ apply: (serviceCtx: Context) => void serviceCtx.provide(name, value) })),
   )

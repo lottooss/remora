@@ -43,6 +43,11 @@ collected before that instruction and does not validate this combined branch.
 
 - Kotlin `:app:compileDebugKotlin`: passed on the first combined composition.
 - Host package build: passed after streaming and key-format fixes.
+- Final TypeScript workspace build: passed after metadata alignment. The host now
+  declares and bundles its existing Zod dependency for runtime manifest validation;
+  no additional external import is permitted by the bundle's allow-list.
+- Final TypeScript workspace typecheck: passed across all seven packages after
+  correcting the ordinary fake-service tuple predicate; no test suite was executed.
 - Android `:app:assembleDebug`: passed after transport key-lifetime, conversation
   acknowledgment and final application wiring changes; initial assembly 1m14s,
   final assembly after the timeout-notice fix 13s (223 Gradle tasks).

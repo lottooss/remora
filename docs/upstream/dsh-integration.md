@@ -275,7 +275,7 @@ Source read from the owner's existing pinned checkout at `a4c74a9`, matching
 No upstream package, owner profile, wire schema, or conformance vector changed.
 Build, suite execution, and real-dsh verification are deferred by user request.
 
-### 9.4 Handshake runtime metadata source inspection (2026-10-05)
+### 9.5 Handshake runtime metadata source inspection (2026-10-05)
 
 Source-only inspection of the same pinned `a4c74a9` checkout:
 

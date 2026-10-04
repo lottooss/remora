@@ -38,6 +38,7 @@ export default defineConfig({
   failOnWarn: true,
   suppressWarnings: [/[\\/]node_modules[\\/].*[\\/]zod[\\/]v4[\\/]locales[\\/][\w-]+\.d\.cts uses CommonJS dts syntax/],
   deps: {
+    alwaysBundle: ['zod'],
     neverBundle: ['ws', 'koffi'],
     onlyImport: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', 'ws', 'koffi'],
   },
