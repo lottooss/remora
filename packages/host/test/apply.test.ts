@@ -23,6 +23,8 @@
  * the observable for what the plugin's registry contains.
  */
 import { Context, type Message } from '@deepseek-ai/cordis'
+import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
+import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval/types'
 import { encodeBase64Url } from '@remora/crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as host from '../src/index.ts'
@@ -39,6 +41,13 @@ import { createHostCredentials, type FakeHostCredentials } from './relay/fake-cr
 import type { FakeGrantRecord } from './identity/fake-credentials.ts'
 import { startFakeRelay, type FakeRelay } from './relay/fake-relay.ts'
 import { createFixtureSession, createTestAgent, FIXTURE_SESSION_ID, FIXTURE_TURN_END } from './notify/dsh-test-events.ts'
+import { createApprovalJournalAgent } from './interaction/approval-journal.ts'
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    'remora-rcp-server'?: host.RcpServer
+  }
+}
 
 /**
  * Cordis fiber lifecycle states. The upstream `FiberState` is an ambient const
@@ -664,4 +673,127 @@ describe('remora host plugin apply() harness: device persistence (P7-H4)', () =>
     }
     await second.fiber.dispose()
   }, 15_000)
+})
+
+describe('remora host plugin apply() harness: AnswerBridge policy (P7-H10)', () => {
+  const DEVICE_ID = 'd_abcdefghijklmnopqrstuvwxyz'
+
+  async function mountBridge(config: Partial<host.Config> = {}) {
+    const ctx = new Context()
+    const credentials = credentialsWithSecret()
+    // Use the production persistence API to prepare a previously paired device.
+    const registry = await host.loadPersistentDeviceRegistry(credentials)
+    registry.addDevice({
+      deviceId: DEVICE_ID,
+      name: 'Approval test phone',
+      noisePublicKey: new Uint8Array(32).fill(1),
+      devicePsk: new Uint8Array(32).fill(2),
+      pushKey: new Uint8Array(32).fill(3),
+      createdAt: 1,
+      lastSeenAt: 1,
+      revoked: false,
+    })
+    await registry.flush()
+    await provideFakeDshServices(ctx, {
+      typertGateway: createFakeTypertGateway(),
+      storage: createFakeStorage(),
+    })
+    await provideCredentialsStore(ctx, credentials)
+    const fiber = await ctx.plugin(host, createValidHostConfig({
+      relayUrl: `http://127.0.0.1:${await reserveClosedPort()}`,
+      ...config,
+    }))
+    cleanups.push(async () => { await fiber.dispose() })
+    expect(fiber.state).toBe(FIBER_STATE.ACTIVE)
+    const server = ctx['remora-rcp-server']
+    if (server === undefined) throw new Error('host did not expose its RCP server')
+    const pending = new Promise<host.PendingApproval>((resolve) => {
+      server.setTransportSender((_deviceId, _channelId, raw) => {
+        const frame = JSON.parse(raw) as { d?: { type?: string; pending?: host.PendingApproval } }
+        if (frame.d?.type === 'requested' && frame.d.pending?.kind === 'approval') resolve(frame.d.pending)
+        return true
+      })
+    })
+    const follow = await server.handleMessage(
+      JSON.stringify({ v: 1, k: 'req', id: 1, m: 'interaction.follow', p: {} }),
+      { deviceId: DEVICE_ID, channelId: 1 },
+    )
+    expect(JSON.parse(follow ?? '{}')).toMatchObject({ ok: true })
+    cleanups.push(async () => { server.closeChannel(DEVICE_ID, 1) })
+    return { ctx, server, pending }
+  }
+
+  it.each([
+    ['high', 'git reset --hard'],
+    ['all', 'echo safe'],
+  ] as const)('enforces configured %s biometrics through the actual approvals.answer handler', async (approvalBiometric, command) => {
+    const { ctx, server, pending } = await mountBridge({ approvalBiometric })
+    const controller = new AbortController()
+    const outcome = ctx.waterfall('approval/request', {
+      agent: createApprovalJournalAgent(JSON.stringify({ command })),
+      toolName: 'bash',
+      callId: ToolCallId('mock-call-1'),
+      signal: controller.signal,
+    }, async (): Promise<ApprovalOutcome> => 'unavailable')
+    try {
+      const approval = await pending
+      const reply = await server.handleMessage(JSON.stringify({
+        v: 1,
+        k: 'req',
+        id: 2,
+        m: 'approvals.answer',
+        p: { id: approval.id, outcome: 'allowed-once', argsDigest: approval.argsDigest, issuedAt: Date.now() },
+      }), { deviceId: DEVICE_ID, channelId: 1 })
+      expect(JSON.parse(reply ?? '{}')).toMatchObject({ ok: false, e: { code: 'signature_required' } })
+      expect(approval.requiresSignature).toBe(true)
+    } finally {
+      controller.abort()
+      await outcome
+    }
+  })
+
+  it('uses the configured approval timeout in pending metadata and ends an unanswered request', async () => {
+    const { ctx, pending } = await mountBridge({ approvalTimeoutMs: 100 })
+    const controller = new AbortController()
+    const outcome = ctx.waterfall('approval/request', {
+      agent: createApprovalJournalAgent(),
+      toolName: 'bash',
+      callId: ToolCallId('mock-call-1'),
+      signal: controller.signal,
+    }, async (): Promise<ApprovalOutcome> => 'unavailable')
+    try {
+      const approval = await pending
+      expect(approval.expiresAt - approval.createdAt).toBe(100)
+      let completed: ApprovalOutcome | undefined
+      void outcome.then((value) => { completed = value })
+      expect(await waitFor(() => completed !== undefined, 1_000)).toBe(true)
+      expect(completed).toBe('unavailable')
+    } finally {
+      controller.abort()
+      await outcome
+    }
+  })
+
+  it('rejects startup when a real Cordis registration interceptor prevents the ordering probes from running', async () => {
+    const ctx = new Context()
+    const messages = captureLogs(ctx)
+    // A real Cordis extension intercepts these registrations. The waterfall
+    // and host stay unmocked; the self-check must detect that no probe ran.
+    const removeInterceptor = ctx.on('internal/listener', (eventName) => {
+      if (eventName === 'approval/request') return () => true
+      return undefined
+    })
+    cleanups.push(async () => { removeInterceptor() })
+    await provideFakeDshServices(ctx, {
+      typertGateway: createFakeTypertGateway(),
+      storage: createFakeStorage(),
+    })
+    await provideCredentialsStore(ctx, credentialsWithSecret())
+    const relay = await startRelay()
+    const fiber = await ctx.plugin(host, createValidHostConfig({ relayUrl: relay.origin }))
+    cleanups.push(async () => { await fiber.dispose() })
+    expect(fiber.state).toBe(FIBER_STATE.FAILED)
+    expect(messages.some((message) => firstArgString(message)?.startsWith('remora: host started'))).toBe(false)
+    expect(relay.enrollRequests).toHaveLength(0)
+  })
 })
