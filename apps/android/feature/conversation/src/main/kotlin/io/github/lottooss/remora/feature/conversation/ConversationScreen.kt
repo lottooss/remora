@@ -58,8 +58,9 @@ import io.github.lottooss.remora.core.data.InteractionRepository
 import io.github.lottooss.remora.core.data.LiveDeltaOverlay
 import io.github.lottooss.remora.core.data.ModelRef
 import io.github.lottooss.remora.core.data.PendingApproval
-import io.github.lottooss.remora.core.data.PendingInteraction
 import io.github.lottooss.remora.core.data.PendingQuestion
+import io.github.lottooss.remora.core.data.QuestionAnswer
+import io.github.lottooss.remora.core.data.PendingInteraction
 import io.github.lottooss.remora.core.data.SessionEvent
 import io.github.lottooss.remora.core.data.SessionRepository
 import io.github.lottooss.remora.core.data.SyncEngine
@@ -82,11 +83,8 @@ fun ConversationScreen(
     syncEngine: SyncEngine? = null,
     initialEvents: List<SessionEvent>? = null,
     connectionStatus: ConnectionStatus = ConnectionStatus.ONLINE,
-    availableModels: List<ModelRef> = listOf(
-        ModelRef("deepseek", "deepseek-chat"),
-        ModelRef("deepseek", "deepseek-reasoner"),
-    ),
-    selectedModel: ModelRef = ModelRef("deepseek", "deepseek-chat"),
+    availableModels: List<ModelRef> = emptyList(),
+    selectedModel: ModelRef? = null,
     onSelectModel: ((ModelRef) -> Unit)? = null,
     onSendPrompt: ((text: String, delivery: String) -> Unit)? = null,
     onCancelTurn: (() -> Unit)? = null,
@@ -94,7 +92,7 @@ fun ConversationScreen(
     interactionRepository: InteractionRepository? = null,
     onApprove: ((PendingApproval) -> Unit)? = null,
     onReject: ((PendingApproval) -> Unit)? = null,
-    onSubmitQuestion: ((questionId: String, answers: List<String>, text: String?) -> Unit)? = null,
+    onSubmitQuestion: ((question: PendingQuestion, answers: List<QuestionAnswer>) -> Unit)? = null,
 ) {
     val repoEvents by sessionRepository?.getEventsFlow(sessionId)?.collectAsState()
         ?: remember { mutableStateOf(initialEvents ?: emptyList()) }
@@ -164,7 +162,8 @@ fun ConversationScreen(
                                 },
                             ) {
                                 Text(
-                                    text = "Model: ${selectedModel.model} ▼",
+                                    text = selectedModel?.let { "Model: ${it.model} ▼" }
+                                        ?: androidx.compose.ui.res.stringResource(R.string.conversation_no_model_selected),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary,
                                 )
@@ -268,8 +267,8 @@ fun ConversationScreen(
             } else if (pendingQuestion != null) {
                 QuestionTakeoverCard(
                     question = pendingQuestion,
-                    onSubmit = { options, customText ->
-                        onSubmitQuestion?.invoke(pendingQuestion.id, options, customText)
+                    onSubmit = { answers ->
+                        onSubmitQuestion?.invoke(pendingQuestion, answers)
                     },
                 )
             } else {

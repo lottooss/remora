@@ -1,44 +1,32 @@
 package io.github.lottooss.remora.feature.conversation
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.lottooss.remora.core.data.PendingApproval
 import io.github.lottooss.remora.core.data.PendingQuestion
+import io.github.lottooss.remora.core.data.QuestionAnswer
 
-/**
- * Takeover card shown in conversation when an approval is required (ADR-0008, blueprint §8.6).
- */
+/** Uses the same complete preview in the conversation and approval inbox. */
 @Composable
 fun ApprovalTakeoverCard(
     approval: PendingApproval,
@@ -46,220 +34,89 @@ fun ApprovalTakeoverCard(
     onReject: (approval: PendingApproval) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val isHighRisk = approval.risk == "high" || approval.requiresSignature
-
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isHighRisk) MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-            else MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "🚨 Approval Required: ${approval.toolName}",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(4.dp),
-                    color = if (isHighRisk) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.secondaryContainer,
-                ) {
-                    Text(
-                        text = if (isHighRisk) "HIGH RISK (Biometric)" else "NORMAL",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (isHighRisk) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                    )
-                }
-            }
-
-            val reason = approval.reason
-            if (!reason.isNullOrBlank()) {
-                Text(
-                    text = reason,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-
-            // Command / args preview in monospace, horizontally scrollable, never truncated silently
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(8.dp),
-                ) {
-                    Text(
-                        text = approval.preview.text,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace,
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = { onReject(approval) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                ) {
-                    Text("Reject")
-                }
-
-                Button(
-                    onClick = { onApprove(approval) },
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isHighRisk) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                    ),
-                ) {
-                    Text(if (isHighRisk) "Approve (Fingerprint)" else "Approve")
-                }
-            }
-        }
-    }
+    ApprovalCard(
+        approval = approval,
+        onApprove = { onApprove(approval) },
+        onReject = { onReject(approval) },
+        modifier = modifier.padding(8.dp).heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+    )
 }
 
-/**
- * Takeover card shown in conversation when the agent asks a question (plan review, options, or free text).
- */
+/** Displays every question in the request and returns RCP's structured answer list. */
 @Composable
 fun QuestionTakeoverCard(
     question: PendingQuestion,
-    onSubmit: (selectedOptions: List<String>, customText: String?) -> Unit,
+    onSubmit: (answers: List<QuestionAnswer>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val selectedOptions = remember { mutableStateListOf<String>() }
-    var customText by remember { mutableStateOf("") }
+    val selections = remember(question) { mutableStateMapOf<String, List<String>>() }
+    val customAnswers = remember(question) { mutableStateMapOf<String, String>() }
+    val complete = question.questions.isNotEmpty() && question.questions.all {
+        !selections[it.id].isNullOrEmpty() || !customAnswers[it.id].isNullOrBlank()
+    }
 
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(8.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)),
-    ) {
+    Card(modifier = modifier.fillMaxWidth().padding(8.dp).heightIn(max = 480.dp)) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.verticalScroll(rememberScrollState()).padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(
-                text = "❓ Question from Agent",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-
-            Text(
-                text = question.prompt,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-
-            // Optional detail markdown / plan review presentation
-            val detail = question.detail
-            if (!detail.isNullOrBlank()) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(8.dp),
-                    )
-                }
-            }
-
-            // Options (single or multi-select)
-            if (question.options.isNotEmpty()) {
-                Text(
-                    text = if (question.multiSelect) "Select options:" else "Choose one option:",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.outline,
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    question.options.forEach { opt ->
-                        val isSelected = selectedOptions.contains(opt.id)
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            if (question.multiSelect) {
+            Text(stringResource(R.string.interaction_questions_title), style = MaterialTheme.typography.titleSmall)
+            question.questions.forEach { prompt ->
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    prompt.header?.let { Text(it, style = MaterialTheme.typography.labelLarge) }
+                    Text(prompt.question, style = MaterialTheme.typography.titleMedium)
+                    prompt.detail?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    prompt.intent?.takeIf { it.kind == "plan-review" }?.let {
+                        Text(stringResource(R.string.interaction_plan_approval, it.approve), style = MaterialTheme.typography.labelMedium)
+                    }
+                    prompt.options.forEach { option ->
+                        val selected = selections[prompt.id].orEmpty()
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            if (prompt.multiSelect) {
                                 Checkbox(
-                                    checked = isSelected,
+                                    checked = option.label in selected,
                                     onCheckedChange = { checked ->
-                                        if (checked) selectedOptions.add(opt.id)
-                                        else selectedOptions.remove(opt.id)
+                                        selections[prompt.id] = if (checked) (selected + option.label).distinct()
+                                            else selected - option.label
                                     },
                                 )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(option.label)
+                                    option.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                                }
                             } else {
                                 FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        selectedOptions.clear()
-                                        selectedOptions.add(opt.id)
+                                    selected = option.label in selected,
+                                    onClick = { selections[prompt.id] = if (option.label in selected) emptyList() else listOf(option.label) },
+                                    label = {
+                                        Column {
+                                            Text(option.label)
+                                            option.description?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                                        }
                                     },
-                                    label = { Text(opt.label) },
-                                )
-                            }
-                            if (question.multiSelect) {
-                                Text(
-                                    text = opt.label,
-                                    style = MaterialTheme.typography.bodySmall,
                                 )
                             }
                         }
                     }
+                    OutlinedTextField(
+                        value = customAnswers[prompt.id].orEmpty(),
+                        onValueChange = { customAnswers[prompt.id] = it },
+                        label = { Text(stringResource(R.string.interaction_custom_answer)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 5,
+                    )
                 }
             }
-
-            // Custom free text input
-            if (question.allowCustom) {
-                OutlinedTextField(
-                    value = customText,
-                    onValueChange = { customText = it },
-                    label = { Text("Your answer (optional if option selected)") },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(8.dp),
-                    maxLines = 3,
-                )
-            }
-
             Button(
                 onClick = {
-                    onSubmit(selectedOptions.toList(), customText.ifBlank { null })
+                    onSubmit(question.questions.map { prompt ->
+                        QuestionAnswer(prompt.id, selections[prompt.id].orEmpty(), customAnswers[prompt.id]?.takeIf { it.isNotBlank() })
+                    })
                 },
-                enabled = selectedOptions.isNotEmpty() || customText.isNotBlank(),
+                enabled = complete && !question.isExpired,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Submit Answer")
+                Text(stringResource(R.string.interaction_submit_answers))
             }
         }
     }

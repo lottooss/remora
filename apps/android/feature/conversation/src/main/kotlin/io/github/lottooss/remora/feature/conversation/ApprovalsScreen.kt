@@ -35,6 +35,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -172,7 +173,11 @@ fun ApprovalCard(
                         color = riskColor,
                     ) {
                         Text(
-                            text = if (isHighRisk) "HIGH RISK (Biometric)" else "NORMAL",
+                            text = when {
+                                approval.risk !in setOf("normal", "high") -> stringResource(R.string.interaction_unknown_risk)
+                                isHighRisk -> "HIGH RISK (Biometric)"
+                                else -> "NORMAL"
+                            },
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = onRiskColor,
@@ -204,7 +209,7 @@ fun ApprovalCard(
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
@@ -212,6 +217,16 @@ fun ApprovalCard(
                 ) {
                     Text(
                         text = approval.preview.text,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    Text(
+                        text = stringResource(R.string.interaction_raw_arguments),
+                        style = MaterialTheme.typography.labelSmall,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                    )
+                    Text(
+                        text = approval.preview.json,
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace,
                     )
@@ -228,6 +243,7 @@ fun ApprovalCard(
             ) {
                 OutlinedButton(
                     onClick = onReject,
+                    enabled = !approval.isExpired && approval.risk in setOf("normal", "high"),
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 ) {
@@ -236,6 +252,7 @@ fun ApprovalCard(
 
                 Button(
                     onClick = onApprove,
+                    enabled = !approval.isExpired && approval.risk in setOf("normal", "high"),
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = if (isHighRisk) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,

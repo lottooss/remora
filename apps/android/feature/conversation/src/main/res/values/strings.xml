@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="conversation_no_model_selected">No model selected</string>
+    <string name="interaction_raw_arguments">Raw arguments included in approval</string>
+    <string name="interaction_unknown_risk">Unsupported risk classification</string>
+    <string name="interaction_questions_title">Questions from agent</string>
+    <string name="interaction_plan_approval">Plan approval option: %1$s</string>
+    <string name="interaction_custom_answer">Custom answer (optional if an option is selected)</string>
+    <string name="interaction_submit_answers">Submit answers</string>
+</resources>

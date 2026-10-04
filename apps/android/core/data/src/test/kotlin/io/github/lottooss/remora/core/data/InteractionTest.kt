@@ -1,6 +1,7 @@
 package io.github.lottooss.remora.core.data
 
 import com.google.common.truth.Truth.assertThat
+import io.github.lottooss.remora.core.crypto.computeArgsDigest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
@@ -12,7 +13,7 @@ class InteractionTest {
 
     private class FakeRpcCaller(
         private val handler: (method: String, params: JsonObject) -> JsonObject = { _, _ ->
-            buildJsonObject { put("accepted", true) }
+            buildJsonObject { put("accepted", true); put("final", "allowed-once"); put("by", "phone") }
         },
     ) {
         val calls = mutableListOf<Pair<String, JsonObject>>()
@@ -26,15 +27,15 @@ class InteractionTest {
     @Test
     fun testHighRiskApprovalRequiresBiometricSignature() = runBlocking {
         val repo = InteractionRepository()
-        val service = InteractionService(repo)
+        val service = InteractionService(repo, "host_1")
         val caller = FakeRpcCaller()
 
         val highRiskApproval = PendingApproval(
             id = "appr_high_1",
             sessionId = "s_1",
             toolName = "bash",
-            preview = Preview(text = "rm -rf /tmp/data"),
-            argsDigest = "sha256:abc123",
+            preview = ApprovalPreview(text = "rm -rf /tmp/data", json = "{}"),
+            argsDigest = computeArgsDigest("rm -rf /tmp/data", "{}"),
             risk = "high",
             requiresSignature = true,
         )
@@ -42,7 +43,9 @@ class InteractionTest {
 
         // 1. Without signature provider -> must fail closed with SecurityException
         val failResult = service.answerApproval(
+            hostId = "host_1",
             approval = highRiskApproval,
+            displayedPreview = highRiskApproval.preview,
             outcome = "allowed-once",
             signatureProvider = null,
             rpcCaller = caller::call,
@@ -54,7 +57,9 @@ class InteractionTest {
         // 2. With signature provider -> succeeds and dispatches sig
         var providerCalled = false
         val successResult = service.answerApproval(
+            hostId = "host_1",
             approval = highRiskApproval,
+            displayedPreview = highRiskApproval.preview,
             outcome = "allowed-once",
             signatureProvider = { canonicalMsg ->
                 providerCalled = true
@@ -78,15 +83,15 @@ class InteractionTest {
     @Test
     fun testNormalRiskApprovalNeedsOnlyUnlockedApp() = runBlocking {
         val repo = InteractionRepository()
-        val service = InteractionService(repo)
+        val service = InteractionService(repo, "host_1")
         val caller = FakeRpcCaller()
 
         val normalRiskApproval = PendingApproval(
             id = "appr_normal_1",
             sessionId = "s_1",
             toolName = "read_file",
-            preview = Preview(text = "package.json"),
-            argsDigest = "sha256:xyz789",
+            preview = ApprovalPreview(text = "package.json", json = "{}"),
+            argsDigest = computeArgsDigest("package.json", "{}"),
             risk = "normal",
             requiresSignature = false,
         )
@@ -94,7 +99,9 @@ class InteractionTest {
 
         // Normal risk needs no signature provider
         val result = service.answerApproval(
+            hostId = "host_1",
             approval = normalRiskApproval,
+            displayedPreview = normalRiskApproval.preview,
             outcome = "allowed-once",
             signatureProvider = null,
             rpcCaller = caller::call,
@@ -109,24 +116,26 @@ class InteractionTest {
     @Test
     fun testDigestMismatchBlocksSigning() = runBlocking {
         val repo = InteractionRepository()
-        val service = InteractionService(repo)
+        val service = InteractionService(repo, "host_1")
         val caller = FakeRpcCaller()
 
         val approval = PendingApproval(
             id = "appr_tampered",
             sessionId = "s_1",
             toolName = "bash",
-            preview = Preview(text = "echo 'safe'"),
-            argsDigest = "sha256:safe_digest",
+            preview = ApprovalPreview(text = "echo 'safe'", json = "{}"),
+            argsDigest = computeArgsDigest("echo 'safe'", "{}"),
             risk = "high",
             requiresSignature = true,
         )
 
+        repo.addOrUpdate(PendingInteraction.Approval(approval))
         var signatureProviderInvoked = false
         val result = service.answerApproval(
+            hostId = "host_1",
             approval = approval,
             outcome = "allowed-once",
-            displayedPreviewText = "echo 'tampered evil script'", // Mismatched displayed preview!
+            displayedPreview = approval.preview.copy(text = "echo 'tampered evil script'"),
             signatureProvider = {
                 signatureProviderInvoked = true
                 "fake_sig"
@@ -137,7 +146,7 @@ class InteractionTest {
         // Must fail with SecurityException without even calling the signature provider!
         assertThat(result.isFailure).isTrue()
         assertThat(result.exceptionOrNull()).isInstanceOf(SecurityException::class.java)
-        assertThat(result.exceptionOrNull()?.message).contains("Preview text mismatch")
+        assertThat(result.exceptionOrNull()?.message).contains("Displayed approval preview changed")
         assertThat(signatureProviderInvoked).isFalse()
         assertThat(caller.calls).isEmpty()
     }
@@ -145,24 +154,24 @@ class InteractionTest {
     @Test
     fun testQuestionAnsweringDispatchesRpc() = runBlocking {
         val repo = InteractionRepository()
-        val service = InteractionService(repo)
+        val service = InteractionService(repo, "host_1")
         val caller = FakeRpcCaller()
 
         val question = PendingQuestion(
             id = "q_1",
             sessionId = "s_1",
-            prompt = "Select architecture strategy",
-            options = listOf(
-                QuestionOption(id = "opt_a", label = "Option A"),
-                QuestionOption(id = "opt_b", label = "Option B"),
-            ),
+            questions = listOf(QuestionPrompt(
+                id = "strategy",
+                question = "Select architecture strategy",
+                options = listOf(QuestionOption(label = "Option A"), QuestionOption(label = "Option B")),
+            )),
         )
         repo.addOrUpdate(PendingInteraction.Question(question))
 
         val result = service.answerQuestion(
-            questionId = "q_1",
-            answers = listOf("opt_a"),
-            text = "Proceed with Option A",
+            hostId = "host_1",
+            question = question,
+            answers = listOf(QuestionAnswer("strategy", listOf("Option A"), "Proceed with Option A")),
             rpcCaller = caller::call,
         )
 
@@ -180,7 +189,7 @@ class InteractionTest {
             id = "appr_pc_win",
             sessionId = "s_1",
             toolName = "bash",
-            preview = Preview(text = "git push"),
+            preview = ApprovalPreview(text = "git push", json = "{}"),
             argsDigest = "sha256:digest",
         )
         repo.addOrUpdate(PendingInteraction.Approval(approval))
