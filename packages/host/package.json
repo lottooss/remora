@@ -28,6 +28,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "koffi": "3.3.2",
     "ws": "^8.21.3"
   },
   "peerDependencies": {
