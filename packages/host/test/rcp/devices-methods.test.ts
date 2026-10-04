@@ -13,8 +13,9 @@
  * ChannelManager in test/rcp/devices-channel.test.ts (added with the
  * implementation, which provides the method registration it wires).
  */
+import { createECDH } from 'node:crypto'
 import { Context, type Message } from '@deepseek-ai/cordis'
-import { encodeBase64Url } from '@remora/crypto'
+import { decodeBase64Url, encodeBase64Url, signApprovalMessage, verifyApprovalSignature } from '@remora/crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as host from '../../src/index.ts'
 import type { RcpServer } from '../../src/rcp/index.ts'
@@ -57,11 +58,17 @@ const UNKNOWN_DEVICE_ID = 'd_bbbbbbbbbbbbbbbbbbbbbbbbbb'
 const PSK_SEED = new Uint8Array(32).fill(2)
 const PUSH_KEY_SEED = new Uint8Array(32).fill(3)
 
-/** Uncompressed P-256 approval public keys (0x04 || X || Y), old and new. */
-const KEY_OLD = new Uint8Array(65).fill(1)
-const KEY_NEW = new Uint8Array(65).fill(9)
-KEY_OLD[0] = 0x04
-KEY_NEW[0] = 0x04
+/** Fixed, valid P-256 test points; repeated filler bytes are not on the curve. */
+function approvalPoint(seed: number): Uint8Array {
+  const ec = createECDH('prime256v1')
+  ec.setPrivateKey(Buffer.alloc(32, seed))
+  return new Uint8Array(ec.getPublicKey(undefined, 'uncompressed'))
+}
+const KEY_OLD = approvalPoint(1)
+const KEY_NEW = approvalPoint(9)
+const KEY_NEW_SPKI = Buffer.concat([
+  Buffer.from('3059301306072a8648ce3d020106082a8648ce3d030107034200', 'hex'), KEY_NEW,
+])
 
 /** Fixed request ids for the exactly-once assertions. */
 const ROTATION_REQUEST_ID = '5e22e13c-1111-4222-8333-000000000001'
@@ -385,12 +392,44 @@ describe('devices.rotateApprovalKey (P7-H7, crypto-v1.md §10)', () => {
 
     const activated = await waitFor(async () => {
       const payload = await readStoredPayload(credentials)
-      return storedDevice(payload, DEVICE_A_ID).approvalPublicKey === encodeBase64Url(KEY_NEW)
+      return storedDevice(payload, DEVICE_A_ID).approvalPublicKey === encodeBase64Url(KEY_NEW_SPKI)
     })
     expect(activated, 'the new approval key never became active after PC confirmation').toBe(true)
 
     const dashboardAfter = await dashboardBody(routes)
     expect(dashboardAfter.pendingRotations).toEqual([])
+  }, 15_000)
+
+  it('accepts Android SPKI and persists a key usable by the DER approval verifier', async () => {
+    const { credentials, routes, server } = await mountHostWithPairedDevice()
+    const response = await request(server, DEVICE_A_ID, 1, 'devices.rotateApprovalKey', {
+      approvalPub: encodeBase64Url(KEY_NEW_SPKI), requestId: ROTATION_REQUEST_ID,
+    })
+    expect(response.ok).toBe(true)
+    expect(response.r).toEqual({ status: 'pending_pc_confirmation' })
+    expect((await postAction(routes, ROTATION_CONFIRM_PATH, { deviceId: DEVICE_A_ID })).status).toBe(200)
+    expect(await waitFor(async () => storedDevice(await readStoredPayload(credentials), DEVICE_A_ID)
+      .approvalPublicKey === encodeBase64Url(KEY_NEW_SPKI))).toBe(true)
+    const publicKey = storedDevice(await readStoredPayload(credentials), DEVICE_A_ID).approvalPublicKey
+    expect(publicKey).toBeDefined()
+    if (publicKey === undefined) throw new Error('stored approval public key missing')
+    const message = new TextEncoder().encode('remora test approval')
+    const signature = signApprovalMessage(new Uint8Array(32).fill(9), message)
+    expect(verifyApprovalSignature(decodeBase64Url(publicKey), signature, message)).toBe(true)
+  }, 15_000)
+
+  it('rejects off-curve points and SPKI with trailing bytes', async () => {
+    const { routes, server } = await mountHostWithPairedDevice()
+    const offCurve = new Uint8Array(65).fill(9)
+    offCurve[0] = 0x04
+    for (const [index, key] of [offCurve, Buffer.concat([KEY_NEW_SPKI, Buffer.from([0])])].entries()) {
+      const response = await request(server, DEVICE_A_ID, index + 1, 'devices.rotateApprovalKey', {
+        approvalPub: encodeBase64Url(key), requestId: ROTATION_REQUEST_ID,
+      })
+      expect(response.ok).toBe(false)
+      expect(response.e?.code).toBe('invalid_params')
+    }
+    expect((await dashboardBody(routes)).pendingRotations).toEqual([])
   }, 15_000)
 
   it('leaves the old key active when the PC rejects or never confirms', async () => {

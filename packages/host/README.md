@@ -33,6 +33,8 @@ signed approvals through the real RCP handler. Recorded-fixture tests also cover
 tool event mapping and PC-chain withdrawal. Full phone-to-host scenarios remain
 the scope of P7-T1.
 
+Approval keys from Android are P-256 SubjectPublicKeyInfo (SPKI) DER, and signatures are ECDSA DER. `devices.rotateApprovalKey` accepts SPKI and legacy uncompressed SEC1 points, validates the curve and point with Node crypto, and normalizes the pending/stored value to SPKI before PC confirmation. Existing registry entries are not silently migrated: an older raw SEC1 approval key can be replaced through another PC-confirmed rotation. Pending/duplicate/conflict responses and the required PC confirmation remain unchanged.
+
 ## Try it in a throwaway dsh profile
 
 Never install into your everyday `web` profile. From the repository root:

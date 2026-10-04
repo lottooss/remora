@@ -9,6 +9,7 @@
  * the relay boundary (crypto-v1.md §10), whose deferral is exercised by the
  * plugin-level tests in test/rcp/devices-methods.test.ts.
  */
+import { createECDH } from 'node:crypto'
 import {
   concatBytes,
   createInitiatorHandshake,
@@ -30,11 +31,17 @@ import { ApprovalKeyRotationManager, registerDevicesMethods } from '../../src/rc
 /** Fixed, obviously fake test key material (AGENTS.md §10). */
 const DEVICE_PSK = new Uint8Array(32).fill(0x55)
 const PUSH_KEY = new Uint8Array(32).fill(0x33)
-/** Uncompressed P-256 approval public keys (0x04 || X || Y), old and new. */
-const KEY_OLD = new Uint8Array(65).fill(1)
-const KEY_NEW = new Uint8Array(65).fill(9)
-KEY_OLD[0] = 0x04
-KEY_NEW[0] = 0x04
+/** Fixed valid P-256 points, encoded the way legacy rotation clients sent them. */
+function approvalPoint(seed: number): Uint8Array {
+  const ec = createECDH('prime256v1')
+  ec.setPrivateKey(Buffer.alloc(32, seed))
+  return new Uint8Array(ec.getPublicKey(undefined, 'uncompressed'))
+}
+const KEY_OLD = approvalPoint(1)
+const KEY_NEW = approvalPoint(9)
+const KEY_NEW_SPKI = new Uint8Array(Buffer.concat([
+  Buffer.from('3059301306072a8648ce3d020106082a8648ce3d030107034200', 'hex'), KEY_NEW,
+]))
 const ROTATION_REQUEST_ID = '5e22e13c-1111-4222-8333-000000000001'
 
 function setupTest() {
@@ -213,6 +220,6 @@ describe('devices.* over the real secure channel (P7-H7, RCP/1 §7)', () => {
 
     // The PC confirmation (management page) activates the new key.
     expect(ctx.rotations.confirm(ctx.deviceId)).toBe('resolved')
-    expect(ctx.registry.getDeviceById(ctx.deviceId)?.approvalPublicKey).toEqual(KEY_NEW)
+    expect(ctx.registry.getDeviceById(ctx.deviceId)?.approvalPublicKey).toEqual(KEY_NEW_SPKI)
   })
 })
