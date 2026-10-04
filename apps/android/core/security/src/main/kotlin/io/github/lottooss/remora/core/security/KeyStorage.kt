@@ -194,7 +194,9 @@ internal object HostKeyCodec {
                 repeat(7) { index ->
                     val length = data.readInt()
                     require(if (index < 6) length == 32 else length in 1..512)
-                    material += ByteArray(length).also(data::readFully)
+                    val part = ByteArray(length)
+                    material += part
+                    data.readFully(part)
                 }
                 require(data.available() == 0)
                 HostKeyMaterial(hostId, deviceId, material[0], material[1], material[2],

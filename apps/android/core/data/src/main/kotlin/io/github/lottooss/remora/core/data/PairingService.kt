@@ -191,11 +191,11 @@ class PairingService(
                         noise.secretKey, noise.publicKey, devicePsk, pushKey, approval.publicKeySpkiDer)
                     keys = material
                     phase = PairingError.STORAGE_FAILED
-                    keyStorage.saveHostKeys(payload.hostId, material)
                     keysSaved = true
+                    keyStorage.saveHostKeys(payload.hostId, material)
+                    hostSaved = true
                     hostRepository.addHost(Host(HostId(payload.hostId), payload.hostName, payload.relayOrigin,
                         payload.hostNoisePub.copyOf(), isOnline = false, lastSeenAt = System.currentTimeMillis()))
-                    hostSaved = true
                     // RCP requires persistence before acknowledging the exact request id.
                     secureChannel.sendTransport(buildJsonObject {
                         put("k", "res"); put("id", response.getValue("id")); put("ok", true)
