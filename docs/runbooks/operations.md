@@ -1,6 +1,6 @@
 # Operations Runbook
 
-> **v1 not released — see milestone P7.** An audit on 2026-09-28 found Remora does not yet work against real dsh or a real phone; several instructions below were corrected on 2026-09-30 (see [SWARM.md §0](../SWARM.md#0-why-this-phase-exists-read-this-it-is-not-optional)). Do not follow this guide end-to-end until the P7 wave-5 owner tasks (P7-O1…P7-O5) pass.
+> **v1 not released — see milestone P7.** An audit on 2026-09-28 found Remora does not yet work against real dsh or a real phone; several instructions below were corrected on 2026-09-30, and the dsh runtime/service sections were rewritten on 2026-10-05 (see [SWARM.md §0](../SWARM.md#0-why-this-phase-exists-read-this-it-is-not-optional)). Do not follow this guide end-to-end until the P7 wave-5 owner tasks (P7-O1…P7-O5) and the [§10 checklist](#10-release-checklist-owner) pass.
 
 Owner-facing guide from zero to "my phone controls dsh on my PC".
 
@@ -59,10 +59,18 @@ pnpm -F @remora/relay exec wrangler secret put FCM_SERVICE_ACCOUNT_JSON
 The Remora Host runs as a Cordis plugin inside `dsh`, operating strictly within an isolated profile (`remora`).
 
 ```sh
-# 1. Install pinned dsh version
-npm install -g @deepseek-ai/dsh@0.1.5-rc.3
+# 1. Install the pinned dsh into the dedicated Remora runtime — NOT a global install.
+#    The service installed in §4 launches only this pinned copy (it verifies the exact
+#    version and entry point), so your interactive dsh installation never becomes a
+#    service dependency. Keep this window in this directory for step 4/5.
+mkdir "%LOCALAPPDATA%\Remora\runtime"
+cd /d "%LOCALAPPDATA%\Remora\runtime"
+npm install @deepseek-ai/dsh@0.1.5-rc.3
 
-# 2. Build host plugin and CLI
+# Shortcut used below (cmd):
+set "DSH=%LOCALAPPDATA%\Remora\runtime\node_modules\@deepseek-ai\dsh\lib\bin.js"
+
+# 2. Build host plugin and CLI (from the repository root)
 pnpm run build
 
 # 3. Pack the host plugin tarball (self-contained: the build bundles the
@@ -70,10 +78,10 @@ pnpm run build
 pnpm -F @remora/host pack
 
 # 4. Create dedicated remora profile from web default
-dsh --profile remora --from-default-profile web
+node "%DSH%" --profile remora --from-default-profile web
 
 # 5. Install the packed Remora host plugin into the profile
-dsh plugin --profile remora add ./remora-host-1.0.0.tgz
+node "%DSH%" plugin --profile remora add ./remora-host-1.0.0.tgz
 ```
 
 Installing from the packed tarball is the documented path (dsh-integration.md Q10): it
@@ -114,37 +122,65 @@ Edit your profile configuration patch at `%USERPROFILE%\.dsh\profiles\remora\cor
 
 Run dsh once interactively to verify startup:
 ```sh
-dsh --profile remora --no-open --port 7717
+node "%DSH%" --profile remora --no-open --port 7717
 ```
-Open the printed `dsh web:` URL in your PC browser to establish the management session cookie.
+Open the printed `dsh web:` URL in your PC browser to establish the management session cookie. The service itself starts dsh with all output discarded (see §4), so this interactive run is how you obtain the GUI URL.
 
 ---
 
-## 4. Install Background Host Service (Always-On Supervision)
+## 4. Install the Background Host Service (Always-On Supervision, Windows)
 
-Use the Remora CLI to manage the Windows logon supervisor:
+The `remora` CLI registers a per-user logon task (no elevation). It snapshots the
+compiled CLI into `%LOCALAPPDATA%\Remora\services\<task>\cli`, so the service never
+depends on this repository checkout, and it launches only the pinned dsh runtime from
+§3 step 1.
 
 ```sh
-# Build CLI
-pnpm -F @remora/cli run build
+# Build the CLI once (from the repository root; already done in §3 step 2)
+pnpm run build
 
-# Install Windows Task Scheduler logon service
+# Register the logon service (default task name RemoraHost; --task-name customises it)
 node apps/cli/lib/bin.js service install --port 7717 --profile remora
 
-# Check service health and live logs
-node apps/cli/lib/bin.js service status
-node apps/cli/lib/bin.js service logs -f
+# Lifecycle — every command reports the outcome it actually observed
+node apps/cli/lib/bin.js service start      # start the registered task now
+node apps/cli/lib/bin.js service status     # registration + supervisor liveness
+node apps/cli/lib/bin.js service logs -f    # metadata-only lifecycle log (see below)
+node apps/cli/lib/bin.js service stop       # ask the supervisor to stop its dsh child
+node apps/cli/lib/bin.js service uninstall  # remove autostart, stop the supervisor
 
-# Run comprehensive system diagnostics
-node apps/cli/lib/bin.js doctor --profile remora
+# Diagnostics and version
+node apps/cli/lib/bin.js doctor --profile remora --relay-url https://remora-relay.<your-subdomain>.workers.dev
+node apps/cli/lib/bin.js --version
 ```
 
-To stop or uninstall the service at any time:
-```sh
-node apps/cli/lib/bin.js service uninstall
-```
+Notes:
 
-> **Power settings recommendation:** Set *Sleep when plugged in* to *Never* in Windows Settings (System → Power). Automatic keep-awake during active agent turns is **not implemented yet** — the current keep-awake path is a no-op on Windows (see [SWARM.md §0](../SWARM.md#0-why-this-phase-exists-read-this-it-is-not-optional)); P7-H6 will fix it and this note will be updated when it lands. Until then, the manual power setting above is the only thing keeping the PC awake.
+- **Logs are metadata-only.** The supervisor records fixed lifecycle facts (started,
+  exited, restart delay), capped at 1 MiB per day, under
+  `%LOCALAPPDATA%\Remora\logs\<task>\remora-YYYY-MM-DD.log`. dsh output is never
+  captured because it can contain conversation content and the browser credential
+  (AGENTS.md §1.8); use dsh's own GUI for anything beyond lifecycle state.
+- **Custom task names.** `--task-name RemoraLaptop` scopes the scheduled task, the
+  service state directory and the log directory, so several configurations coexist.
+- **No elevation, no shell.** Registration creates the task with
+  `Register-ScheduledTask` for your own user (RunLevel Limited) and executes
+  `conhost.exe --headless <node> <bin.js> host run --installed-task <task>` directly
+  (no `cmd.exe`). If Task Scheduler denies it, an `HKCU\...\Run` entry is the
+  documented fallback; `service uninstall` removes whichever exists and says so.
+- **Acknowledged lifecycle.** `start`, `stop` and `uninstall` poll the real supervisor
+  state and report success only when they observed it. Stop is requested through a
+  `stop-request` file watched by the supervisor; nothing is killed from a stored PID.
+- **Locking.** A per-task `supervisor.json` (exclusive create + liveness check)
+  prevents two service instances for the same task name; install is refused while a
+  supervisor is running.
+- **Uninstall retains data.** The runtime, CLI snapshot, logs and the dsh profile are
+  kept; only the autostart registration and the running supervisor are removed.
+
+> **Power settings:** Automatic keep-awake during active agent turns is implemented in
+> the host (P7-H6, Windows keep-awake). Confirm active acquisition on your machine —
+> OWNER-PENDING evidence. Laptop lid-close and battery policies still apply; set
+> *Sleep when plugged in* to *Never* for 24/7 availability.
 
 ---
 
@@ -212,7 +248,12 @@ The Cloudflare Worker Durable Object (`AccountHub`) stores all routing metadata 
 
 ### 8.2 Host Identity and Paired Devices
 
-The host currently does **not** persist its identity keys or the paired-device registry — every restart forgets both (see [SWARM.md §0](../SWARM.md#0-why-this-phase-exists-read-this-it-is-not-optional)). Where this state will live is **determined by P7-H2 (persistent host identity) and P7-H4 (persistent device registry)**; until those tasks land there is nothing reliable to back up, and this section will be updated when they merge.
+The host persists its identity in the dsh credentials record `remora/host-identity`
+(P7-H2) and paired devices in the persistent device registry (P7-H4); both live inside
+the dedicated dsh profile area. Back up the whole profile directory
+(`%USERPROFILE%\.dsh\profiles\remora`) plus the dsh credentials store. That backup
+contains secret key material: store it encrypted, and never in logs, snapshots or this
+repository.
 
 ---
 
@@ -225,3 +266,25 @@ The host currently does **not** persist its identity keys or the paired-device r
 | No push notifications received | Missing `google-services.json` or FCM key | Verify `google-services.json` was present when building Android app. Verify `FCM_SERVICE_ACCOUNT_JSON` secret in Cloudflare. Ensure Android notification permissions are granted. |
 | Biometric prompt requested on every action | High-risk approval policy active | Expected behavior for destructive commands (e.g. `rm`, file deletion, shell pipelines) per Blueprint §11 security model. |
 | Path access denied error | Requested path outside configured roots | Add workspace directories to `remoteRoots` in `%USERPROFILE%\.dsh\profiles\remora\cordis.patch.yml`. |
+| `service install` says the pinned runtime is missing | Dedicated runtime absent or wrong version | Repeat §3 step 1 (`npm install @deepseek-ai/dsh@0.1.5-rc.3` inside `%LOCALAPPDATA%\Remora\runtime`). A global `dsh` on PATH does not count. |
+| `service start` says the supervisor did not report startup | Snapshot CLI, runtime or profile problem | Run `remora doctor --profile remora`, read `%LOCALAPPDATA%\Remora\logs\<task>\`, then retry. If an orphaned dsh from a hard crash still holds the port, close it before retrying (the supervisor never kills stored PIDs). |
+
+---
+
+## 10. Release checklist (owner)
+
+Everything below needs owner accounts, secrets, devices or signing keys — agents leave
+these boxes unticked (`OWNER-PENDING`, docs/SWARM.md §1 rule 5).
+
+- [ ] OWNER-PENDING: Relay deployed and `REMORA_ENROLL_SECRET` stored in Cloudflare (§1); record the worker URL here.
+- [ ] OWNER-PENDING: Firebase project created, `apps/android/app/google-services.json` placed, `FCM_SERVICE_ACCOUNT_JSON` uploaded (§2).
+- [ ] OWNER-PENDING: Dedicated pinned dsh runtime installed (`%LOCALAPPDATA%\Remora\runtime`, §3 step 1).
+- [ ] OWNER-PENDING: `remora` profile created, packed host plugin installed, `cordis.patch.yml` configured (relay URL, `remoteRoots`, notification preferences, §3).
+- [ ] OWNER-PENDING: Enrollment secret provided to dsh as `REMORA_RELAY_ENROLL_SECRET` (§3).
+- [ ] OWNER-PENDING: Interactive dsh run verified; management URL opened once (§3).
+- [ ] OWNER-PENDING: Service installed and started; survives sign-out/sign-in and a dsh kill on the real PC (§4). Automated CI proof of this is task P7-T2 and is not yet implemented.
+- [ ] OWNER-PENDING: Android release keystore generated, release APK signed and installed (§5).
+- [ ] OWNER-PENDING: Physical phone paired with SAS confirmation; approval, question, session and file flows exercised ([device-test.md](device-test.md) filled in by the owner, §6).
+- [ ] OWNER-PENDING: Device revocation verified from the management dashboard (§7).
+- [ ] OWNER-PENDING: Encrypted backup of the dsh profile taken (§8).
+- [ ] OWNER-PENDING: GitHub required checks configured and `v1.0.0` tag created only after every box above has evidence.

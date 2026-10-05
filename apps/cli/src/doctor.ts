@@ -1,201 +1,103 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { execSync } from 'node:child_process'
 import { getDshProfileDir } from './paths.ts'
+import { PINNED_DSH_VERSION, resolveDshRuntime } from './runtime.ts'
+import { getServiceStatus } from './service.ts'
 
-export interface DoctorCheck {
-  name: string
-  status: 'pass' | 'warn' | 'fail'
-  message: string
-  hint?: string
-}
+export interface DoctorCheck { name: string; status: 'pass' | 'warn' | 'fail'; message: string; hint?: string }
+export interface DoctorReport { overallSuccess: boolean; checks: DoctorCheck[] }
 
-export interface DoctorReport {
-  overallSuccess: boolean
-  checks: DoctorCheck[]
-}
-
+/** Report local Node compatibility without launching another process. */
 export async function checkNodeVersion(): Promise<DoctorCheck> {
-  const version = process.versions.node
-  const major = parseInt(version.split('.')[0] ?? '0', 10)
-  if (major >= 24) {
-    return {
-      name: 'Node.js runtime',
-      status: 'pass',
-      message: `v${version} (meets >= 24 requirement)`,
-    }
-  }
-  return {
-    name: 'Node.js runtime',
-    status: 'fail',
-    message: `v${version} is unsupported; Node >= 24 required`,
-    hint: 'Install Node 24+ via fnm, nvm-windows, or official installer.',
-  }
+  const valid = Number(process.versions.node.split('.')[0]) >= 24
+  return { name: 'Node.js runtime', status: valid ? 'pass' : 'fail', message: `v${process.versions.node}; Node >= 24 required.` }
 }
 
+/** Check the same pinned runtime used by the supervisor, never an unrelated PATH binary. */
 export async function checkDshInstalled(): Promise<DoctorCheck> {
   try {
-    const versionOutput = execSync('dsh --version', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
-    return {
-      name: 'DeepSeek Harness (dsh)',
-      status: 'pass',
-      message: `dsh CLI found: ${versionOutput}`,
-    }
+    resolveDshRuntime()
+    return { name: 'Dedicated dsh runtime', status: 'pass', message: `@deepseek-ai/dsh@${PINNED_DSH_VERSION} is installed.` }
   } catch {
-    return {
-      name: 'DeepSeek Harness (dsh)',
-      status: 'warn',
-      message: 'dsh command not found on PATH',
-      hint: 'Install dsh globally via `npm install -g @deepseek-ai/dsh` or ensure it is on PATH.',
-    }
+    return { name: 'Dedicated dsh runtime', status: 'fail', message: 'The pinned runtime is missing or does not match this release.', hint: 'Follow operations.md section 3; a global dsh installation is not the service runtime.' }
   }
 }
 
+/** Only existence is checked; no credential or profile content is printed. */
 export async function checkProfilePresent(profile: string = 'remora'): Promise<DoctorCheck> {
-  const profileDir = getDshProfileDir(profile)
-  if (fs.existsSync(profileDir)) {
-    return {
-      name: `dsh profile '${profile}'`,
-      status: 'pass',
-      message: `Profile exists at ${profileDir}`,
-    }
-  }
-  return {
-    name: `dsh profile '${profile}'`,
-    status: 'warn',
-    message: `Profile directory not found: ${profileDir}`,
-    hint: `Create profile via \`dsh --profile ${profile} --from-default-profile web\``,
-  }
+  return fs.existsSync(getDshProfileDir(profile))
+    ? { name: 'dsh profile', status: 'pass', message: `Dedicated profile ${profile} exists.` }
+    : { name: 'dsh profile', status: 'fail', message: `Dedicated profile ${profile} is missing.`, hint: 'Create it using the pinned dsh runtime before installing the service.' }
 }
 
+/** A config row is a hint, not proof that Cordis loaded a working host. */
 export async function checkBundleInstalled(profile: string = 'remora'): Promise<DoctorCheck> {
-  const profileDir = getDshProfileDir(profile)
-  const patchYml = path.join(profileDir, 'cordis.patch.yml')
-  if (!fs.existsSync(patchYml)) {
-    return {
-      name: 'Remora host bundle',
-      status: 'warn',
-      message: 'cordis.patch.yml not found in profile',
-      hint: `Add plugin via \`dsh plugin --profile ${profile} add ./packages/host\``,
-    }
-  }
-  const content = fs.readFileSync(patchYml, 'utf8')
-  if (content.includes('remora') || content.includes('@remora/host')) {
-    return {
-      name: 'Remora host bundle',
-      status: 'pass',
-      message: 'Remora plugin configured in cordis.patch.yml',
-    }
-  }
-  return {
-    name: 'Remora host bundle',
-    status: 'warn',
-    message: 'Remora row missing in cordis.patch.yml',
-    hint: 'Configure remora row in cordis.patch.yml per docs/runbooks/operations.md §3.',
-  }
-}
-
-export async function checkRelayReachable(relayUrl?: string): Promise<DoctorCheck> {
-  const target = relayUrl || 'https://127.0.0.1:8787'
+  const patch = path.join(getDshProfileDir(profile), 'cordis.patch.yml')
   try {
-    const res = await fetch(target, { method: 'GET', signal: AbortSignal.timeout(3000) })
-    return {
-      name: 'Relay reachability',
-      status: 'pass',
-      message: `Reachable (${target} responded with HTTP ${res.status})`,
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'connection refused'
-    return {
-      name: 'Relay reachability',
-      status: 'warn',
-      message: `Could not reach relay at ${target}: ${msg}`,
-      hint: 'Verify relay deployment with `pnpm -F @remora/relay run dev` or check your Cloudflare Worker URL.',
-    }
+    if (fs.statSync(patch).size > 256 * 1024) throw new Error('Oversized patch')
+    const content = fs.readFileSync(patch, 'utf8')
+    if (!/^\s*-\s*id:\s*['"]?remora['"]?\s*(?:#.*)?$/m.test(content)) throw new Error('Missing row')
+    return { name: 'Remora host bundle', status: 'warn', message: 'Remora configuration row exists; live plugin startup has not been inspected.', hint: 'Confirm the app connects to this host before relying on unattended operation.' }
+  } catch {
+    return { name: 'Remora host bundle', status: 'fail', message: 'Remora configuration row is absent or unreadable.', hint: 'Install the packed host with --allow-build koffi and configure its profile as described in operations.md section 3.' }
   }
 }
 
-export async function checkServiceState(): Promise<DoctorCheck> {
-  if (process.platform === 'win32') {
+/** Require the RLY/1 health body, not merely an arbitrary HTTP response. */
+export async function checkRelayReachable(relayUrl?: string): Promise<DoctorCheck> {
+  if (relayUrl === undefined) return { name: 'Relay health', status: 'warn', message: 'No relay URL supplied; network health was not checked.', hint: 'Pass --relay-url https://<your-relay>.' }
+  try {
+    const url = new URL(relayUrl)
+    if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.pathname !== '/') throw new Error('Invalid relay URL')
+    const response = await fetch(new URL('/v1/health', url), { signal: AbortSignal.timeout(5000), redirect: 'error' })
+    if (!response.ok || response.body === null) throw new Error('Unhealthy relay')
+    const reader = response.body.getReader()
+    const chunks: Uint8Array[] = []
+    let length = 0
     try {
-      const output = execSync('schtasks /Query /TN RemoraHost', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
-      if (output.includes('RemoraHost')) {
-        return {
-          name: 'Logon service',
-          status: 'pass',
-          message: 'Scheduled task RemoraHost is registered',
-        }
+      while (true) {
+        const next = await reader.read()
+        if (next.done) break
+        length += next.value.byteLength
+        if (length > 1024) throw new Error('Oversized response')
+        chunks.push(next.value)
       }
-    } catch {
-      // not found
-    }
-    return {
-      name: 'Logon service',
-      status: 'warn',
-      message: 'RemoraHost scheduled task not found',
-      hint: 'Run `remora service install` to register logon autostart.',
-    }
-  }
-  return {
-    name: 'Logon service',
-    status: 'pass',
-    message: `Service management available on ${process.platform}`,
+    } finally { await reader.cancel() }
+    const body: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+    if (typeof body !== 'object' || body === null || !('ok' in body) || body.ok !== true || !('v' in body) || body.v !== 1) throw new Error('Wrong protocol')
+    return { name: 'Relay health', status: 'pass', message: 'HTTPS /v1/health returned RLY/1 readiness.' }
+  } catch {
+    return { name: 'Relay health', status: 'fail', message: 'Relay HTTPS health check failed or returned an invalid response.', hint: 'Use the relay HTTPS origin without credentials, query or path; check the owner deployment and network.' }
   }
 }
 
+/** Include the documented HKCU fallback, without printing registry/task command strings. */
+export async function checkServiceState(taskName: string = 'RemoraHost'): Promise<DoctorCheck> {
+  const state = getServiceStatus(taskName)
+  return { name: 'Logon supervisor', status: state.registered && state.running ? 'pass' : 'warn', message: `${state.details} Supervisor ${state.running ? 'present (or state needs attention)' : 'stopped'}; relay connection is not inferred from this.` }
+}
+
+/** Platform capability only; the host reports actual acquisition independently. */
 export async function checkKeepAwakeSupport(): Promise<DoctorCheck> {
-  const p = process.platform
-  if (p === 'win32' || p === 'darwin' || p === 'linux') {
-    return {
-      name: 'Keep-awake support',
-      status: 'pass',
-      message: `Native keep-awake supported on ${p}`,
-    }
-  }
-  return {
-    name: 'Keep-awake support',
-    status: 'warn',
-    message: `Platform ${p} uses no-op keep-awake fallback`,
-  }
+  return { name: 'Keep-awake support', status: ['win32', 'darwin', 'linux'].includes(process.platform) ? 'pass' : 'warn', message: `Native keep-awake supported on Windows, macOS and Linux. Active acquisition must be confirmed in host status.` }
 }
 
+/** Keep explicit sleep and lid policies under the owner's control. */
 export function checkPowerSettingsHints(): DoctorCheck {
-  return {
-    name: 'Power settings advice',
-    status: 'pass',
-    message: 'PC can be locked (Win+L). For 24/7 availability on laptops, set "When I close lid" to "Do nothing".',
-  }
+  return { name: 'Power settings advice', status: 'pass', message: 'A locked PC (Win+L) can stay online. Lid-close, explicit sleep and battery policies still apply.' }
 }
 
-export async function runDoctor(profile: string = 'remora', relayUrl?: string): Promise<DoctorReport> {
-  const checks: DoctorCheck[] = [
-    await checkNodeVersion(),
-    await checkDshInstalled(),
-    await checkProfilePresent(profile),
-    await checkBundleInstalled(profile),
-    await checkRelayReachable(relayUrl),
-    await checkServiceState(),
-    await checkKeepAwakeSupport(),
-    checkPowerSettingsHints(),
-  ]
-
-  const overallSuccess = !checks.some((c) => c.status === 'fail')
-  return { overallSuccess, checks }
+/** Read local setup facts and, only when supplied, the relay's public health endpoint. */
+export async function runDoctor(profile: string = 'remora', relayUrl?: string, taskName: string = 'RemoraHost'): Promise<DoctorReport> {
+  const checks = [await checkNodeVersion(), await checkDshInstalled(), await checkProfilePresent(profile), await checkBundleInstalled(profile), await checkRelayReachable(relayUrl), await checkServiceState(taskName), await checkKeepAwakeSupport(), checkPowerSettingsHints()]
+  return { overallSuccess: !checks.some((check) => check.status === 'fail'), checks }
 }
 
+/** Diagnostics contain fixed status messages and never subprocess output or credentials. */
 export function printDoctorReport(report: DoctorReport): void {
-  console.log('\n=== remora doctor ===\n')
   for (const check of report.checks) {
-    const symbol = check.status === 'pass' ? '[\x1b[32m✓\x1b[0m]' : check.status === 'warn' ? '[\x1b[33m!\x1b[0m]' : '[\x1b[31m✗\x1b[0m]'
-    console.log(`${symbol} ${check.name}: ${check.message}`)
-    if (check.hint) {
-      console.log(`    Hint: ${check.hint}`)
-    }
+    console.log(`[${check.status.toUpperCase()}] ${check.name}: ${check.message}`)
+    if (check.hint !== undefined) console.log(`  ${check.hint}`)
   }
-  console.log('')
-  if (report.overallSuccess) {
-    console.log('\x1b[32mDoctor found no critical failures.\x1b[0m')
-  } else {
-    console.log('\x1b[31mDoctor found one or more critical issues. See hints above.\x1b[0m')
-  }
+  console.log(report.overallSuccess ? 'No local blocking failures found; warnings and owner acceptance remain open.' : 'Fix the reported failures before relying on the service.')
 }

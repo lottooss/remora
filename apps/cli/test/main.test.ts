@@ -23,7 +23,7 @@ describe('remora CLI dispatcher', () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     const code = await main(['--version'])
     expect(code).toBe(0)
-    expect(log.mock.calls[0]?.[0]).toBe('0.0.0')
+    expect(log.mock.calls[0]?.[0]).toBe('1.0.0')
   })
 
   it('rejects unknown commands with exit code 64', async () => {
