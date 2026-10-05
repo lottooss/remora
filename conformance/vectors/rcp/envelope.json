@@ -1,17 +1,250 @@
 {
   "suite": "rcp/envelope",
   "version": 1,
-  "source": "Scaffolded for P0-A1 / RCP/1 \u00a73",
-  "notes": "RCP message envelope structure validation",
+  "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
+  "notes": "Decoded known fields are compared, allowing implementations to discard unknown optional fields. Optional null is invalid; absence stays absent on encode. Error envelope uses the current shared implementation shape; spec §3 inconsistency is tracked separately.",
   "cases": [
     {
-      "name": "placeholder scaffold valid baseline",
+      "name": "valid req ping",
       "input": {
-        "status": "scaffold"
+        "value": {
+          "k": "req",
+          "id": 1,
+          "m": "ping",
+          "p": {
+            "t": 1791158400000
+          }
+        }
       },
       "expect": {
+        "k": "req",
+        "id": 1,
+        "m": "ping",
+        "p": {
+          "t": 1791158400000
+        }
+      }
+    },
+    {
+      "name": "valid req host.status",
+      "input": {
+        "value": {
+          "k": "req",
+          "id": 4294967295,
+          "m": "host.status"
+        }
+      },
+      "expect": {
+        "k": "req",
+        "id": 4294967295,
+        "m": "host.status"
+      }
+    },
+    {
+      "name": "valid res true",
+      "input": {
+        "value": {
+          "k": "res",
+          "id": 1,
+          "ok": true,
+          "r": {
+            "t": 1791158400000,
+            "hostTime": 1791158400012
+          }
+        }
+      },
+      "expect": {
+        "k": "res",
+        "id": 1,
+        "ok": true,
+        "r": {
+          "t": 1791158400000,
+          "hostTime": 1791158400012
+        }
+      }
+    },
+    {
+      "name": "valid res false",
+      "input": {
+        "value": {
+          "k": "res",
+          "id": 2,
+          "ok": false,
+          "e": {
+            "code": "forbidden",
+            "message": "Access denied."
+          }
+        }
+      },
+      "expect": {
+        "k": "res",
+        "id": 2,
+        "ok": false,
+        "e": {
+          "code": "forbidden",
+          "message": "Access denied."
+        }
+      }
+    },
+    {
+      "name": "valid item",
+      "input": {
+        "value": {
+          "k": "item",
+          "sid": 9,
+          "n": 0,
+          "d": {
+            "type": "events",
+            "events": [
+              {
+                "kind": "assistant.message",
+                "seq": 3,
+                "at": 1791158400000,
+                "text": "Ready to review.",
+                "model": {
+                  "provider": "deepseek",
+                  "model": "deepseek-chat",
+                  "reasoningEffort": "high"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "expect": {
+        "k": "item",
+        "sid": 9,
+        "n": 0,
+        "d": {
+          "type": "events",
+          "events": [
+            {
+              "kind": "assistant.message",
+              "seq": 3,
+              "at": 1791158400000,
+              "text": "Ready to review.",
+              "model": {
+                "provider": "deepseek",
+                "model": "deepseek-chat",
+                "reasoningEffort": "high"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "valid end true",
+      "input": {
+        "value": {
+          "k": "end",
+          "sid": 9,
+          "ok": true
+        }
+      },
+      "expect": {
+        "k": "end",
+        "sid": 9,
         "ok": true
       }
+    },
+    {
+      "name": "valid cancel",
+      "input": {
+        "value": {
+          "k": "cancel",
+          "sid": 9
+        }
+      },
+      "expect": {
+        "k": "cancel",
+        "sid": 9
+      }
+    },
+    {
+      "name": "valid evt",
+      "input": {
+        "value": {
+          "k": "evt",
+          "e": "host.shutdown",
+          "d": {}
+        }
+      },
+      "expect": {
+        "k": "evt",
+        "e": "host.shutdown",
+        "d": {}
+      }
+    },
+    {
+      "name": "negative request id",
+      "input": {
+        "value": {
+          "k": "req",
+          "id": -1,
+          "m": "ping"
+        }
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "u32 overflow",
+      "input": {
+        "value": {
+          "k": "cancel",
+          "sid": 4294967296
+        }
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "missing failure error",
+      "input": {
+        "value": {
+          "k": "res",
+          "id": 1,
+          "ok": false
+        }
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "null optional params",
+      "input": {
+        "value": {
+          "k": "req",
+          "id": 1,
+          "m": "ping",
+          "p": null
+        }
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "missing item data",
+      "input": {
+        "value": {
+          "k": "item",
+          "sid": 1,
+          "n": 0
+        }
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "success must not include error",
+      "input": {
+        "value": {
+          "k": "res",
+          "id": 1,
+          "ok": true,
+          "e": {
+            "code": "conflict",
+            "message": "Conflict."
+          }
+        }
+      },
+      "error": "invalid_request"
     }
   ]
 }

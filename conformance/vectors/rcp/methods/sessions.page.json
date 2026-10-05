@@ -1,5 +1,5 @@
 {
-  "suite": "rcp/methods/questions.answer",
+  "suite": "rcp/methods/sessions.page",
   "version": 1,
   "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
   "notes": "input.direction chooses params/result/item/error; value is the actual JSON payload. expect is the decoded payload; error labels invalid_params/invalid_result/invalid_item/invalid_error are corpus validation categories, not host execution results. No approval digest/signature validity, policy enforcement, or exactly-once effects are claimed. Method name comes from the filename; suite labels are lowercase to satisfy the existing vector-file schema.",
@@ -9,31 +9,15 @@
       "input": {
         "direction": "params",
         "value": {
-          "id": "11111111-2222-4333-8444-555555555555",
-          "answers": [
-            {
-              "id": "q-1",
-              "selected": [
-                "Types",
-                "Lint"
-              ],
-              "custom": "Only changed files"
-            }
-          ]
+          "sessionId": "session-vector-1",
+          "beforeSeq": 4,
+          "limit": 25
         }
       },
       "expect": {
-        "id": "11111111-2222-4333-8444-555555555555",
-        "answers": [
-          {
-            "id": "q-1",
-            "selected": [
-              "Types",
-              "Lint"
-            ],
-            "custom": "Only changed files"
-          }
-        ]
+        "sessionId": "session-vector-1",
+        "beforeSeq": 4,
+        "limit": 25
       }
     },
     {
@@ -41,13 +25,37 @@
       "input": {
         "direction": "result",
         "value": {
-          "accepted": true,
-          "by": "phone"
+          "events": [
+            {
+              "kind": "assistant.message",
+              "seq": 3,
+              "at": 1791158400000,
+              "text": "Ready to review.",
+              "model": {
+                "provider": "deepseek",
+                "model": "deepseek-chat",
+                "reasoningEffort": "high"
+              }
+            }
+          ],
+          "hasOlder": false
         }
       },
       "expect": {
-        "accepted": true,
-        "by": "phone"
+        "events": [
+          {
+            "kind": "assistant.message",
+            "seq": 3,
+            "at": 1791158400000,
+            "text": "Ready to review.",
+            "model": {
+              "provider": "deepseek",
+              "model": "deepseek-chat",
+              "reasoningEffort": "high"
+            }
+          }
+        ],
+        "hasOlder": false
       }
     },
     {
@@ -55,13 +63,9 @@
       "input": {
         "direction": "params",
         "value": {
-          "id": "11111111-2222-4333-8444-555555555555",
-          "answers": [
-            {
-              "id": "q-1",
-              "selected": "Types"
-            }
-          ]
+          "sessionId": "session-vector-1",
+          "beforeSeq": 4,
+          "limit": 0
         }
       },
       "error": "invalid_params"
@@ -86,20 +90,6 @@
       "expect": {
         "code": "not_found",
         "message": "Requested resource is unavailable."
-      }
-    },
-    {
-      "name": "system already resolved question",
-      "input": {
-        "direction": "result",
-        "value": {
-          "accepted": false,
-          "by": "system"
-        }
-      },
-      "expect": {
-        "accepted": false,
-        "by": "system"
       }
     }
   ]

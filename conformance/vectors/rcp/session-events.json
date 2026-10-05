@@ -1,17 +1,558 @@
 {
   "suite": "rcp/session-events",
   "version": 1,
-  "source": "Scaffolded for P0-A1 / RCP/1 \u00a75",
-  "notes": "Session events stream frame variants",
+  "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
+  "notes": "Covers every current and normative event kind, including legacy compatibility and unknown fallbacks. Expected decoded payloads are authored explicitly; not observed decoder output.",
   "cases": [
     {
-      "name": "placeholder scaffold valid baseline",
+      "name": "session.created",
       "input": {
-        "status": "scaffold"
+        "value": {
+          "seq": 0,
+          "at": 1791158400000,
+          "kind": "session.created",
+          "sessionId": "session-vector-1"
+        }
       },
       "expect": {
-        "ok": true
+        "seq": 0,
+        "at": 1791158400000,
+        "kind": "session.created",
+        "sessionId": "session-vector-1"
       }
+    },
+    {
+      "name": "session.status",
+      "input": {
+        "value": {
+          "seq": 1,
+          "at": 1791158400000,
+          "kind": "session.status",
+          "sessionId": "session-vector-1",
+          "status": "running"
+        }
+      },
+      "expect": {
+        "seq": 1,
+        "at": 1791158400000,
+        "kind": "session.status",
+        "sessionId": "session-vector-1",
+        "status": "running"
+      }
+    },
+    {
+      "name": "turn.start",
+      "input": {
+        "value": {
+          "seq": 2,
+          "at": 1791158400000,
+          "kind": "turn.start"
+        }
+      },
+      "expect": {
+        "seq": 2,
+        "at": 1791158400000,
+        "kind": "turn.start"
+      }
+    },
+    {
+      "name": "turn.end",
+      "input": {
+        "value": {
+          "seq": 3,
+          "at": 1791158400000,
+          "kind": "turn.end",
+          "status": "completed"
+        }
+      },
+      "expect": {
+        "seq": 3,
+        "at": 1791158400000,
+        "kind": "turn.end",
+        "status": "completed"
+      }
+    },
+    {
+      "name": "agent.error",
+      "input": {
+        "value": {
+          "seq": 4,
+          "at": 1791158400000,
+          "kind": "agent.error",
+          "message": "Operation failed.",
+          "code": "internal"
+        }
+      },
+      "expect": {
+        "seq": 4,
+        "at": 1791158400000,
+        "kind": "agent.error",
+        "message": "Operation failed.",
+        "code": "internal"
+      }
+    },
+    {
+      "name": "user.message",
+      "input": {
+        "value": {
+          "seq": 5,
+          "at": 1791158400000,
+          "kind": "user.message",
+          "text": "Review changes",
+          "source": "user",
+          "requestId": "11111111-2222-4333-8444-555555555555",
+          "attachments": [
+            {
+              "name": "notes.txt",
+              "mime": "text/plain"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "seq": 5,
+        "at": 1791158400000,
+        "kind": "user.message",
+        "text": "Review changes",
+        "source": "user",
+        "requestId": "11111111-2222-4333-8444-555555555555",
+        "attachments": [
+          {
+            "name": "notes.txt",
+            "mime": "text/plain"
+          }
+        ]
+      }
+    },
+    {
+      "name": "assistant.message",
+      "input": {
+        "value": {
+          "seq": 6,
+          "at": 1791158400000,
+          "kind": "assistant.message",
+          "text": "Ready.",
+          "reasoning": "Inspect first.",
+          "model": {
+            "provider": "deepseek",
+            "model": "deepseek-chat",
+            "reasoningEffort": "high"
+          }
+        }
+      },
+      "expect": {
+        "seq": 6,
+        "at": 1791158400000,
+        "kind": "assistant.message",
+        "text": "Ready.",
+        "reasoning": "Inspect first.",
+        "model": {
+          "provider": "deepseek",
+          "model": "deepseek-chat",
+          "reasoningEffort": "high"
+        }
+      }
+    },
+    {
+      "name": "assistant.attempt",
+      "input": {
+        "value": {
+          "seq": 7,
+          "at": 1791158400000,
+          "kind": "assistant.attempt",
+          "outcome": "retried",
+          "text": "Retrying after stream interruption."
+        }
+      },
+      "expect": {
+        "seq": 7,
+        "at": 1791158400000,
+        "kind": "assistant.attempt",
+        "outcome": "retried",
+        "text": "Retrying after stream interruption."
+      }
+    },
+    {
+      "name": "assistant.delta",
+      "input": {
+        "value": {
+          "seq": 8,
+          "at": 1791158400000,
+          "kind": "assistant.delta",
+          "index": 0,
+          "text": "Ready",
+          "attempt": "attempt-1"
+        }
+      },
+      "expect": {
+        "seq": 8,
+        "at": 1791158400000,
+        "kind": "assistant.delta",
+        "index": 0,
+        "text": "Ready",
+        "attempt": "attempt-1"
+      }
+    },
+    {
+      "name": "tool.call",
+      "input": {
+        "value": {
+          "seq": 9,
+          "at": 1791158400000,
+          "kind": "tool.call",
+          "callId": "call-1",
+          "tool": "shell",
+          "title": "Git status",
+          "args": {
+            "text": "git status",
+            "bytes": 10,
+            "truncated": false
+          }
+        }
+      },
+      "expect": {
+        "seq": 9,
+        "at": 1791158400000,
+        "kind": "tool.call",
+        "callId": "call-1",
+        "tool": "shell",
+        "title": "Git status",
+        "args": {
+          "text": "git status",
+          "bytes": 10,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "name": "tool.result",
+      "input": {
+        "value": {
+          "seq": 10,
+          "at": 1791158400000,
+          "kind": "tool.result",
+          "callId": "call-1",
+          "status": "ok",
+          "output": {
+            "text": "clean",
+            "bytes": 5,
+            "truncated": false
+          }
+        }
+      },
+      "expect": {
+        "seq": 10,
+        "at": 1791158400000,
+        "kind": "tool.result",
+        "callId": "call-1",
+        "status": "ok",
+        "output": {
+          "text": "clean",
+          "bytes": 5,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "name": "approval.asked",
+      "input": {
+        "value": {
+          "seq": 11,
+          "at": 1791158400000,
+          "kind": "approval.asked",
+          "id": "11111111-2222-4333-8444-555555555555",
+          "toolName": "shell",
+          "risk": "high"
+        }
+      },
+      "expect": {
+        "seq": 11,
+        "at": 1791158400000,
+        "kind": "approval.asked",
+        "id": "11111111-2222-4333-8444-555555555555",
+        "toolName": "shell",
+        "risk": "high"
+      }
+    },
+    {
+      "name": "approval.decided",
+      "input": {
+        "value": {
+          "seq": 12,
+          "at": 1791158400000,
+          "kind": "approval.decided",
+          "toolName": "shell",
+          "callId": "call-1",
+          "outcome": "rejected"
+        }
+      },
+      "expect": {
+        "seq": 12,
+        "at": 1791158400000,
+        "kind": "approval.decided",
+        "toolName": "shell",
+        "callId": "call-1",
+        "outcome": "rejected"
+      }
+    },
+    {
+      "name": "question.asked",
+      "input": {
+        "value": {
+          "seq": 13,
+          "at": 1791158400000,
+          "kind": "question.asked",
+          "id": "11111111-2222-4333-8444-555555555555",
+          "text": "Which checks?"
+        }
+      },
+      "expect": {
+        "seq": 13,
+        "at": 1791158400000,
+        "kind": "question.asked",
+        "id": "11111111-2222-4333-8444-555555555555",
+        "text": "Which checks?"
+      }
+    },
+    {
+      "name": "question.decided",
+      "input": {
+        "value": {
+          "seq": 14,
+          "at": 1791158400000,
+          "kind": "question.decided",
+          "id": "11111111-2222-4333-8444-555555555555",
+          "outcome": "answered",
+          "by": "phone"
+        }
+      },
+      "expect": {
+        "seq": 14,
+        "at": 1791158400000,
+        "kind": "question.decided",
+        "id": "11111111-2222-4333-8444-555555555555",
+        "outcome": "answered",
+        "by": "phone"
+      }
+    },
+    {
+      "name": "todo.updated",
+      "input": {
+        "value": {
+          "seq": 15,
+          "at": 1791158400000,
+          "kind": "todo.updated",
+          "items": [
+            {
+              "text": "Review",
+              "status": "in_progress"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "seq": 15,
+        "at": 1791158400000,
+        "kind": "todo.updated",
+        "items": [
+          {
+            "text": "Review",
+            "status": "in_progress"
+          }
+        ]
+      }
+    },
+    {
+      "name": "notice",
+      "input": {
+        "value": {
+          "seq": 16,
+          "at": 1791158400000,
+          "kind": "notice",
+          "level": "warn",
+          "text": "Connection resumed."
+        }
+      },
+      "expect": {
+        "seq": 16,
+        "at": 1791158400000,
+        "kind": "notice",
+        "level": "warn",
+        "text": "Connection resumed."
+      }
+    },
+    {
+      "name": "unknown",
+      "input": {
+        "value": {
+          "seq": 17,
+          "at": 1791158400000,
+          "kind": "unknown",
+          "dshType": "new-upstream-kind"
+        }
+      },
+      "expect": {
+        "seq": 17,
+        "at": 1791158400000,
+        "kind": "unknown",
+        "dshType": "new-upstream-kind"
+      }
+    },
+    {
+      "name": "unknown future event",
+      "input": {
+        "value": {
+          "seq": 20,
+          "at": 1791158400000,
+          "kind": "future.event",
+          "detail": "retained"
+        }
+      },
+      "expect": {
+        "seq": 20,
+        "at": 1791158400000,
+        "kind": "unknown",
+        "dshType": "future.event",
+        "detail": "retained"
+      }
+    },
+    {
+      "name": "unknown turn status",
+      "input": {
+        "value": {
+          "seq": 21,
+          "at": 1791158400000,
+          "kind": "turn.end",
+          "status": "future"
+        }
+      },
+      "expect": {
+        "seq": 21,
+        "at": 1791158400000,
+        "kind": "turn.end",
+        "status": "unknown"
+      }
+    },
+    {
+      "name": "unknown tool status",
+      "input": {
+        "value": {
+          "seq": 22,
+          "at": 1791158400000,
+          "kind": "tool.result",
+          "callId": "call-1",
+          "status": "future",
+          "output": {
+            "text": "",
+            "bytes": 0,
+            "truncated": false
+          }
+        }
+      },
+      "expect": {
+        "seq": 22,
+        "at": 1791158400000,
+        "kind": "tool.result",
+        "callId": "call-1",
+        "status": "unknown",
+        "output": {
+          "text": "",
+          "bytes": 0,
+          "truncated": false
+        }
+      }
+    },
+    {
+      "name": "unknown approval risk is conservative",
+      "input": {
+        "value": {
+          "seq": 23,
+          "at": 1791158400000,
+          "kind": "approval.asked",
+          "id": "11111111-2222-4333-8444-555555555555",
+          "toolName": "shell",
+          "risk": "future"
+        }
+      },
+      "expect": {
+        "seq": 23,
+        "at": 1791158400000,
+        "kind": "approval.asked",
+        "id": "11111111-2222-4333-8444-555555555555",
+        "toolName": "shell",
+        "risk": "high"
+      }
+    },
+    {
+      "name": "unknown source falls back",
+      "input": {
+        "value": {
+          "seq": 24,
+          "at": 1791158400000,
+          "kind": "user.message",
+          "text": "hello",
+          "source": "future"
+        }
+      },
+      "expect": {
+        "seq": 24,
+        "at": 1791158400000,
+        "kind": "user.message",
+        "text": "hello",
+        "source": "other"
+      }
+    },
+    {
+      "name": "unknown todo status",
+      "input": {
+        "value": {
+          "seq": 25,
+          "at": 1791158400000,
+          "kind": "todo.updated",
+          "items": [
+            {
+              "text": "Review",
+              "status": "future"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "seq": 25,
+        "at": 1791158400000,
+        "kind": "todo.updated",
+        "items": [
+          {
+            "text": "Review",
+            "status": "unknown"
+          }
+        ]
+      }
+    },
+    {
+      "name": "known event cannot hide malformed required fields",
+      "input": {
+        "value": {
+          "seq": 30,
+          "at": 1791158400000,
+          "kind": "tool.call",
+          "callId": "call-1",
+          "tool": "shell",
+          "title": "Missing preview"
+        }
+      },
+      "error": "invalid_event"
+    },
+    {
+      "name": "negative durable sequence",
+      "input": {
+        "value": {
+          "seq": -1,
+          "at": 1791158400000,
+          "kind": "turn.start"
+        }
+      },
+      "error": "invalid_event"
     }
   ]
 }
