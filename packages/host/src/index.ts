@@ -339,7 +339,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     questionTimeoutMs: resolved.approvalTimeoutMs,
   })
 
-  registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)
+  registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard, identity.hostId)
 
   // Guaranteed by `inject` above: without it the fiber never loads, so the
   // previous silent `if (gateway)` branch (which skipped the session methods
@@ -458,12 +458,16 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       detachNotifier()
       keepAwakeManager.dispose()
       disposeBridge()
+      pairingService.dispose()
       for (const timer of pendingUnpairRevokeTimers) clearTimeout(timer)
       pendingUnpairRevokeTimers.clear()
       channelManager.closeAll()
       await connecting
-      await registry.flush()
-      await relay.stop()
+      try {
+        await registry.flush()
+      } finally {
+        await relay.stop()
+      }
     },
     'remora host',
   )
@@ -506,7 +510,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   ctx.logger.info(
     'remora: host started (id: %s, relay: %s, %d remote roots)',
-    identity.hostId,
+    identity.hostId.slice(0, 6),
     resolved.relayOrigin,
     resolved.remoteRoots.length,
   )

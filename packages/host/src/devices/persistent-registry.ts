@@ -321,6 +321,7 @@ export class PersistentDeviceRegistry implements DeviceRegistry, NotifyPrefsStor
   private onRevokeListener: ((deviceId: string) => void) | null = null
   /** Serialized tail of the credentials writes: every write observes the previous one. */
   private writeQueue: Promise<void> = Promise.resolve()
+  private latestWrite: Promise<void> = Promise.resolve()
 
   /** File mode (tests only): loads the JSON file when it exists. */
   constructor(storageFilePath?: string)
@@ -427,10 +428,12 @@ export class PersistentDeviceRegistry implements DeviceRegistry, NotifyPrefsStor
    * write is one small record write.
    */
   async flush(): Promise<void> {
-    await this.writeQueue
+    await this.latestWrite
   }
 
   private indexDevice(record: DeviceRecord): void {
+    const previous = this.devicesById.get(record.deviceId)
+    if (previous) this.devicesByNoiseKeyHex.delete(bytesToHex(previous.noisePublicKey))
     const hex = bytesToHex(record.noisePublicKey)
     this.devicesById.set(record.deviceId, record)
     this.devicesByNoiseKeyHex.set(hex, record)
@@ -464,6 +467,7 @@ export class PersistentDeviceRegistry implements DeviceRegistry, NotifyPrefsStor
       })
     }
     const write = this.writeQueue.then(run)
+    this.latestWrite = write
     this.writeQueue = write.then(
       () => undefined,
       (error: unknown) => {

@@ -9,7 +9,7 @@
  * §11: "self only") — the subject comes from the channel's authenticated
  * device id, never from parameters.
  */
-import { createPublicKey } from 'node:crypto'
+import { normalizeApprovalPublicKey } from '../../identity/approval-key.ts'
 import { decodeBase64Url } from '@remora/crypto'
 import {
   DevicesRotateApprovalKeyParamsSchema,
@@ -151,31 +151,6 @@ export interface DevicesMethodsDeps {
   scheduleRelayRevoke?: ((deviceId: string) => void) | undefined
 }
 
-/** id-ecPublicKey + prime256v1 AlgorithmIdentifier and uncompressed BIT STRING. */
-const P256_SPKI_PREFIX = Buffer.from('3059301306072a8648ce3d020106082a8648ce3d030107034200', 'hex')
-
-/**
- * Android exports SPKI; early rotation clients sent uncompressed SEC1. Import
- * either with OpenSSL's curve/point validation and persist the SPKI format
- * consumed by verifyApprovalSignature, never an unchecked 65-byte point.
- */
-function normalizeApprovalPublicKey(bytes: Uint8Array): Uint8Array {
-  if (bytes.length === 0 || bytes.length > 512) throw new Error('invalid approval public key')
-  const input = bytes.length === 65 && bytes[0] === 0x04
-    ? Buffer.concat([P256_SPKI_PREFIX, bytes])
-    : Buffer.from(bytes)
-  const key = createPublicKey({ key: input, format: 'der', type: 'spki' })
-  if (key.asymmetricKeyType !== 'ec' || key.asymmetricKeyDetails?.namedCurve !== 'prime256v1') {
-    throw new Error('approval public key must use P-256')
-  }
-  // Reject trailing bytes and non-canonical ASN.1 rather than letting the parser
-  // silently discard data. Importing the JWK normalizes compressed points too.
-  const encoded = key.export({ format: 'der', type: 'spki' })
-  if (!encoded.equals(input)) throw new Error('approval public key must be canonical DER')
-  const canonicalKey = createPublicKey({ key: key.export({ format: 'jwk' }), format: 'jwk' })
-  return new Uint8Array(canonicalKey.export({ format: 'der', type: 'spki' }))
-}
-
 export function registerDevicesMethods(rcpServer: RcpServer, deps: DevicesMethodsDeps): void {
   rcpServer.registerMethod('devices.self', async (p, ctx) => {
     const parsed = DevicesSelfParamsSchema.safeParse(p ?? {})
@@ -233,7 +208,7 @@ export function registerDevicesMethods(rcpServer: RcpServer, deps: DevicesMethod
     }
     let approvalPublicKey: Uint8Array
     try {
-      approvalPublicKey = normalizeApprovalPublicKey(decodeBase64Url(parsed.data.approvalPub))
+      approvalPublicKey = normalizeApprovalPublicKey(decodeBase64Url(parsed.data.approvalPub), true)
     } catch {
       throw new RcpMethodError(
         createRcpError(RCP_ERROR_CODES.invalid_params, 'approvalPub must encode a valid P-256 public key'),

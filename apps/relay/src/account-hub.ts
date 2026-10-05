@@ -15,6 +15,7 @@ import {
   MAX_ENDPOINTS,
   RLY_SUBPROTOCOL,
   RLY_VERSION,
+  ControlFrameSchema,
   type Peer,
 } from '@remora/protocol'
 import {
@@ -35,6 +36,7 @@ const OFFLINE_TASK_PREFIX = 'offline:host:'
 export type EndpointKind = 'host' | 'device'
 
 export interface Attachment {
+  relayOrigin: string
   endpointId: string | null
   kind: EndpointKind | null
   nonce: string
@@ -108,12 +110,14 @@ function parseAttachment(ws: WebSocket): Attachment | null {
   const o = raw as Record<string, unknown>
   if (
     typeof o.nonce !== 'string' ||
+    typeof o.relayOrigin !== 'string' ||
     typeof o.connectedAt !== 'number' ||
     typeof o.authed !== 'boolean'
   ) {
     return null
   }
   return {
+    relayOrigin: o.relayOrigin,
     endpointId: typeof o.endpointId === 'string' ? o.endpointId : null,
     kind: o.kind === 'host' || o.kind === 'device' ? o.kind : null,
     nonce: o.nonce,
@@ -126,12 +130,32 @@ function parseAttachment(ws: WebSocket): Attachment | null {
 }
 
 async function readJsonBody(request: Request): Promise<unknown | null> {
-  const text = await request.text()
-  if (text.length > 4096) return null
+  const reader = request.body?.getReader()
+  if (!reader) return null
+  const chunks: Uint8Array[] = []
+  let size = 0
   try {
-    return JSON.parse(text) as unknown
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.byteLength
+      if (size > 4096) {
+        await reader.cancel()
+        return null
+      }
+      chunks.push(value)
+    }
+    const bytes = new Uint8Array(size)
+    let offset = 0
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset)
+      offset += chunk.length
+    }
+    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown
   } catch {
     return null
+  } finally {
+    reader.releaseLock()
   }
 }
 
@@ -314,9 +338,15 @@ export class AccountHub extends DurableObject<Env> {
     const now = Date.now()
 
     const paramId = url.searchParams.get('id')
+    const paramKind = url.searchParams.get('kind')
+    if ((paramId !== null && !/^[hd]_[a-z2-7]{26}$/.test(paramId)) ||
+        (paramKind !== null && paramKind !== 'host' && paramKind !== 'device')) {
+      return json({ error: 'bad_request', message: 'Invalid endpoint identity' }, 400)
+    }
     const tags = paramId ? [paramId] : ['pending']
 
     const att: Attachment = {
+      relayOrigin: url.origin,
       endpointId: paramId,
       kind: url.searchParams.get('kind') === 'host' ? 'host' : url.searchParams.get('kind') === 'device' ? 'device' : null,
       nonce,
@@ -347,7 +377,11 @@ export class AccountHub extends DurableObject<Env> {
 
   private async handleEnrollHost(request: Request): Promise<Response> {
     const authHeader = request.headers.get('Authorization') ?? ''
-    const expectedSecret = (this.env as any).REMORA_ENROLL_SECRET ?? 'test-enroll-secret'
+    const configured = (this.env as unknown as { REMORA_ENROLL_SECRET?: unknown }).REMORA_ENROLL_SECRET
+    if (typeof configured !== 'string' || configured.trim().length === 0) {
+      return json({ error: 'unavailable', message: 'Host enrollment is not configured' }, 503)
+    }
+    const expectedSecret = configured
     const expectedHeader = `Bearer ${expectedSecret}`
 
     if (!constantTimeEqual(authHeader, expectedHeader)) {
@@ -419,7 +453,7 @@ export class AccountHub extends DurableObject<Env> {
     try {
       ticketBytes = decodeBase64Url(body.ticket)
       pubBytes = decodeBase64Url(body.relayPub)
-      if (pubBytes.length !== 32) throw new Error('invalid key length')
+      if (pubBytes.length !== 32 || ticketBytes.length !== 32) throw new Error('invalid key length')
     } catch {
       return json({ error: 'bad_request', message: 'Invalid base64url encoding' }, 400)
     }
@@ -434,12 +468,16 @@ export class AccountHub extends DurableObject<Env> {
     }>('SELECT host_id, expires_at, used_at FROM tickets WHERE ticket_hash = ?1', ticketHash).toArray()
 
     const ticketRow = ticketRows[0]
-    if (!ticketRow || ticketRow.used_at !== null || ticketRow.expires_at < now) {
+    if (!ticketRow || ticketRow.used_at !== null || ticketRow.expires_at <= now) {
       return json({ error: 'ticket_invalid', message: 'Ticket unknown, expired, or already used' }, 410)
     }
 
-    // Atomically mark ticket used
-    this.ctx.storage.sql.exec('UPDATE tickets SET used_at = ?1 WHERE ticket_hash = ?2', now, ticketHash)
+    const host = this.ctx.storage.sql.exec<{ revoked_at: number | null }>(
+      "SELECT revoked_at FROM endpoints WHERE id = ?1 AND kind = 'host'", ticketRow.host_id,
+    ).toArray()[0]
+    if (!host || host.revoked_at !== null) {
+      return json({ error: 'ticket_invalid', message: 'Ticket unknown, expired, or already used' }, 410)
+    }
 
     const deviceId = deriveEndpointId('d_', pubBytes)
     const name = typeof body.name === 'string' && body.name.length > 0 ? body.name.slice(0, 64) : deviceId
@@ -453,6 +491,15 @@ export class AccountHub extends DurableObject<Env> {
     if (existingCount >= this.maxEndpoints()) {
       return json({ error: 'rate_limited', message: 'Maximum endpoint capacity reached' }, 429)
     }
+
+    const existingDevice = this.ctx.storage.sql.exec<{ revoked_at: number | null }>(
+      'SELECT revoked_at FROM endpoints WHERE id = ?1', deviceId,
+    ).toArray()[0]
+    if (existingDevice?.revoked_at != null) {
+      return json({ error: 'ticket_invalid', message: 'Device identity is revoked' }, 410)
+    }
+    // No await separates ticket consumption from endpoint/link creation.
+    this.ctx.storage.sql.exec('UPDATE tickets SET used_at = ?1 WHERE ticket_hash = ?2', now, ticketHash)
 
     this.ctx.storage.sql.exec(
       'INSERT INTO endpoints (id, kind, relay_pub, name, platform, created_at, last_seen_at) VALUES (?1, \'device\', ?2, ?3, ?4, ?5, ?5) ' +
@@ -525,8 +572,8 @@ export class AccountHub extends DurableObject<Env> {
     this.bump('control_in')
     let frame: Record<string, unknown>
     try {
-      frame = JSON.parse(message)
-      if (typeof frame !== 'object' || frame === null) throw new Error('not an object')
+      if (new TextEncoder().encode(message).length > this.maxFrameBytes()) throw new Error('too large')
+      frame = ControlFrameSchema.parse(JSON.parse(message))
     } catch {
       this.sendError(ws, 'bad_request', 'Malformed control frame')
       ws.close(CloseCodes.MALFORMED, 'malformed control frame')
@@ -566,7 +613,7 @@ export class AccountHub extends DurableObject<Env> {
         ws.close(CloseCodes.NORMAL, 'bye')
         break
       default:
-        this.sendError(ws, 'bad_request', `Unknown control frame type: ${t}`, rid)
+        this.sendError(ws, 'bad_request', 'Unsupported control frame type', rid)
         break
     }
   }
@@ -583,7 +630,9 @@ export class AccountHub extends DurableObject<Env> {
     const kind = frame.kind === 'host' ? 'host' : frame.kind === 'device' ? 'device' : null
     const sigStr = typeof frame.sig === 'string' ? frame.sig : ''
 
-    if (!kind || !id || !sigStr) {
+    if (!kind || !id || !sigStr || frame.v !== RLY_VERSION ||
+        (att.endpointId !== null && att.endpointId !== id) ||
+        (att.kind !== null && att.kind !== kind)) {
       await this.failAuth(ws)
       return
     }
@@ -605,7 +654,13 @@ export class AccountHub extends DurableObject<Env> {
     let valid = false
     try {
       const sigBytes = decodeBase64Url(sigStr)
-      valid = verifyRelayChallenge(relayPub, att.nonce, sigBytes)
+      valid = relayPub.length === 32 && deriveEndpointId(kind === 'host' ? 'h_' : 'd_', relayPub) === id &&
+        verifyRelayChallenge(relayPub, {
+          relayOrigin: att.relayOrigin,
+          kind,
+          endpointId: id,
+          nonce: decodeBase64Url(att.nonce),
+        }, sigBytes)
     } catch {
       valid = false
     }
@@ -798,7 +853,7 @@ export class AccountHub extends DurableObject<Env> {
     }
 
     const now = Date.now()
-    this.ctx.storage.sql.exec('UPDATE endpoints SET revoked_at = ?1 WHERE id = ?2', now, targetId)
+    this.ctx.storage.sql.exec('UPDATE endpoints SET revoked_at = ?1, fcm_token = NULL, host_offline = 0 WHERE id = ?2', now, targetId)
 
     // Close any active sockets of the revoked endpoint
     for (const targetWs of this.findSocketsFor(targetId)) {
@@ -825,6 +880,10 @@ export class AccountHub extends DurableObject<Env> {
     }
 
     const token = typeof frame.token === 'string' ? frame.token : null
+    if (token === null || token.length === 0 || token.length > 4096) {
+      this.sendError(ws, 'bad_request', 'Invalid push token', rid)
+      return
+    }
     const hostOffline = frame.hostOffline === true ? 1 : 0
     this.ctx.storage.sql.exec(
       'UPDATE endpoints SET fcm_token = ?1, host_offline = ?2 WHERE id = ?3',
@@ -857,11 +916,12 @@ export class AccountHub extends DurableObject<Env> {
       return
     }
 
-    if (!Array.isArray(frame.to)) {
+    if (!Array.isArray(frame.to) || frame.to.length > this.maxEndpoints() ||
+        frame.to.some((id) => typeof id !== 'string' || !/^d_[a-z2-7]{26}$/.test(id))) {
       this.sendError(ws, 'bad_request', 'to must be an array of device ids', rid)
       return
     }
-    const to = frame.to.filter((d): d is string => typeof d === 'string')
+    const to = [...new Set(frame.to.filter((d): d is string => typeof d === 'string'))]
 
     const collapse = typeof frame.collapse === 'string' ? frame.collapse : undefined
     const priority = frame.priority === 'high' || frame.priority === 'normal' ? frame.priority : undefined
@@ -957,7 +1017,8 @@ export class AccountHub extends DurableObject<Env> {
     const reserved1 = bytes[3]
     const dstKindByte = bytes[8]
 
-    if (version !== 0x01 || type !== 0x01 || reserved0 !== 0x00 || reserved1 !== 0x00 || dstKindByte === undefined) {
+    if (version !== 0x01 || type !== 0x01 || reserved0 !== 0x00 || reserved1 !== 0x00 ||
+        bytes[25] !== 0 || bytes[26] !== 0 || bytes[27] !== 0 || dstKindByte === undefined) {
       this.bump('frames_bad')
       this.sendError(ws, 'bad_request', 'Unsupported or malformed frame header')
       return

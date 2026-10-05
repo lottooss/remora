@@ -28,6 +28,8 @@ export interface DeviceRegistry {
   revokeDevice(deviceId: string): void
   renameDevice?(deviceId: string, name: string): void
   listDevices(): DeviceRecord[]
+  /** Wait for durable writes; rejects if the latest write failed. */
+  flush?(): Promise<void>
 }
 
 export {
