@@ -1,5 +1,6 @@
 package io.github.lottooss.remora.core.transport
 
+import io.github.lottooss.remora.core.protocol.RcpPayloads
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.collect
@@ -18,8 +19,8 @@ class RcpClient(
     private val channel: SecureChannel,
     scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob()),
 ) {
-    private data class Stream(val items: Channel<JsonElement>, var sequence: Long = 0)
-    private data class Pending(val result: CompletableDeferred<JsonElement>, val stream: Stream? = null)
+    private data class Stream(val method: String, val items: Channel<JsonElement>, var sequence: Long = 0)
+    private data class Pending(val method: String, val result: CompletableDeferred<JsonElement>, val stream: Stream? = null)
     private val job = SupervisorJob(scope.coroutineContext[Job])
     private val clientScope = CoroutineScope(scope.coroutineContext + job)
     private val nextId = AtomicLong(1)
@@ -40,14 +41,16 @@ class RcpClient(
 
     private suspend fun request(method: String, params: JsonElement?, timeoutMs: Long, stream: Stream? = null): JsonElement {
         check(!closed.get()) { "RCP channel closed" }
+        val rawParams = params ?: buildJsonObject {}
+        val checkedParams = if (RcpPayloads.metadata(method) != null) RcpPayloads.params(method, rawParams) else rawParams
         check(pending.size < 64) { "Too many pending requests" }
         val id = nextId.getAndUpdate { if (it >= 0xffffffffL) 1 else it + 1 }
-        val item = Pending(CompletableDeferred(), stream)
+        val item = Pending(method, CompletableDeferred(), stream)
         check(pending.putIfAbsent(id, item) == null) { "Request id collision" }
         try {
             channel.sendTransport(buildJsonObject {
                 put("k", "req"); put("id", id); put("m", method)
-                put("p", params ?: buildJsonObject {})
+                put("p", checkedParams)
             }.toString())
             return withTimeout(timeoutMs) { item.result.await() }
         } finally { pending.remove(id) }
@@ -55,7 +58,7 @@ class RcpClient(
 
     fun openStream(method: String, params: JsonElement? = null): Flow<JsonElement> = flow {
         check(streams.size < 10) { "Too many open streams" }
-        val stream = Stream(Channel(128))
+        val stream = Stream(method, Channel(128))
         var sid: Long? = null
         try {
             sid = request(method, params, 30_000, stream).jsonObject["sid"]?.jsonPrimitive?.longOrNull
@@ -89,13 +92,14 @@ class RcpClient(
 
     private fun handle(text: String) {
         try {
-            val root = Json.parseToJsonElement(text).jsonObject
+            val root = RcpPayloads.envelope(Json.parseToJsonElement(text))
             when (root["k"]?.jsonPrimitive?.content) {
                 "res" -> {
                     val id = root["id"]?.jsonPrimitive?.longOrNull ?: error("Missing request id")
                     val p = pending[id] ?: return
                     if (root["ok"]?.jsonPrimitive?.booleanOrNull == true) {
-                        val result = root["r"] ?: buildJsonObject {}
+                        val rawResult = root["r"] ?: buildJsonObject {}
+                        val result = if (RcpPayloads.metadata(p.method) != null) RcpPayloads.result(p.method, rawResult) else rawResult
                         if (p.stream != null) {
                             val sid = result.jsonObject["sid"]?.jsonPrimitive?.longOrNull ?: error("Missing stream id")
                             require(sid in 0..0xffffffffL && streams.putIfAbsent(sid, p.stream) == null)
@@ -112,7 +116,9 @@ class RcpClient(
                     val stream = streams[sid] ?: run { bufferEarly(sid, root); return }
                     val sequence = root["n"]?.jsonPrimitive?.longOrNull ?: error("Missing stream sequence")
                     require(sequence == stream.sequence++)
-                    if (!stream.items.trySend(root["d"] ?: error("Missing stream data")).isSuccess) {
+                    val rawItem = root["d"] ?: error("Missing stream data")
+                    val item = if (RcpPayloads.metadata(stream.method) != null) RcpPayloads.item(stream.method, rawItem) else rawItem
+                    if (!stream.items.trySend(item).isSuccess) {
                         // Losing a durable event is unsafe; reconnect and resume from the durable cursor.
                         channel.close()
                     }
