@@ -11,7 +11,6 @@ import {
   deriveEndpointId,
   derivePairPsk,
   deriveSasCode,
-  encodeBase32,
   encodeBase64Url,
   generateKeypair,
   getRelayPublicKey,
@@ -427,8 +426,7 @@ export class FakeDevice {
   }> {
     const qrData = parsePairingQr(qrPayload)
     const httpOrigin = relayHttpUrl ?? qrData.relayOrigin
-    const ticketId = `t_${encodeBase32(qrData.ticket.subarray(0, 16))}`
-    const pairPsk = derivePairPsk(qrData.pairingSecret, ticketId)
+    const pairPsk = derivePairPsk(qrData.pairingSecret, qrData.hostId)
 
     // Enroll at relay
     await this.enrollAtRelay(httpOrigin, encodeBase64Url(qrData.ticket))
@@ -479,7 +477,7 @@ export class FakeDevice {
     const msg2Body = await waitMsg2
     initiator.readMessage(msg2Body)
 
-    const sasCode = deriveSasCode(qrData.hostNoisePub, this.noiseKeypair.publicKey, pairPsk)
+    const sasCode = deriveSasCode(initiator.result.handshakeHash)
     const recvCipher = initiator.result.recvCipher
 
     const waitForResult = (timeoutMs = 10_000) => {

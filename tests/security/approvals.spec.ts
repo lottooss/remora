@@ -16,8 +16,8 @@ import {
 } from '@remora/crypto'
 
 describe('Security Test Suite: Approvals, Signatures & Replays (T05, T09, T10, T14, T24)', () => {
-  const hostId = 'h_sec_test'
-  const deviceId = 'd_device_sec_1'
+  const hostId = 'h_erruijsx3ey2rmxcpeh3pgxjkm'
+  const deviceId = 'd_erruijsx3ey2rmxcpeh3pgxjkm'
 
   function setupHost() {
     const registry = new InMemoryDeviceRegistry()
@@ -41,7 +41,7 @@ describe('Security Test Suite: Approvals, Signatures & Replays (T05, T09, T10, T
       revoked: false,
     })
 
-    registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)
+    registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard, hostId)
 
     return {
       registry,
@@ -150,9 +150,13 @@ describe('Security Test Suite: Approvals, Signatures & Replays (T05, T09, T10, T
     const { policyGuard, deviceKeypair } = setupHost()
 
     const issuedAt = Date.now()
-    const argsDigest = 'sha256:' + 'a'.repeat(64)
+    const argsDigest = 'a'.repeat(64)
     const approvalId = '33333333-3333-4333-8333-333333333333'
     const canonicalMsg = buildCanonicalApprovalMessage({
+      hostId,
+      deviceId,
+      sessionId: 'ses_1',
+      toolName: 'bash',
       approvalId,
       outcome: 'allowed-once',
       issuedAt,
@@ -208,6 +212,10 @@ describe('Security Test Suite: Approvals, Signatures & Replays (T05, T09, T10, T
 
     // High-S signatures from Android Keystore must be accepted per Crypto/1 §7 (lowS: false)
     const verifyResult = policyGuard.verifyApprovalSignature({
+      hostId,
+      deviceId,
+      sessionId: 'ses_1',
+      toolName: 'bash',
       approvalId,
       outcome: 'allowed-once',
       argsDigest,
@@ -281,6 +289,10 @@ describe('Security Test Suite: Approvals, Signatures & Replays (T05, T09, T10, T
     // 10 minutes in the past
     const expiredTimestamp = Date.now() - (10 * 60 * 1000)
     const canonicalMsg = buildCanonicalApprovalMessage({
+      hostId,
+      deviceId,
+      sessionId: 'ses_1',
+      toolName: 'bash',
       approvalId: id,
       outcome: 'allowed-once',
       issuedAt: expiredTimestamp,
@@ -380,6 +392,10 @@ describe('Security Test Suite: Approvals, Signatures & Replays (T05, T09, T10, T
     })
 
     const canonicalMsg = buildCanonicalApprovalMessage({
+      hostId,
+      deviceId,
+      sessionId: 'ses_1',
+      toolName: 'bash',
       approvalId: id,
       outcome: 'allowed-once',
       issuedAt: Date.now(),

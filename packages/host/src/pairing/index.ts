@@ -120,8 +120,9 @@ export class PairingService {
     }
 
     try {
-      const ticketId = `t_${encodeBase32(attempt.ticket.subarray(0, 16))}`
-      const pairPsk = derivePairPsk(attempt.pairingSecret, ticketId)
+      // Normative host-bound PSK (Crypto/1 §5.2): identical on both sides,
+      // derived from the pairing secret and the authenticated host identity.
+      const pairPsk = derivePairPsk(attempt.pairingSecret, this.options.identity.hostId)
       const prologue = utf8ToBytes(
         `remora/1\x00pair\x00${this.options.identity.hostId}\x00${deviceId}`,
       )
@@ -181,12 +182,9 @@ export class PairingService {
 
       await this.options.sendFrame(frameBytes)
 
-      // Compute SAS code (Crypto/1 §5.6)
-      const sasCode = deriveSasCode(
-        this.options.identity.noiseKeypair.publicKey,
-        learnedStatic,
-        pairPsk,
-      )
+      // SAS from the completed Noise transcript hash (Crypto/1 §5.3): binds
+      // the confirmation to this exact handshake, not to the static keys.
+      const sasCode = deriveSasCode(responder.result.handshakeHash)
 
       attempt.deviceId = deviceId
       attempt.deviceName = parsedMsg1.name ?? 'Device'

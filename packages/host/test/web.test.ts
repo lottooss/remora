@@ -13,6 +13,7 @@ import {
   utf8ToBytes,
 } from '@remora/crypto'
 import { InMemoryDeviceRegistry } from '../src/devices/index.ts'
+import { decodeDataFrame } from '@remora/protocol'
 import { createHostIdentity, type HostIdentity } from '../src/identity/index.ts'
 import { PairingService, type PairingAttempt } from '../src/pairing/index.ts'
 import { printTerminalQr, type ManagementPairingService, type TerminalQrStream } from '../src/web/index.ts'
@@ -110,6 +111,8 @@ interface RouteState {
   registry: InMemoryDeviceRegistry
   identity: HostIdentity
   terminal: { isTTY: boolean; chunks: string[] }
+  /** Frames the pairing service sent to the (fake) relay, newest last. */
+  hostFrames: Uint8Array[]
   /** Records device ids the route asked the relay to revoke. */
   revokedOnRelay: string[]
 }
@@ -122,12 +125,15 @@ interface StateOptions {
 function createState(options: StateOptions = {}): RouteState {
   const identity = createHostIdentity()
   const registry = new InMemoryDeviceRegistry()
+  const hostFrames: Uint8Array[] = []
   const pairingService = new PairingService({
     identity,
     hostName: 'TestHost',
     relayOrigin: 'https://relay.test',
     registry,
-    sendFrame: () => {},
+    sendFrame: (bytes) => {
+      hostFrames.push(bytes)
+    },
   })
   const terminal = { isTTY: options.isTTY ?? true, chunks: [] as string[] }
   const stdout: TerminalQrStream = {
@@ -154,7 +160,7 @@ function createState(options: StateOptions = {}): RouteState {
       revokedOnRelay.push(deviceId)
     },
   }
-  return { deps, pairingService, registry, identity, terminal, revokedOnRelay }
+  return { deps, pairingService, registry, identity, terminal, hostFrames, revokedOnRelay }
 }
 
 function addPairedDevice(registry: InMemoryDeviceRegistry, deviceId = VALID_DEVICE_ID, name = 'Pixel 8'): void {
@@ -204,6 +210,7 @@ async function driveHandshake(
   pairingService: PairingService,
   identity: HostIdentity,
   attempt: PairingAttempt,
+  hostFrames: Uint8Array[],
 ): Promise<{ deviceId: string; sas: string }> {
   const deviceRelaySeed = randomBytes(32)
   const deviceRelayKey = { privateKey: deviceRelaySeed, publicKey: getRelayPublicKey(deviceRelaySeed) }
@@ -211,8 +218,7 @@ async function driveHandshake(
   const deviceId = `d_${encodeBase32(deviceRelayKey.publicKey.subarray(0, 16))}`
   const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
 
-  const ticketId = `t_${encodeBase32(attempt.ticket.subarray(0, 16))}`
-  const pairPsk = derivePairPsk(attempt.pairingSecret, ticketId)
+  const pairPsk = derivePairPsk(attempt.pairingSecret, identity.hostId)
   const prologue = utf8ToBytes(`remora/1\x00pair\x00${identity.hostId}\x00${deviceId}`)
   const initiator = createInitiatorHandshake({
     staticKey: deviceNoiseKey.privateKey,
@@ -234,7 +240,11 @@ async function driveHandshake(
 
   const handled = await pairingService.handlePairingHandshake(deviceId, 7, peerRawId, msg1)
   expect(handled).toBe(true)
-  const sas = deriveSasCode(identity.noiseKeypair.publicKey, deviceNoiseKey.publicKey, pairPsk)
+  // Complete the device half so the transcript hash matches the host's.
+  const msg2Frame = decodeDataFrame(hostFrames[hostFrames.length - 1]!)
+  expect(msg2Frame.payload[0]).toBe(0x02)
+  initiator.readMessage(msg2Frame.payload.subarray(1))
+  const sas = deriveSasCode(initiator.result.handshakeHash)
   expect(attempt.sasCode).toBe(sas)
   return { deviceId, sas }
 }
@@ -437,7 +447,7 @@ describe('P2-H1: management page routes', () => {
     expect(withQr).toContain('Scan to Pair Device')
     expect(withQr).toContain('<svg')
 
-    const { sas } = await driveHandshake(state.pairingService, state.identity, openAttempt(state))
+    const { sas } = await driveHandshake(state.pairingService, state.identity, openAttempt(state), state.hostFrames)
 
     const withSas = await (await get(harness, '/api/remora')).text()
     expect(withSas).toContain('Confirm Pairing SAS Code')
@@ -460,6 +470,7 @@ describe('P2-H1: management page routes', () => {
       state.pairingService,
       state.identity,
       openAttempt(state),
+      state.hostFrames,
     )
 
     const malformed = await post(harness, '/api/remora/pair/confirm', { body: { sas: '1234' } })

@@ -339,7 +339,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     questionTimeoutMs: resolved.approvalTimeoutMs,
   })
 
-  registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)
+  registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard, identity.hostId)
 
   // Guaranteed by `inject` above: without it the fiber never loads, so the
   // previous silent `if (gateway)` branch (which skipped the session methods
@@ -394,6 +394,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   relay.attachChannelManager(channelManager)
 
   const notifier = new HostNotifier({
+    hostId: identity.hostId,
     registry,
     prefsStore: notifyPrefsStore,
     config: resolved.notify,

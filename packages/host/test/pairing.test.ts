@@ -102,8 +102,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
     const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
     const channelId = 42
 
-    const ticketId = `t_${encodeBase32(attempt.ticket.subarray(0, 16))}`
-    const pairPsk = derivePairPsk(attempt.pairingSecret, ticketId)
+    const pairPsk = derivePairPsk(attempt.pairingSecret, hostIdentity.hostId)
     const prologue = utf8ToBytes(`remora/1\x00pair\x00${hostIdentity.hostId}\x00${deviceId}`)
 
     const initiator = createInitiatorHandshake({
@@ -144,12 +143,8 @@ describe('P2-H1: Pairing and Device Registry', () => {
     const parsedMsg2 = JSON.parse(new TextDecoder().decode(decryptedMsg2))
     expect(parsedMsg2.hostId).toBe(hostIdentity.hostId)
 
-    // SAS match
-    const clientSas = deriveSasCode(
-      hostIdentity.noiseKeypair.publicKey,
-      deviceNoiseKey.publicKey,
-      pairPsk,
-    )
+    // SAS match (host and client derive it from the completed transcript)
+    const clientSas = deriveSasCode(initiator.result.handshakeHash)
     expect(attempt.sasCode).toBe(clientSas)
 
     // Host confirms pairing
@@ -194,8 +189,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
     const deviceId = `d_${encodeBase32(deviceRelayKey.publicKey.subarray(0, 16))}`
     const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
 
-    const ticketId = `t_${encodeBase32(attempt.ticket.subarray(0, 16))}`
-    const pairPsk = derivePairPsk(attempt.pairingSecret, ticketId)
+    const pairPsk = derivePairPsk(attempt.pairingSecret, hostIdentity.hostId)
     const prologue = utf8ToBytes(`remora/1\x00pair\x00${hostIdentity.hostId}\x00${deviceId}`)
 
     const initiator = createInitiatorHandshake({
@@ -342,8 +336,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
     const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
     const channelId = 100
 
-    const ticketId = `t_${encodeBase32(attempt.ticket.subarray(0, 16))}`
-    const pairPsk = derivePairPsk(attempt.pairingSecret, ticketId)
+    const pairPsk = derivePairPsk(attempt.pairingSecret, hostIdentity.hostId)
     const prologue = utf8ToBytes(`remora/1\x00pair\x00${hostIdentity.hostId}\x00${deviceId}`)
 
     const initiator = createInitiatorHandshake({

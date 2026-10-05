@@ -26,6 +26,7 @@ import {
   randomBytes,
   verifyRelayChallenge,
 } from '@remora/crypto'
+import type { RelayAuthFields } from '@remora/crypto'
 import { type FcmEnv, sendFcmDataMessage } from './fcm.ts'
 
 const PING_REQ = '{"t":"ping"}'
@@ -38,6 +39,8 @@ export interface Attachment {
   endpointId: string | null
   kind: EndpointKind | null
   nonce: string
+  /** Canonical origin of the upgrade request, bound into the auth signature. */
+  origin: string | null
   connectedAt: number
   authed: boolean
   authedAt: number | null
@@ -117,6 +120,7 @@ function parseAttachment(ws: WebSocket): Attachment | null {
     endpointId: typeof o.endpointId === 'string' ? o.endpointId : null,
     kind: o.kind === 'host' || o.kind === 'device' ? o.kind : null,
     nonce: o.nonce,
+    origin: typeof o.origin === 'string' ? o.origin : null,
     connectedAt: o.connectedAt,
     authed: o.authed,
     authedAt: typeof o.authedAt === 'number' ? o.authedAt : null,
@@ -320,6 +324,7 @@ export class AccountHub extends DurableObject<Env> {
       endpointId: paramId,
       kind: url.searchParams.get('kind') === 'host' ? 'host' : url.searchParams.get('kind') === 'device' ? 'device' : null,
       nonce,
+      origin: url.origin,
       connectedAt: now,
       authed: false,
       authedAt: null,
@@ -604,8 +609,19 @@ export class AccountHub extends DurableObject<Env> {
     const relayPub = new Uint8Array(endpoint.relay_pub)
     let valid = false
     try {
+      // Crypto/1 §4: the signature covers this connection's canonical origin,
+      // the endpoint identity from the auth frame and the issued nonce. Old
+      // attachments without an origin fail closed (missing field → throw).
+      if (att.origin === null) throw new Error('attachment: origin missing')
+      if (kind !== 'host' && kind !== 'device') throw new Error('attachment: kind missing')
+      const fields: RelayAuthFields = {
+        relayOrigin: att.origin,
+        kind,
+        endpointId: id,
+        nonce: decodeBase64Url(att.nonce),
+      }
       const sigBytes = decodeBase64Url(sigStr)
-      valid = verifyRelayChallenge(relayPub, att.nonce, sigBytes)
+      valid = verifyRelayChallenge(relayPub, fields, sigBytes)
     } catch {
       valid = false
     }

@@ -2,6 +2,7 @@ import { SELF } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import {
   decodeBase32,
+  decodeBase64Url,
   deriveEndpointId,
   encodeBase64Url,
   getRelayPublicKey,
@@ -70,6 +71,14 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
   const devicePub = getRelayPublicKey(devicePriv)
   const deviceId = deriveEndpointId('d_', devicePub)
 
+  // Crypto/1 §4: the relay binds auth to the connection origin (the fetch URL
+  // the DO sees), the endpoint identity and the challenge nonce.
+  const RELAY_ORIGIN = 'https://relay.test'
+  const signHostChallenge = (priv: Uint8Array, nonceB64u: string): Uint8Array =>
+    signRelayChallenge(priv, { relayOrigin: RELAY_ORIGIN, kind: 'host', endpointId: hostId, nonce: decodeBase64Url(nonceB64u) })
+  const signDeviceChallenge = (priv: Uint8Array, nonceB64u: string): Uint8Array =>
+    signRelayChallenge(priv, { relayOrigin: RELAY_ORIGIN, kind: 'device', endpointId: deviceId, nonce: decodeBase64Url(nonceB64u) })
+
   let enrolledTicket = ''
 
   it('answers health checks without caching', async () => {
@@ -135,7 +144,7 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
     expect(challenge.t).toBe('challenge')
     expect(challenge.nonce).toBeDefined()
 
-    const sig = signRelayChallenge(hostPriv, challenge.nonce)
+    const sig = signHostChallenge(hostPriv, challenge.nonce)
     ws.send(
       JSON.stringify({
         t: 'auth',
@@ -218,7 +227,7 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
     const hostWs = hostRes.webSocket!
     hostWs.accept()
     const hostChallenge = await nextMessage<any>(hostWs)
-    const hostSig = signRelayChallenge(hostPriv, hostChallenge.nonce)
+    const hostSig = signHostChallenge(hostPriv, hostChallenge.nonce)
     hostWs.send(
       JSON.stringify({
         t: 'auth',
@@ -238,7 +247,7 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
     const devWs = devRes.webSocket!
     devWs.accept()
     const devChallenge = await nextMessage<any>(devWs)
-    const devSig = signRelayChallenge(devicePriv, devChallenge.nonce)
+    const devSig = signDeviceChallenge(devicePriv, devChallenge.nonce)
     devWs.send(
       JSON.stringify({
         t: 'auth',
@@ -305,7 +314,7 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c1.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c1.nonce)),
       }),
     )
     await nextMessage<any>(ws1)
@@ -326,7 +335,7 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c2.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c2.nonce)),
       }),
     )
     await nextMessage<any>(ws2)
@@ -351,7 +360,7 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c.nonce)),
       }),
     )
     await nextMessage<any>(ws)
@@ -387,7 +396,7 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
         v: 1,
         id: deviceId,
         kind: 'device',
-        sig: encodeBase64Url(signRelayChallenge(devicePriv, devC.nonce)),
+        sig: encodeBase64Url(signDeviceChallenge(devicePriv, devC.nonce)),
       }),
     )
     await nextMessage<any>(devWs)
@@ -405,7 +414,7 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, hostC.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, hostC.nonce)),
       }),
     )
     await nextMessage<any>(hostWs)

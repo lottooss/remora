@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers'
 import { runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  decodeBase64Url,
   deriveEndpointId,
   encodeBase64Url,
   getRelayPublicKey,
@@ -90,6 +91,12 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
   const hostPriv = randomBytes(32)
   const hostPub = getRelayPublicKey(hostPriv)
   const hostId = deriveEndpointId('h_', hostPub)
+  // Crypto/1 §4: sign over the connection origin, endpoint identity and nonce.
+  const RELAY_ORIGIN = 'https://relay.test'
+  const signHostChallenge = (priv: Uint8Array, nonceB64u: string): Uint8Array =>
+    signRelayChallenge(priv, { relayOrigin: RELAY_ORIGIN, kind: 'host', endpointId: hostId, nonce: decodeBase64Url(nonceB64u) })
+  const signDeviceChallenge = (priv: Uint8Array, nonceB64u: string): Uint8Array =>
+    signRelayChallenge(priv, { relayOrigin: RELAY_ORIGIN, kind: 'device', endpointId: deviceId, nonce: decodeBase64Url(nonceB64u) })
 
   const devicePriv = randomBytes(32)
   const devicePub = getRelayPublicKey(devicePriv)
@@ -179,7 +186,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, challenge.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, challenge.nonce)),
       }),
     )
     await nextMessage<any>(ws) // ready
@@ -230,7 +237,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
         v: 1,
         id: deviceId,
         kind: 'device',
-        sig: encodeBase64Url(signRelayChallenge(devicePriv, c.nonce)),
+        sig: encodeBase64Url(signDeviceChallenge(devicePriv, c.nonce)),
       }),
     )
     await nextMessage<any>(ws) // ready
@@ -280,7 +287,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c.nonce)),
       }),
     )
     await nextMessage<any>(ws) // ready
@@ -336,7 +343,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c.nonce)),
       }),
     )
     await nextMessage<any>(ws) // ready
@@ -379,7 +386,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c.nonce)),
       }),
     )
     await nextMessage<any>(ws) // ready
@@ -433,7 +440,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c.nonce)),
       }),
     )
     await nextMessage<any>(hostWs) // ready
@@ -483,7 +490,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c1.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c1.nonce)),
       }),
     )
     await nextMessage<any>(hostWs1) // ready
@@ -504,7 +511,7 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
         v: 1,
         id: hostId,
         kind: 'host',
-        sig: encodeBase64Url(signRelayChallenge(hostPriv, c2.nonce)),
+        sig: encodeBase64Url(signHostChallenge(hostPriv, c2.nonce)),
       }),
     )
     await nextMessage<any>(hostWs2) // ready -> cancels offline task & alarm
