@@ -22,7 +22,9 @@ export const SESSION_EVENT_KINDS = [
   'turn.start',
   'turn.end',
   'agent.error',
+  'user.message',
   'assistant.message',
+  'assistant.attempt',
   'assistant.delta',
   'tool.call',
   'tool.result',
@@ -30,6 +32,8 @@ export const SESSION_EVENT_KINDS = [
   'approval.decided',
   'question.asked',
   'question.decided',
+  'todo.updated',
+  'notice',
   'unknown',
 ] as const
 
@@ -54,6 +58,10 @@ export type SessionEvent =
   | (SessionEventCommon & { kind: 'turn.start' })
   | (SessionEventCommon & { kind: 'turn.end'; status: TurnEndStatus; error?: string })
   | (SessionEventCommon & { kind: 'agent.error'; message: string; code?: string })
+  | (SessionEventCommon & { kind: 'user.message'; text: string; source: 'user' | 'agent' | 'system' | 'other'; requestId?: string; attachments?: { name: string; mime: string }[] })
+  | (SessionEventCommon & { kind: 'assistant.attempt'; outcome: 'failed' | 'retried' | 'cancelled' | 'stream-error' | 'unknown'; text?: string })
+  | (SessionEventCommon & { kind: 'todo.updated'; items: { text: string; status: 'pending' | 'in_progress' | 'completed' | 'unknown' }[] })
+  | (SessionEventCommon & { kind: 'notice'; level: 'info' | 'warn' | 'error'; text: string })
   | (SessionEventCommon & {
       kind: 'assistant.message'
       text: string
@@ -103,6 +111,22 @@ const commonFields = {
 } as const
 
 const knownSessionEventSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('user.message'), ...commonFields, text: z.string(),
+    source: z.enum(['user', 'agent', 'system', 'other']).catch('other'),
+    requestId: z.string().optional(),
+    attachments: z.array(z.object({ name: z.string(), mime: z.string() }).passthrough()).optional(),
+  }).passthrough(),
+  z.object({
+    kind: z.literal('assistant.attempt'), ...commonFields,
+    outcome: z.enum(['failed', 'retried', 'cancelled', 'stream-error', 'unknown']).catch('unknown'),
+    text: z.string().optional(),
+  }).passthrough(),
+  z.object({
+    kind: z.literal('todo.updated'), ...commonFields,
+    items: z.array(z.object({ text: z.string(), status: z.enum(['pending', 'in_progress', 'completed', 'unknown']).catch('unknown') }).passthrough()),
+  }).passthrough(),
+  z.object({ kind: z.literal('notice'), ...commonFields, level: z.enum(['info', 'warn', 'error']).catch('info'), text: z.string() }).passthrough(),
   z
     .object({ kind: z.literal('session.created'), ...commonFields, sessionId: SessionIdSchema })
     .passthrough(),

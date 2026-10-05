@@ -1,17 +1,403 @@
 {
   "suite": "relay/control-frames",
   "version": 1,
-  "source": "Scaffolded for P0-A1 / RLY/1 \u00a73.2",
-  "notes": "Control frame encode/decode and validation",
+  "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
+  "notes": "input.value is the exact control frame JSON. Expected decoded frames echo the authored fields; implementations may drop unknown optional fields. Priority and ttl are always authored explicitly because the TS schema injects defaults. Error labels name the violated normative bound from RLY/1 §5.",
   "cases": [
     {
-      "name": "placeholder scaffold valid baseline",
+      "name": "challenge",
       "input": {
-        "status": "scaffold"
+        "value": {
+          "t": "challenge",
+          "v": 1,
+          "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+          "time": 1791158400000
+        }
       },
       "expect": {
-        "ok": true
+        "t": "challenge",
+        "v": 1,
+        "nonce": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "time": 1791158400000
       }
+    },
+    {
+      "name": "ready with peers",
+      "input": {
+        "value": {
+          "t": "ready",
+          "v": 1,
+          "id": "h_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+          "peers": [
+            {
+              "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+              "kind": "device",
+              "name": "Vector phone",
+              "online": true,
+              "lastSeenAt": 1791158400000
+            }
+          ]
+        }
+      },
+      "expect": {
+        "t": "ready",
+        "v": 1,
+        "id": "h_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+        "peers": [
+          {
+            "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+            "kind": "device",
+            "name": "Vector phone",
+            "online": true,
+            "lastSeenAt": 1791158400000
+          }
+        ]
+      }
+    },
+    {
+      "name": "ping",
+      "input": {
+        "value": {
+          "t": "ping"
+        }
+      },
+      "expect": {
+        "t": "ping"
+      }
+    },
+    {
+      "name": "pong",
+      "input": {
+        "value": {
+          "t": "pong"
+        }
+      },
+      "expect": {
+        "t": "pong"
+      }
+    },
+    {
+      "name": "presence online",
+      "input": {
+        "value": {
+          "t": "presence",
+          "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+          "kind": "device",
+          "online": true,
+          "at": 1791158400000
+        }
+      },
+      "expect": {
+        "t": "presence",
+        "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+        "kind": "device",
+        "online": true,
+        "at": 1791158400000
+      }
+    },
+    {
+      "name": "enroll ticket request",
+      "input": {
+        "value": {
+          "t": "enroll.ticket",
+          "rid": "r1"
+        }
+      },
+      "expect": {
+        "t": "enroll.ticket",
+        "rid": "r1"
+      }
+    },
+    {
+      "name": "enroll ticket granted",
+      "input": {
+        "value": {
+          "t": "enroll.ticket.ok",
+          "rid": "r1",
+          "ticket": "AQgPFh0kKzI5QEdOVVxjanF4f4aNlJuiqbC3vsXM09o",
+          "expiresAt": 1791159000000
+        }
+      },
+      "expect": {
+        "t": "enroll.ticket.ok",
+        "rid": "r1",
+        "ticket": "AQgPFh0kKzI5QEdOVVxjanF4f4aNlJuiqbC3vsXM09o",
+        "expiresAt": 1791159000000
+      }
+    },
+    {
+      "name": "endpoint list request",
+      "input": {
+        "value": {
+          "t": "endpoint.list",
+          "rid": "r2"
+        }
+      },
+      "expect": {
+        "t": "endpoint.list",
+        "rid": "r2"
+      }
+    },
+    {
+      "name": "endpoint list reply",
+      "input": {
+        "value": {
+          "t": "endpoint.list.ok",
+          "rid": "r2",
+          "devices": [
+            {
+              "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+              "kind": "device",
+              "name": "Vector phone",
+              "online": true,
+              "lastSeenAt": 1791158400000
+            }
+          ]
+        }
+      },
+      "expect": {
+        "t": "endpoint.list.ok",
+        "rid": "r2",
+        "devices": [
+          {
+            "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+            "kind": "device",
+            "name": "Vector phone",
+            "online": true,
+            "lastSeenAt": 1791158400000
+          }
+        ]
+      }
+    },
+    {
+      "name": "endpoint revoke request",
+      "input": {
+        "value": {
+          "t": "endpoint.revoke",
+          "rid": "r3",
+          "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+        }
+      },
+      "expect": {
+        "t": "endpoint.revoke",
+        "rid": "r3",
+        "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+      }
+    },
+    {
+      "name": "push with explicit delivery fields",
+      "input": {
+        "value": {
+          "t": "push",
+          "rid": "r4",
+          "to": [
+            "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+          ],
+          "ct": "BRIfLDlGU2BteoeUoa67yNXi7_wJFiMwPUpXZHF-i5ilsr_M2ebzAA0aJzRBTltodYKPnKm2w9Dd6vcEER4rOEVSX2x5hpOgrbrH1OHu-wgVIi88SVZjcH2Kl6SxvsvY",
+          "priority": "high",
+          "ttl": 3600
+        }
+      },
+      "expect": {
+        "t": "push",
+        "rid": "r4",
+        "to": [
+          "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+        ],
+        "ct": "BRIfLDlGU2BteoeUoa67yNXi7_wJFiMwPUpXZHF-i5ilsr_M2ebzAA0aJzRBTltodYKPnKm2w9Dd6vcEER4rOEVSX2x5hpOgrbrH1OHu-wgVIi88SVZjcH2Kl6SxvsvY",
+        "priority": "high",
+        "ttl": 3600
+      }
+    },
+    {
+      "name": "push result",
+      "input": {
+        "value": {
+          "t": "push.result",
+          "rid": "r4",
+          "results": [
+            {
+              "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+              "status": "sent"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "t": "push.result",
+        "rid": "r4",
+        "results": [
+          {
+            "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+            "status": "sent"
+          }
+        ]
+      }
+    },
+    {
+      "name": "push token update",
+      "input": {
+        "value": {
+          "t": "push.token",
+          "rid": "r5",
+          "token": "fcm-token-vector",
+          "hostOffline": true
+        }
+      },
+      "expect": {
+        "t": "push.token",
+        "rid": "r5",
+        "token": "fcm-token-vector",
+        "hostOffline": true
+      }
+    },
+    {
+      "name": "bye with reason",
+      "input": {
+        "value": {
+          "t": "bye",
+          "reason": "shutdown"
+        }
+      },
+      "expect": {
+        "t": "bye",
+        "reason": "shutdown"
+      }
+    },
+    {
+      "name": "ok reply",
+      "input": {
+        "value": {
+          "t": "ok",
+          "rid": "r5"
+        }
+      },
+      "expect": {
+        "t": "ok",
+        "rid": "r5"
+      }
+    },
+    {
+      "name": "error reply",
+      "input": {
+        "value": {
+          "t": "error",
+          "rid": "r6",
+          "code": "not_linked",
+          "message": "Destination is not linked.",
+          "ref": "r6"
+        }
+      },
+      "expect": {
+        "t": "error",
+        "rid": "r6",
+        "code": "not_linked",
+        "message": "Destination is not linked.",
+        "ref": "r6"
+      }
+    },
+    {
+      "name": "unknown frame type",
+      "input": {
+        "value": {
+          "t": "self-introduced"
+        }
+      },
+      "error": "unknown_type"
+    },
+    {
+      "name": "challenge missing nonce",
+      "input": {
+        "value": {
+          "t": "challenge",
+          "v": 1,
+          "time": 1791158400000
+        }
+      },
+      "error": "missing_nonce"
+    },
+    {
+      "name": "auth missing signature",
+      "input": {
+        "value": {
+          "t": "auth",
+          "v": 1,
+          "kind": "host",
+          "id": "h_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+        }
+      },
+      "error": "missing_sig"
+    },
+    {
+      "name": "presence unknown kind",
+      "input": {
+        "value": {
+          "t": "presence",
+          "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+          "kind": "router",
+          "online": true,
+          "at": 1791158400000
+        }
+      },
+      "error": "bad_kind"
+    },
+    {
+      "name": "push priority outside the set",
+      "input": {
+        "value": {
+          "t": "push",
+          "rid": "r7",
+          "to": [
+            "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+          ],
+          "ct": "BRIfLDlGU2BteoeUoa67yNXi7_wJFiMwPUpXZHF-i5ilsr_M2ebzAA0aJzRBTltodYKPnKm2w9Dd6vcEER4rOEVSX2x5hpOgrbrH1OHu-wgVIi88SVZjcH2Kl6SxvsvY",
+          "priority": "urgent",
+          "ttl": 3600
+        }
+      },
+      "error": "bad_priority"
+    },
+    {
+      "name": "push ttl above one day",
+      "input": {
+        "value": {
+          "t": "push",
+          "rid": "r8",
+          "to": [
+            "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"
+          ],
+          "ct": "BRIfLDlGU2BteoeUoa67yNXi7_wJFiMwPUpXZHF-i5ilsr_M2ebzAA0aJzRBTltodYKPnKm2w9Dd6vcEER4rOEVSX2x5hpOgrbrH1OHu-wgVIi88SVZjcH2Kl6SxvsvY",
+          "priority": "normal",
+          "ttl": 86401
+        }
+      },
+      "error": "ttl_range"
+    },
+    {
+      "name": "push result unknown status",
+      "input": {
+        "value": {
+          "t": "push.result",
+          "rid": "r9",
+          "results": [
+            {
+              "id": "d_vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv",
+              "status": "maybe"
+            }
+          ]
+        }
+      },
+      "error": "bad_status"
+    },
+    {
+      "name": "rid above 32 characters",
+      "input": {
+        "value": {
+          "t": "ok",
+          "rid": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+        }
+      },
+      "error": "rid_too_long"
     }
   ]
 }

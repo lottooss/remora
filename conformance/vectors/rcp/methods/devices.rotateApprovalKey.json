@@ -1,16 +1,66 @@
 {
-  "suite": "rcp/methods/devices.rotate-approval-key",
+  "suite": "rcp/methods/devices.rotateapprovalkey",
   "version": 1,
-  "source": "Scaffolded for P0-A1",
-  "notes": "devices.rotateApprovalKey request/response",
+  "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
+  "notes": "input.direction chooses params/result/item/error; value is the actual JSON payload. expect is the decoded payload; error labels invalid_params/invalid_result/invalid_item/invalid_error are corpus validation categories, not host execution results. No approval digest/signature validity, policy enforcement, or exactly-once effects are claimed. Method name comes from the filename; suite labels are lowercase to satisfy the existing vector-file schema.",
   "cases": [
     {
-      "name": "placeholder scaffold valid baseline",
+      "name": "valid request parameters",
       "input": {
-        "status": "scaffold"
+        "direction": "params",
+        "value": {
+          "approvalPub": "AQIDBA",
+          "requestId": "11111111-2222-4333-8444-555555555555"
+        }
       },
       "expect": {
-        "ok": true
+        "approvalPub": "AQIDBA",
+        "requestId": "11111111-2222-4333-8444-555555555555"
+      }
+    },
+    {
+      "name": "valid response payload",
+      "input": {
+        "direction": "result",
+        "value": {
+          "status": "pending_pc_confirmation"
+        }
+      },
+      "expect": {
+        "status": "pending_pc_confirmation"
+      }
+    },
+    {
+      "name": "malformed request parameters",
+      "input": {
+        "direction": "params",
+        "value": {
+          "approvalPub": "AQIDBA==",
+          "requestId": "11111111-2222-4333-8444-555555555555"
+        }
+      },
+      "error": "invalid_params"
+    },
+    {
+      "name": "malformed response payload",
+      "input": {
+        "direction": "result",
+        "value": {}
+      },
+      "error": "invalid_result"
+    },
+    {
+      "name": "not found error payload",
+      "input": {
+        "direction": "error",
+        "value": {
+          "code": "not_found",
+          "message": "Requested resource is unavailable."
+        }
+      },
+      "expect": {
+        "code": "not_found",
+        "message": "Requested resource is unavailable."
       }
     }
   ]

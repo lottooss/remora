@@ -1,6 +1,5 @@
 package io.github.lottooss.remora.core.protocol
 
-import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -9,13 +8,16 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
-import kotlinx.serialization.json.JsonContentPolymorphicSerializer
 import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonEncoder
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 
 @Serializable
 data class Preview(
@@ -28,6 +30,7 @@ data class Preview(
 data class ModelRef(
     val provider: String,
     val model: String,
+    val reasoningEffort: String? = null,
 )
 
 @Serializable(with = SessionStatusSerializer::class)
@@ -154,6 +157,53 @@ sealed interface SessionEvent {
     val seq: Long
     val at: Long
     val kind: String
+
+    @Serializable
+    data class Attachment(val name: String, val mime: String)
+
+    @Serializable
+    @SerialName("user.message")
+    data class UserMessage(
+        override val seq: Long,
+        override val at: Long,
+        override val kind: String = "user.message",
+        val text: String,
+        val source: String = "other",
+        val requestId: String? = null,
+        val attachments: List<Attachment>? = null,
+    ) : SessionEvent
+
+    @Serializable
+    @SerialName("assistant.attempt")
+    data class AssistantAttempt(
+        override val seq: Long,
+        override val at: Long,
+        override val kind: String = "assistant.attempt",
+        val outcome: String = "unknown",
+        val text: String? = null,
+    ) : SessionEvent
+
+    @Serializable
+    data class TodoItem(val text: String, val status: String = "unknown")
+
+    @Serializable
+    @SerialName("todo.updated")
+    data class TodoUpdated(
+        override val seq: Long,
+        override val at: Long,
+        override val kind: String = "todo.updated",
+        val items: List<TodoItem>,
+    ) : SessionEvent
+
+    @Serializable
+    @SerialName("notice")
+    data class Notice(
+        override val seq: Long,
+        override val at: Long,
+        override val kind: String = "notice",
+        val level: String = "info",
+        val text: String,
+    ) : SessionEvent
 
     @Serializable
     @SerialName("session.created")
@@ -302,11 +352,25 @@ sealed interface SessionEvent {
     ) : SessionEvent
 }
 
-object SessionEventSerializer : JsonContentPolymorphicSerializer<SessionEvent>(SessionEvent::class) {
-    override fun selectDeserializer(element: JsonElement): DeserializationStrategy<SessionEvent> {
-        val obj = element.jsonObject
+object SessionEventSerializer : KSerializer<SessionEvent> {
+    override val descriptor: SerialDescriptor = JsonObject.serializer().descriptor
+
+    override fun deserialize(decoder: Decoder): SessionEvent {
+        val jsonDecoder = decoder as? JsonDecoder ?: error("Session events require JSON")
+        val original = jsonDecoder.decodeJsonElement().jsonObject
+        val obj = RcpPayloads.sessionEvent(original)
         val kind = obj["kind"]?.jsonPrimitive?.contentOrNull
-        return when (kind) {
+        if (kind == "unknown") return SessionEvent.Unknown(
+            seq = obj["seq"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L,
+            at = obj["at"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L,
+            dshType = obj.getValue("dshType").jsonPrimitive.content,
+            payload = original,
+        )
+        val serializer = when (kind) {
+            "user.message" -> SessionEvent.UserMessage.serializer()
+            "assistant.attempt" -> SessionEvent.AssistantAttempt.serializer()
+            "todo.updated" -> SessionEvent.TodoUpdated.serializer()
+            "notice" -> SessionEvent.Notice.serializer()
             "session.created" -> SessionEvent.SessionCreated.serializer()
             "session.status" -> SessionEvent.SessionStatusEvent.serializer()
             "turn.start" -> SessionEvent.TurnStart.serializer()
@@ -320,32 +384,34 @@ object SessionEventSerializer : JsonContentPolymorphicSerializer<SessionEvent>(S
             "approval.decided" -> SessionEvent.ApprovalDecided.serializer()
             "question.asked" -> SessionEvent.QuestionAsked.serializer()
             "question.decided" -> SessionEvent.QuestionDecided.serializer()
-            "unknown" -> SessionEvent.Unknown.serializer()
-            else -> SessionEventUnknownFallbackSerializer
+            else -> error("Unmapped validated session event")
         }
-    }
-}
-
-object SessionEventUnknownFallbackSerializer : KSerializer<SessionEvent.Unknown> {
-    override val descriptor: SerialDescriptor = JsonObject.serializer().descriptor
-
-    override fun serialize(encoder: Encoder, value: SessionEvent.Unknown) {
-        SessionEvent.Unknown.serializer().serialize(encoder, value)
+        return jsonDecoder.json.decodeFromJsonElement(serializer, obj)
     }
 
-    override fun deserialize(decoder: Decoder): SessionEvent.Unknown {
-        val jsonDecoder = decoder as? JsonDecoder
-            ?: throw IllegalStateException("SessionEvent unknown fallback requires JsonDecoder")
-        val obj = jsonDecoder.decodeJsonElement().jsonObject
-        val kind = obj["kind"]?.jsonPrimitive?.contentOrNull ?: "unknown"
-        val seq = obj["seq"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L
-        val at = obj["at"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L
-        return SessionEvent.Unknown(
-            seq = seq,
-            at = at,
-            kind = "unknown",
-            dshType = kind,
-            payload = obj,
-        )
+    override fun serialize(encoder: Encoder, value: SessionEvent) {
+        val jsonEncoder = encoder as? JsonEncoder ?: error("Session events require JSON")
+        val json = jsonEncoder.json
+        val encoded: JsonElement = when (value) {
+            is SessionEvent.UserMessage -> json.encodeToJsonElement(SessionEvent.UserMessage.serializer(), value)
+            is SessionEvent.AssistantAttempt -> json.encodeToJsonElement(SessionEvent.AssistantAttempt.serializer(), value)
+            is SessionEvent.TodoUpdated -> json.encodeToJsonElement(SessionEvent.TodoUpdated.serializer(), value)
+            is SessionEvent.Notice -> json.encodeToJsonElement(SessionEvent.Notice.serializer(), value)
+            is SessionEvent.SessionCreated -> json.encodeToJsonElement(SessionEvent.SessionCreated.serializer(), value)
+            is SessionEvent.SessionStatusEvent -> json.encodeToJsonElement(SessionEvent.SessionStatusEvent.serializer(), value)
+            is SessionEvent.TurnStart -> json.encodeToJsonElement(SessionEvent.TurnStart.serializer(), value)
+            is SessionEvent.TurnEnd -> json.encodeToJsonElement(SessionEvent.TurnEnd.serializer(), value)
+            is SessionEvent.AgentError -> json.encodeToJsonElement(SessionEvent.AgentError.serializer(), value)
+            is SessionEvent.AssistantMessage -> json.encodeToJsonElement(SessionEvent.AssistantMessage.serializer(), value)
+            is SessionEvent.AssistantDelta -> json.encodeToJsonElement(SessionEvent.AssistantDelta.serializer(), value)
+            is SessionEvent.ToolCall -> json.encodeToJsonElement(SessionEvent.ToolCall.serializer(), value)
+            is SessionEvent.ToolResult -> json.encodeToJsonElement(SessionEvent.ToolResult.serializer(), value)
+            is SessionEvent.ApprovalAsked -> json.encodeToJsonElement(SessionEvent.ApprovalAsked.serializer(), value)
+            is SessionEvent.ApprovalDecided -> json.encodeToJsonElement(SessionEvent.ApprovalDecided.serializer(), value)
+            is SessionEvent.QuestionAsked -> json.encodeToJsonElement(SessionEvent.QuestionAsked.serializer(), value)
+            is SessionEvent.QuestionDecided -> json.encodeToJsonElement(SessionEvent.QuestionDecided.serializer(), value)
+            is SessionEvent.Unknown -> JsonObject(value.payload + ("kind" to JsonPrimitive("unknown")) + ("dshType" to JsonPrimitive(value.dshType)))
+        }
+        jsonEncoder.encodeJsonElement(RcpPayloads.sessionEvent(encoded))
     }
 }
