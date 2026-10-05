@@ -2,6 +2,8 @@ package io.github.lottooss.remora.core.transport
 
 import io.github.lottooss.remora.core.crypto.encodeBase64Url
 import io.github.lottooss.remora.core.crypto.signRelayChallenge
+import io.github.lottooss.remora.core.crypto.RelayAuthFields
+import io.github.lottooss.remora.core.crypto.decodeBase64Url
 import io.github.lottooss.remora.core.protocol.DataFrame
 import io.github.lottooss.remora.core.protocol.PeerKind
 import io.github.lottooss.remora.core.protocol.RLY_SUBPROTOCOL
@@ -231,7 +233,7 @@ class RelayClient(
                     require(root["v"]?.jsonPrimitive?.intOrNull == RLY_VERSION)
                     _connectionState.value = ConnectionState.Authenticating
                     val nonce = root["nonce"]?.jsonPrimitive?.content ?: return
-                    val sig = signRelayChallenge(relayPrivateKey, nonce)
+                    val sig = signRelayChallenge(relayPrivateKey, RelayAuthFields(relayOrigin, "device", deviceId, decodeBase64Url(nonce)))
                     val authMessage = buildJsonObject {
                         put("t", "auth")
                         put("v", RLY_VERSION)

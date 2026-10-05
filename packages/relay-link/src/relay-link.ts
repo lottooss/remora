@@ -10,7 +10,7 @@ import {
   type DataFrame,
   type Peer,
 } from '@remora/protocol'
-import { encodeBase64Url, signRelayChallenge } from '@remora/crypto'
+import { decodeBase64Url, encodeBase64Url, signRelayChallenge } from '@remora/crypto'
 
 export type RelayLinkState = 'idle' | 'connecting' | 'authenticating' | 'ready' | 'backoff' | 'stopped'
 
@@ -214,7 +214,14 @@ export class RelayLink extends EventEmitter {
       case 'challenge': {
         this.setState('authenticating')
         const nonce = frame.nonce
-        const sig = signRelayChallenge(this.options.relayPrivateKey, nonce)
+        const relayUrl = new URL(this.options.url)
+        relayUrl.protocol = relayUrl.protocol === 'wss:' ? 'https:' : 'http:'
+        const sig = signRelayChallenge(this.options.relayPrivateKey, {
+          relayOrigin: relayUrl.origin,
+          kind: this.options.endpointKind,
+          endpointId: this.options.endpointId,
+          nonce: decodeBase64Url(nonce),
+        })
         const b64uSig = encodeBase64Url(sig)
 
         const authPayload = {

@@ -59,7 +59,7 @@ describe('End-to-End Interaction & AnswerBridge (P3-H1)', () => {
     })
 
     // Register interaction RCP methods
-    registerInteractionMethods(rcpServer, pendingRegistry, registry)
+    registerInteractionMethods(rcpServer, pendingRegistry, registry, undefined, hostIdentity.hostId)
 
     hostRelay = new HostRelayConnection({
       relayUrl: env.relayWsUrl,
@@ -208,6 +208,11 @@ describe('End-to-End Interaction & AnswerBridge (P3-H1)', () => {
     // Sign with P-256 key
     const issuedAt = Date.now()
     const canonicalMsg = buildCanonicalApprovalMessage({
+      hostId: hostIdentity.hostId,
+      deviceId: device.deviceId,
+      sessionId: highRiskItem.sessionId,
+      callId: highRiskItem.callId,
+      toolName: highRiskItem.toolName,
       approvalId: highRiskItem.id,
       outcome: 'allowed-once',
       argsDigest: highRiskItem.argsDigest,

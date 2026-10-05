@@ -1,5 +1,6 @@
 package io.github.lottooss.remora.core.data
 
+import io.github.lottooss.remora.core.crypto.ApprovalMessageFields
 import io.github.lottooss.remora.core.crypto.buildCanonicalApprovalMessage
 import io.github.lottooss.remora.core.crypto.computeArgsDigest
 import io.github.lottooss.remora.core.crypto.decodeBase64Url
@@ -26,6 +27,7 @@ data class ApprovalAnswerResult(val accepted: Boolean, val finalOutcome: String,
 class InteractionService(
     private val interactionRepository: InteractionRepository,
     private val hostId: String,
+    private val deviceId: () -> String,
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) {
     private val answerMutex = Mutex()
@@ -52,7 +54,11 @@ class InteractionService(
             "Approval preview digest mismatch",
         )
         val issuedAt = nowMillis()
-        val canonicalMessage = buildCanonicalApprovalMessage(approval.id, outcome, issuedAt, digest)
+        val canonicalMessage = buildCanonicalApprovalMessage(ApprovalMessageFields(
+            hostId = this.hostId, deviceId = deviceId(), approvalId = approval.id,
+            sessionId = approval.sessionId, callId = approval.callId, toolName = approval.toolName,
+            argsDigest = digest, outcome = outcome, issuedAt = issuedAt,
+        ))
         val signature = if (approval.requiresSignature || approval.risk == "high") {
             val provider = signatureProvider ?: throw SecurityException("Biometric signature required")
             val encoded = provider(canonicalMessage)

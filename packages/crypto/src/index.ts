@@ -17,6 +17,7 @@ export const DOMAIN_PREFIX = 'remora/1'
 export const ENDPOINT_ID_PREFIX = { host: 'h_', device: 'd_' } as const
 
 export * from './noise/index.ts'
+export * from './context.ts'
 export * from './b64u.ts'
 export * from './base32.ts'
 export * from './random.ts'

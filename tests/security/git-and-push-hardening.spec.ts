@@ -106,6 +106,11 @@ describe('P6-T2 Security Hardening', () => {
     it('fails closed when push ciphertext is tampered or decrypted with wrong key', () => {
       const deviceAPushKey = randomBytes(32)
       const deviceBPushKey = randomBytes(32)
+      // Push AEAD is bound to the host/device pair (Crypto/1 §8).
+      const pushContext = {
+        hostId: 'h_erruijsx3ey2rmxcpeh3pgxjkm',
+        deviceId: 'd_erruijsx3ey2rmxcpeh3pgxjkm',
+      }
 
       const payload = {
         type: 'approval',
@@ -116,7 +121,7 @@ describe('P6-T2 Security Hardening', () => {
         issuedAt: Date.now(),
       }
 
-      const sealed = sealPushPayload(deviceAPushKey, payload)
+      const sealed = sealPushPayload(deviceAPushKey, payload, pushContext)
       expect(sealed.length).toBeGreaterThan(28) // 12 nonce + ciphertext + 16 tag
 
       // 1. Bit-flipped ciphertext must fail authentication
@@ -124,21 +129,21 @@ describe('P6-T2 Security Hardening', () => {
       tamperedCiphertext[15] ^= 0xff
 
       expect(() => {
-        openPushPayload(deviceAPushKey, tamperedCiphertext)
+        openPushPayload(deviceAPushKey, tamperedCiphertext, pushContext)
       }).toThrow()
 
       // 2. Truncated payload must throw
       expect(() => {
-        openPushPayload(deviceAPushKey, sealed.subarray(0, 20))
+        openPushPayload(deviceAPushKey, sealed.subarray(0, 20), pushContext)
       }).toThrow()
 
       // 3. Key isolation: Device B cannot decrypt payload meant for Device A
       expect(() => {
-        openPushPayload(deviceBPushKey, sealed)
+        openPushPayload(deviceBPushKey, sealed, pushContext)
       }).toThrow()
 
       // 4. Clean round-trip succeeds for legitimate recipient
-      const opened = openPushPayload(deviceAPushKey, sealed)
+      const opened = openPushPayload(deviceAPushKey, sealed, pushContext)
       expect(opened).toEqual(payload)
 
       // 5. Zero plaintext leakage: sealed payload does not contain confidential strings

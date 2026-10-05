@@ -1,22 +1,28 @@
 import { p256 } from '@noble/curves/nist.js'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
+import { bytesToHex, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js'
+import { assertEndpointId, assertUnicode } from './context.ts'
 
 /** Wire outcome of a signed approval answer (RCP/1 §7). */
 export type ApprovalOutcome = 'allowed-once' | 'rejected'
 
 /** Fields bound into the canonical approval message. */
 export interface ApprovalMessageFields {
+  hostId: string
+  deviceId: string
   approvalId: string
+  sessionId: string
+  callId?: string | undefined
+  toolName: string
   outcome: ApprovalOutcome
   /** Decimal milliseconds since the Unix epoch. */
   issuedAt: number
-  /** `sha256:` + hex digest from {@link computeArgsDigest}, or bare lowercase hex. */
+  /** Bare lowercase SHA-256 hex from {@link computeArgsDigest}. */
   argsDigest: string
 }
 
 const OUTCOMES: ReadonlySet<string> = new Set(['allowed-once', 'rejected'])
-const ARGS_DIGEST_PATTERN = /^(sha256:)?[0-9a-f]{64}$/
+const ARGS_DIGEST_PATTERN = /^[0-9a-f]{64}$/
 
 /** P-256 verify options from Crypto/1 §7: hash with SHA-256, accept high-S, DER. */
 const APPROVAL_VERIFY_OPTS = { prehash: true, lowS: false, format: 'der' } as const
@@ -27,19 +33,25 @@ const SPKI_PRIME256V1_OID = Uint8Array.of(0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x
 /**
  * Builds the canonical approval message: UTF-8 lines joined by `\n` with no
  * trailing newline, headed by the frozen `remora/1 approval` domain
- * (Crypto/1 §7, restricted to the fields this API signs).
+ * (Crypto/1 §7). Identity and pending context come from the authenticated channel.
  */
 export function buildCanonicalApprovalMessage(fields: ApprovalMessageFields): string {
-  const { approvalId, outcome, issuedAt, argsDigest } = fields
-  if (approvalId.length === 0 || approvalId.length > 128 || /[\r\n]/.test(approvalId)) {
-    throw new Error('approval: malformed approvalId')
+  const { hostId, deviceId, approvalId, sessionId, callId, toolName, outcome, issuedAt, argsDigest } = fields
+  assertEndpointId(hostId, 'host')
+  assertEndpointId(deviceId, 'device')
+  for (const [name, value] of Object.entries({ approvalId, sessionId, toolName, ...(callId === undefined ? {} : { callId }) })) {
+    if (value.length === 0 || value.length > 1024 || /[\r\n\x00]/.test(value)) {
+      throw new Error(`approval: malformed ${name}`)
+    }
+    assertUnicode(value)
   }
+  if (approvalId.length > 128 || callId === '-') throw new Error('approval: malformed approvalId or callId')
   if (!OUTCOMES.has(outcome)) throw new Error('approval: outcome must be allowed-once or rejected')
   if (!Number.isSafeInteger(issuedAt) || issuedAt < 0) {
     throw new Error('approval: issuedAt must be non-negative integer milliseconds')
   }
   if (!ARGS_DIGEST_PATTERN.test(argsDigest)) throw new Error('approval: malformed argsDigest')
-  return ['remora/1 approval', approvalId, argsDigest, outcome, String(issuedAt)].join('\n')
+  return ['remora/1 approval', hostId, deviceId, approvalId, sessionId, callId ?? '-', toolName, argsDigest, outcome, String(issuedAt)].join('\n')
 }
 
 /**
@@ -76,11 +88,13 @@ export function canonicalJson(value: unknown): string {
 }
 
 /**
- * `argsDigest = "sha256:" + hex_lower(SHA-256(UTF-8(canonicalJson(preview))))`
+ * `argsDigest = hex_lower(SHA-256(UTF-8(text) || 0x00 || UTF-8(json)))`
  * — binds what the phone displayed to the signature (Crypto/1 §7).
  */
-export function computeArgsDigest(preview: unknown): string {
-  return `sha256:${bytesToHex(sha256(utf8ToBytes(canonicalJson(preview))))}`
+export function computeArgsDigest(preview: { text: string; json: string }): string {
+  assertUnicode(preview.text)
+  assertUnicode(preview.json)
+  return bytesToHex(sha256(concatBytes(utf8ToBytes(preview.text), Uint8Array.of(0), utf8ToBytes(preview.json))))
 }
 
 function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
@@ -126,9 +140,16 @@ function spkiToSec1Point(spki: Uint8Array): Uint8Array {
   if (bits.value.length < 2 || bits.value[0] !== 0x00) throw new Error('spki: BIT STRING must have 0 unused bits')
   const point = bits.value.subarray(1)
   const uncompressed = point.length === 65 && point[0] === 0x04
-  const compressed = point.length === 33 && (point[0] === 0x02 || point[0] === 0x03)
-  if (!uncompressed && !compressed) throw new Error('spki: not a P-256 SEC1 point')
+  if (!uncompressed) throw new Error('spki: not an uncompressed P-256 SEC1 point')
   return point
+}
+
+/** Validates the mandatory uncompressed P-256 SPKI approval key at pairing. */
+export function isValidApprovalPublicKey(publicKeySpkiDer: Uint8Array): boolean {
+  try {
+    p256.Point.fromBytes(spkiToSec1Point(publicKeySpkiDer)).assertValidity()
+    return true
+  } catch { return false }
 }
 
 /**
@@ -176,4 +197,3 @@ export function generateApprovalKeypair(): {
 export function signApprovalMessage(privateKey: Uint8Array, message: Uint8Array): Uint8Array {
   return p256.sign(message, privateKey, { lowS: false, format: 'der' })
 }
-

@@ -2,16 +2,25 @@
   "suite": "crypto/pairing",
   "version": 1,
   "source": "Crypto/1 §5 pairing protocol",
-  "notes": "QR code serialization, PSK derivation, and SAS generation",
+  "notes": "Host-bound pairing PSK derivation and handshake-hash SAS derivation",
   "cases": [
     {
-      "name": "pairPsk derivation from pairingSecret and ticketId",
+      "name": "pairPsk derives from the pairing secret and host id",
       "input": {
-        "pairingSecretB64u": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
-        "ticketId": "tkt_01923456789a"
+        "pairingSecretB64u": "oKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr8",
+        "hostId": "h_erruijsx3ey2rmxcpeh3pgxjkm"
       },
       "expect": {
-        "pairPskHex": "4495c8ccf93f1be72f34e989f9320fadee5d48717b50dff109ab091b4913fc04"
+        "pairPskHex": "99c4b4d5d4435a7604a28bc116507469871731aed99a3fec9d8f2018a2a0fb03"
+      }
+    },
+    {
+      "name": "SAS derives six digits from the handshake hash",
+      "input": {
+        "handshakeHashHex": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+      },
+      "expect": {
+        "sasCode": "764025"
       }
     }
   ]

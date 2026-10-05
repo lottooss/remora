@@ -4,7 +4,6 @@ import io.github.lottooss.remora.core.crypto.PairingData
 import io.github.lottooss.remora.core.crypto.decodeBase64Url
 import io.github.lottooss.remora.core.crypto.deriveEndpointId
 import io.github.lottooss.remora.core.crypto.derivePairPsk
-import io.github.lottooss.remora.core.crypto.encodeBase32
 import io.github.lottooss.remora.core.crypto.encodeBase64Url
 import io.github.lottooss.remora.core.crypto.generateKeypair
 import io.github.lottooss.remora.core.crypto.getRelayPublicKey
@@ -165,8 +164,7 @@ class PairingService(
                     withTimeout(120_000) { secureChannel.incomingMessages.first() }
                 }
                 try {
-                    val ticketId = "t_" + encodeBase32(payload.ticket.copyOfRange(0, 16))
-                    val pairPsk = derivePairPsk(payload.pairingSecret, ticketId)
+                    val pairPsk = derivePairPsk(payload.pairingSecret, payload.hostId)
                     secrets += pairPsk
                     val message = buildJsonObject {
                         put("v", 1); put("purpose", "pair"); put("deviceId", deviceId)

@@ -142,6 +142,7 @@ class RemoraViewModel @Inject constructor(
             try {
                 val material = withContext(Dispatchers.IO) { keys.getHostKeys(runtime.host.id.value) }
                     ?: throw IllegalStateException("Pairing keys unavailable")
+                runtime.pairedDeviceId = material.deviceId
                 try {
                     if (connectionsAllowed && _runtimes.value[runtime.host.id.value] === runtime) {
                         runtime.connection.connect(HostConnectionInfo(
@@ -367,7 +368,14 @@ class HostRuntime(
     val sync = SyncEngine(sessions, scope, interactions, workspaces)
     val sessionsService = SessionService(sessions)
     private var hostClockOffset = 0L
-    val interactionsService = InteractionService(interactions, host.id.value) {
+    /** Paired device identity loaded with the keys in [connect]; null while unpaired. */
+    @Volatile
+    var pairedDeviceId: String? = null
+    val interactionsService = InteractionService(interactions, host.id.value, {
+        // Crypto/1 §7: answers sign the paired device identity, taken from the
+        // stored pairing material — never from request-supplied values.
+        pairedDeviceId ?: error("Host disconnected")
+    }) {
         System.currentTimeMillis() + hostClockOffset
     }
     val models = MutableStateFlow<List<ModelRef>>(emptyList())
@@ -413,7 +421,11 @@ class HostRuntime(
         check(isSelected())
         return connection.rcpClient.value ?: error("Host disconnected")
     }
-    fun disconnect() { connectJob?.cancel(); connection.disconnect() }
+    fun disconnect() {
+        connectJob?.cancel()
+        connection.disconnect()
+        pairedDeviceId = null
+    }
     fun close() {
         disconnect()
         sync.closeAll()

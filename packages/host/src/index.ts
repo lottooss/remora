@@ -394,6 +394,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   relay.attachChannelManager(channelManager)
 
   const notifier = new HostNotifier({
+    hostId: identity.hostId,
     registry,
     prefsStore: notifyPrefsStore,
     config: resolved.notify,

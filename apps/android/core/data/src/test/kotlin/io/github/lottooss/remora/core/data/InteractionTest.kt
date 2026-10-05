@@ -11,6 +11,12 @@ import org.junit.Test
 
 class InteractionTest {
 
+    companion object {
+        // Canonical endpoint ids required by the Crypto/1 §7 context binding.
+        private const val HOST_ID = "h_erruijsx3ey2rmxcpeh3pgxjkm"
+        private const val DEVICE_ID = "d_erruijsx3ey2rmxcpeh3pgxjkm"
+    }
+
     private class FakeRpcCaller(
         private val handler: (method: String, params: JsonObject) -> JsonObject = { _, _ ->
             buildJsonObject { put("accepted", true); put("final", "allowed-once"); put("by", "phone") }
@@ -27,7 +33,7 @@ class InteractionTest {
     @Test
     fun testHighRiskApprovalRequiresBiometricSignature() = runBlocking {
         val repo = InteractionRepository()
-        val service = InteractionService(repo, "host_1")
+        val service = InteractionService(repo, HOST_ID, deviceId = { DEVICE_ID })
         val caller = FakeRpcCaller()
 
         val highRiskApproval = PendingApproval(
@@ -43,7 +49,7 @@ class InteractionTest {
 
         // 1. Without signature provider -> must fail closed with SecurityException
         val failResult = service.answerApproval(
-            hostId = "host_1",
+            hostId = HOST_ID,
             approval = highRiskApproval,
             displayedPreview = highRiskApproval.preview,
             outcome = "allowed-once",
@@ -57,7 +63,7 @@ class InteractionTest {
         // 2. With signature provider -> succeeds and dispatches sig
         var providerCalled = false
         val successResult = service.answerApproval(
-            hostId = "host_1",
+            hostId = HOST_ID,
             approval = highRiskApproval,
             displayedPreview = highRiskApproval.preview,
             outcome = "allowed-once",
@@ -83,7 +89,7 @@ class InteractionTest {
     @Test
     fun testNormalRiskApprovalNeedsOnlyUnlockedApp() = runBlocking {
         val repo = InteractionRepository()
-        val service = InteractionService(repo, "host_1")
+        val service = InteractionService(repo, HOST_ID, deviceId = { DEVICE_ID })
         val caller = FakeRpcCaller()
 
         val normalRiskApproval = PendingApproval(
@@ -99,7 +105,7 @@ class InteractionTest {
 
         // Normal risk needs no signature provider
         val result = service.answerApproval(
-            hostId = "host_1",
+            hostId = HOST_ID,
             approval = normalRiskApproval,
             displayedPreview = normalRiskApproval.preview,
             outcome = "allowed-once",
@@ -116,7 +122,7 @@ class InteractionTest {
     @Test
     fun testDigestMismatchBlocksSigning() = runBlocking {
         val repo = InteractionRepository()
-        val service = InteractionService(repo, "host_1")
+        val service = InteractionService(repo, HOST_ID, deviceId = { DEVICE_ID })
         val caller = FakeRpcCaller()
 
         val approval = PendingApproval(
@@ -132,7 +138,7 @@ class InteractionTest {
         repo.addOrUpdate(PendingInteraction.Approval(approval))
         var signatureProviderInvoked = false
         val result = service.answerApproval(
-            hostId = "host_1",
+            hostId = HOST_ID,
             approval = approval,
             outcome = "allowed-once",
             displayedPreview = approval.preview.copy(text = "echo 'tampered evil script'"),
@@ -154,7 +160,7 @@ class InteractionTest {
     @Test
     fun testQuestionAnsweringDispatchesRpc() = runBlocking {
         val repo = InteractionRepository()
-        val service = InteractionService(repo, "host_1")
+        val service = InteractionService(repo, HOST_ID, deviceId = { DEVICE_ID })
         val caller = FakeRpcCaller()
 
         val question = PendingQuestion(
@@ -169,7 +175,7 @@ class InteractionTest {
         repo.addOrUpdate(PendingInteraction.Question(question))
 
         val result = service.answerQuestion(
-            hostId = "host_1",
+            hostId = HOST_ID,
             question = question,
             answers = listOf(QuestionAnswer("strategy", listOf("Option A"), "Proceed with Option A")),
             rpcCaller = caller::call,

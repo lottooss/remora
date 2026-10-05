@@ -2,6 +2,7 @@ package io.github.lottooss.remora.notification
 
 import com.google.common.truth.Truth.assertThat
 import io.github.lottooss.remora.core.crypto.openPushPayload
+import io.github.lottooss.remora.core.crypto.PushContext
 import io.github.lottooss.remora.core.crypto.sealPushPayload
 import org.junit.Test
 
@@ -10,12 +11,16 @@ class PushNotificationTest {
     @Test
     fun testPushPayloadEncryptionDecryption() {
         val key = ByteArray(32) { (it + 1).toByte() }
+        val context = PushContext(
+            hostId = "h_erruijsx3ey2rmxcpeh3pgxjkm",
+            deviceId = "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        )
         val json = """{"v":1,"kind":"approval","title":"Test Approval","body":"Needs your approval"}"""
 
-        val sealed = sealPushPayload(key, json)
+        val sealed = sealPushPayload(key, json, context)
         assertThat(sealed.size).isGreaterThan(12 + 16)
 
-        val opened = openPushPayload(key, sealed)
+        val opened = openPushPayload(key, sealed, context)
         assertThat(opened).isEqualTo(json)
     }
 
@@ -59,9 +64,13 @@ class PushNotificationTest {
     fun testDroppingInvalidCiphertext() {
         val key = ByteArray(32) { (it + 1).toByte() }
         val corruptData = ByteArray(30) { 0xFF.toByte() }
+        val context = PushContext(
+            hostId = "h_erruijsx3ey2rmxcpeh3pgxjkm",
+            deviceId = "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        )
 
         try {
-            openPushPayload(key, corruptData)
+            openPushPayload(key, corruptData, context)
             assertThat(false).isTrue()
         } catch (_: Exception) {
         }

@@ -9,24 +9,33 @@ fun getRelayPublicKey(privateKey: ByteArray): ByteArray {
     return Ed25519PrivateKeyParameters(privateKey, 0).generatePublicKey().encoded
 }
 
-fun signRelayChallenge(privateKey: ByteArray, challengeToken: String): ByteArray {
+/** Raw challenge and authenticated endpoint/deployment context (Crypto/1 §4). */
+data class RelayAuthFields(val relayOrigin: String, val kind: String, val endpointId: String, val nonce: ByteArray)
+
+fun buildRelayAuthMessage(fields: RelayAuthFields): ByteArray = with(fields) {
+    requireRelayOrigin(relayOrigin)
+    require(kind == "host" || kind == "device") { "Invalid endpoint kind" }
+    requireEndpointId(endpointId, kind)
+    require(nonce.size == 32) { "Nonce must be 32 bytes" }
+    "remora/1 relay-auth\u0000$relayOrigin\u0000$kind\u0000$endpointId\u0000".toByteArray(Charsets.UTF_8) + nonce
+}
+
+fun signRelayChallenge(privateKey: ByteArray, fields: RelayAuthFields): ByteArray {
     require(privateKey.size == 32) { "private key must be 32 bytes" }
-    val msg = ("remora/1 relay-auth\u0000" + challengeToken).toByteArray(Charsets.UTF_8)
+    val msg = buildRelayAuthMessage(fields)
     val signer = Ed25519Signer()
     signer.init(true, Ed25519PrivateKeyParameters(privateKey, 0))
     signer.update(msg, 0, msg.size)
     return signer.generateSignature()
 }
 
-fun verifyRelayChallenge(publicKey: ByteArray, challengeToken: String, signature: ByteArray): Boolean {
+fun verifyRelayChallenge(publicKey: ByteArray, fields: RelayAuthFields, signature: ByteArray): Boolean {
     if (publicKey.size != 32 || signature.size != 64) return false
     return try {
-        val msg = ("remora/1 relay-auth\u0000" + challengeToken).toByteArray(Charsets.UTF_8)
+        val msg = buildRelayAuthMessage(fields)
         val verifier = Ed25519Signer()
         verifier.init(false, Ed25519PublicKeyParameters(publicKey, 0))
         verifier.update(msg, 0, msg.size)
         verifier.verifySignature(signature)
-    } catch (_: Exception) {
-        false
-    }
+    } catch (_: Exception) { false }
 }

@@ -26,6 +26,7 @@ export interface PushFrame {
 }
 
 export interface HostNotifierOptions {
+  hostId: string
   registry: DeviceRegistry
   prefsStore: NotifyPrefsStore
   config: NotifyConfig
@@ -53,6 +54,7 @@ const TURN_THROTTLE_MS = 30_000
 const MAX_TRACKED_SESSIONS = 512
 
 export class HostNotifier {
+  private readonly hostId: string
   private readonly registry: DeviceRegistry
   private readonly prefsStore: NotifyPrefsStore
   private readonly config: NotifyConfig
@@ -64,6 +66,7 @@ export class HostNotifier {
   private readonly lastTurnNotifiedAt = new Map<string, number>()
 
   constructor(options: HostNotifierOptions) {
+    this.hostId = options.hostId
     this.registry = options.registry
     this.prefsStore = options.prefsStore
     this.config = options.config
@@ -202,7 +205,7 @@ export class HostNotifier {
         try {
           await this.sendPush({
             to: [device.deviceId],
-            ct: sealPush(device.pushKey, payload),
+            ct: sealPush(device.pushKey, payload, { hostId: this.hostId, deviceId: device.deviceId }),
             priority: options.priority,
             collapse: options.collapse,
             ttl: options.ttl ?? 86400,

@@ -9,8 +9,8 @@ import { RcpServer } from '../src/rcp/index.ts'
 import { registerNotifyMethods } from '../src/rcp/methods/notify.ts'
 import type { NotifyConfig } from '../src/config.ts'
 
-const HOST_ID = 'h_test0000000000000000000000'
-const DEVICE_ID = 'd_test00000000000000000000001'
+const HOST_ID = 'h_erruijsx3ey2rmxcpeh3pgxjkm'
+const DEVICE_ID = 'd_erruijsx3ey2rmxcpeh3pgxjkm'
 
 function createDevice(overrides: Partial<DeviceRecord> = {}): DeviceRecord {
   return {
@@ -56,6 +56,7 @@ function createNotifier(options: {
   const prefsStore = new InMemoryNotifyPrefsStore()
   const pushes: CapturedPush[] = []
   const notifier = new HostNotifier({
+    hostId: HOST_ID,
     registry,
     prefsStore,
     config: options.config ?? createConfig(),
@@ -73,7 +74,10 @@ function createNotifier(options: {
 
 function unseal(captured: CapturedPush): Record<string, unknown> {
   const raw = decodeBase64Url(captured.frame.ct)
-  return openPushPayload(captured.device.pushKey, raw) as Record<string, unknown>
+  return openPushPayload(captured.device.pushKey, raw, {
+    hostId: HOST_ID,
+    deviceId: captured.device.deviceId,
+  }) as Record<string, unknown>
 }
 
 function createApproval(overrides: Record<string, unknown> = {}) {
@@ -388,7 +392,7 @@ describe('P5-H1: Host Notifier', () => {
 
       expect(pushes).toHaveLength(1)
       const raw = decodeBase64Url(pushes[0]!.frame.ct)
-      const decrypted = openPushPayload(pushes[0]!.device.pushKey, raw) as Record<string, unknown>
+      const decrypted = openPushPayload(pushes[0]!.device.pushKey, raw, { hostId: HOST_ID, deviceId: pushes[0]!.device.deviceId }) as Record<string, unknown>
 
       expect(decrypted.kind).toBe('approval')
       expect(decrypted.sessionId).toBe('ses-1')
@@ -405,7 +409,7 @@ describe('P5-H1: Host Notifier', () => {
       const raw = decodeBase64Url(pushes[0]!.frame.ct)
       const wrongKey = randomBytes(32)
 
-      expect(() => openPushPayload(wrongKey, raw)).toThrow()
+      expect(() => openPushPayload(wrongKey, raw, { hostId: HOST_ID, deviceId: DEVICE_ID })).toThrow()
     })
 
     it('buildPushPayload + sealPushPayload round-trips correctly', () => {
@@ -416,8 +420,8 @@ describe('P5-H1: Host Notifier', () => {
         body: 'Test body',
       })
       const key = randomBytes(32)
-      const sealed = sealPushPayload(key, payload)
-      const unsealed = openPushPayload(key, sealed) as Record<string, unknown>
+      const sealed = sealPushPayload(key, payload, { hostId: HOST_ID, deviceId: DEVICE_ID })
+      const unsealed = openPushPayload(key, sealed, { hostId: HOST_ID, deviceId: DEVICE_ID }) as Record<string, unknown>
 
       expect(unsealed.kind).toBe('approval')
       expect(unsealed.sessionId).toBe('ses-1')
@@ -477,21 +481,21 @@ describe('P5-H1: Host Notifier', () => {
 
   describe('multi-device dispatch', () => {
     it('dispatches to multiple eligible devices', async () => {
-      const device1 = createDevice({ deviceId: 'd_test00000000000000000000001' })
-      const device2 = createDevice({ deviceId: 'd_test00000000000000000000002' })
+      const device1 = createDevice({ deviceId: 'd_erruijsx3ey2rmxcpeh3pgxjkm' })
+      const device2 = createDevice({ deviceId: 'd_erruijsx3ey2rmxcpeh3pgxjki' })
       const { notifier, pushes } = createNotifier({ devices: [device1, device2] })
 
       await notifier.notifyApproval(createApproval())
 
       expect(pushes).toHaveLength(2)
       const deviceIds = pushes.map((p) => p.device.deviceId).sort()
-      expect(deviceIds).toEqual(['d_test00000000000000000000001', 'd_test00000000000000000000002'])
+      expect(deviceIds).toEqual(['d_erruijsx3ey2rmxcpeh3pgxjkm', 'd_erruijsx3ey2rmxcpeh3pgxjki'])
     })
 
     it('only dispatches to devices with valid push keys', async () => {
-      const device1 = createDevice({ deviceId: 'd_test00000000000000000000001' })
+      const device1 = createDevice({ deviceId: 'd_erruijsx3ey2rmxcpeh3pgxjkm' })
       const device2 = createDevice({
-        deviceId: 'd_test00000000000000000000002',
+        deviceId: 'd_erruijsx3ey2rmxcpeh3pgxjki',
         pushKey: new Uint8Array(16),
       })
       const { notifier, pushes } = createNotifier({ devices: [device1, device2] })
@@ -499,7 +503,7 @@ describe('P5-H1: Host Notifier', () => {
       await notifier.notifyApproval(createApproval())
 
       expect(pushes).toHaveLength(1)
-      expect(pushes[0]!.device.deviceId).toBe('d_test00000000000000000000001')
+      expect(pushes[0]!.device.deviceId).toBe('d_erruijsx3ey2rmxcpeh3pgxjkm')
     })
   })
 })

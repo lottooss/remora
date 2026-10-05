@@ -20,7 +20,8 @@ export function registerInteractionMethods(
   rcpServer: RcpServer,
   pendingRegistry: PendingRegistry,
   deviceRegistry: DeviceRegistry,
-  policyGuard?: PolicyGuard | undefined,
+  policyGuard: PolicyGuard | undefined,
+  hostId: string,
 ): void {
   // 1. interaction.follow (stream)
   rcpServer.registerMethod('interaction.follow', async (p, ctx) => {
@@ -111,6 +112,7 @@ export function registerInteractionMethods(
       // If policyGuard provided custom verification, call it
       if (policyGuard?.verifyApprovalSignature) {
         const verifyRes = policyGuard.verifyApprovalSignature({
+          hostId, deviceId: ctx.deviceId, sessionId: item.sessionId, callId: item.callId, toolName: item.toolName,
           approvalId: parsed.data.id,
           outcome: parsed.data.outcome,
           argsDigest: parsed.data.argsDigest,
@@ -126,6 +128,7 @@ export function registerInteractionMethods(
         }
       } else {
         const canonicalMsg = buildCanonicalApprovalMessage({
+          hostId, deviceId: ctx.deviceId, sessionId: item.sessionId, callId: item.callId, toolName: item.toolName,
           approvalId: parsed.data.id,
           outcome: parsed.data.outcome,
           argsDigest: parsed.data.argsDigest,

@@ -27,6 +27,7 @@ import {
   randomBytes,
   verifyRelayChallenge,
 } from '@remora/crypto'
+import type { RelayAuthFields } from '@remora/crypto'
 import { type FcmEnv, sendFcmDataMessage } from './fcm.ts'
 
 const PING_REQ = '{"t":"ping"}'
@@ -36,6 +37,7 @@ const OFFLINE_TASK_PREFIX = 'offline:host:'
 export type EndpointKind = 'host' | 'device'
 
 export interface Attachment {
+  /** Canonical origin of the upgrade request, bound into the auth signature. */
   relayOrigin: string
   endpointId: string | null
   kind: EndpointKind | null
@@ -653,14 +655,19 @@ export class AccountHub extends DurableObject<Env> {
     const relayPub = new Uint8Array(endpoint.relay_pub)
     let valid = false
     try {
+      // Crypto/1 §4: the signature covers this connection's canonical origin,
+      // the endpoint identity from the auth frame and the issued nonce. Old
+      // attachments without an origin fail closed (missing field → throw).
+      if (kind !== 'host' && kind !== 'device') throw new Error('attachment: kind missing')
+      const fields: RelayAuthFields = {
+        relayOrigin: att.relayOrigin,
+        kind,
+        endpointId: id,
+        nonce: decodeBase64Url(att.nonce),
+      }
       const sigBytes = decodeBase64Url(sigStr)
       valid = relayPub.length === 32 && deriveEndpointId(kind === 'host' ? 'h_' : 'd_', relayPub) === id &&
-        verifyRelayChallenge(relayPub, {
-          relayOrigin: att.relayOrigin,
-          kind,
-          endpointId: id,
-          nonce: decodeBase64Url(att.nonce),
-        }, sigBytes)
+        verifyRelayChallenge(relayPub, fields, sigBytes)
     } catch {
       valid = false
     }

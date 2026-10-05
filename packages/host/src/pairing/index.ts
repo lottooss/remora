@@ -187,6 +187,8 @@ export class PairingService {
         payload: new Uint8Array([0x02, ...msg2Bytes]),
       })
 
+      // SAS from the completed Noise transcript hash (Crypto/1 §5.3): binds
+      // the confirmation to this exact handshake, not to the static keys.
       const sasCode = deriveSasCode(responder.result.handshakeHash)
 
       attempt.deviceId = deviceId
