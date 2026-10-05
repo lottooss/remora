@@ -1,60 +1,36 @@
 package io.github.lottooss.remora.core.crypto
 
-/** Builds the existing five-line TS approval message, rejecting ambiguous inputs. */
-fun buildCanonicalApprovalMessage(
-    approvalId: String,
-    outcome: String,
-    issuedAt: Long,
-    argsDigest: String,
-): String {
-    require(approvalId.isNotEmpty() && approvalId.length <= 128 && '\r' !in approvalId && '\n' !in approvalId) {
-        "Approval id is malformed"
+/** Complete authenticated pending context used by Crypto/1 §7. */
+data class ApprovalMessageFields(
+    val hostId: String,
+    val deviceId: String,
+    val approvalId: String,
+    val sessionId: String,
+    val callId: String? = null,
+    val toolName: String,
+    val argsDigest: String,
+    val outcome: String,
+    val issuedAt: Long,
+)
+
+/** Ten UTF-8 lines with no trailing newline; no legacy signing fallback. */
+fun buildCanonicalApprovalMessage(fields: ApprovalMessageFields): String = with(fields) {
+    requireEndpointId(hostId, "host")
+    requireEndpointId(deviceId, "device")
+    for (value in listOfNotNull(approvalId, sessionId, callId, toolName)) {
+        require(value.isNotEmpty() && value.length <= 1024 && value.none { it == '\r' || it == '\n' || it == '\u0000' }) { "Malformed approval context" }
+        requireUnicode(value)
     }
+    require(approvalId.length <= 128 && callId != "-") { "Malformed approval id or call id" }
     require(outcome == "allowed-once" || outcome == "rejected") { "Approval outcome is invalid" }
     require(issuedAt in 0L..9_007_199_254_740_991L) { "Approval timestamp is invalid" }
-    require(Regex("^(sha256:)?[0-9a-f]{64}$").matches(argsDigest)) { "Approval digest is malformed" }
-    return "remora/1 approval\n$approvalId\n$argsDigest\n$outcome\n$issuedAt"
+    require(Regex("^[0-9a-f]{64}$").matches(argsDigest)) { "Approval digest is malformed" }
+    listOf("remora/1 approval", hostId, deviceId, approvalId, sessionId, callId ?: "-", toolName, argsDigest, outcome, issuedAt.toString()).joinToString("\n")
 }
 
-/**
- * Matches TS computeArgsDigest({text, json}): SHA-256 of the canonical JSON object.
- * [previewJson] is a raw JSON string and is not parsed or normalized. This retains
- * the currently deployed TS format; Crypto/1's conflicting body needs a coordinated decision.
- */
+/** Hashes the exact displayed text, a NUL separator and raw JSON string (Crypto/1 §7). */
 fun computeArgsDigest(previewText: String, previewJson: String): String {
-    val canonical = "{\"json\":" + quoteJsonString(previewJson) + ",\"text\":" + quoteJsonString(previewText) + "}"
-    val input = canonical.toByteArray(Charsets.UTF_8)
-    return "sha256:" + encodeHex(sha256(input))
-}
-
-// JSON.stringify string encoding, including well-formed escaping of lone UTF-16 surrogates.
-// The preview object has only string values, so general JCS number serialization is unnecessary.
-private fun quoteJsonString(value: String): String = buildString {
-    append('"')
-    var index = 0
-    while (index < value.length) {
-        val char = value[index]
-        when (char) {
-            '"' -> append("\\\"")
-            '\\' -> append("\\\\")
-            '\b' -> append("\\b")
-            '\u000c' -> append("\\f")
-            '\n' -> append("\\n")
-            '\r' -> append("\\r")
-            '\t' -> append("\\t")
-            else -> when {
-                char.isHighSurrogate() && index + 1 < value.length && value[index + 1].isLowSurrogate() -> {
-                    append(char)
-                    append(value[++index])
-                }
-                char.code < 0x20 || char.isSurrogate() -> {
-                    append("\\u")
-                    append(char.code.toString(16).padStart(4, '0'))
-                }
-                else -> append(char)
-            }
-        }
-        index += 1
-    }
-    append('"')
+    requireUnicode(previewText)
+    requireUnicode(previewJson)
+    return encodeHex(sha256(previewText.toByteArray(Charsets.UTF_8) + byteArrayOf(0) + previewJson.toByteArray(Charsets.UTF_8)))
 }

@@ -42,11 +42,16 @@ class CryptoConformanceTest {
             val input = caseObj["input"]!!.jsonObject
             val expect = caseObj["expect"]!!.jsonObject
             val pub = decodeBase64Url(input["publicKeyB64u"]!!.jsonPrimitive.content)
-            val token = input["challengeToken"]!!.jsonPrimitive.content
+            val fields = RelayAuthFields(
+                relayOrigin = input["relayOrigin"]!!.jsonPrimitive.content,
+                kind = input["kind"]!!.jsonPrimitive.content,
+                endpointId = input["endpointId"]!!.jsonPrimitive.content,
+                nonce = decodeBase64Url(input["nonceB64u"]!!.jsonPrimitive.content),
+            )
             val sig = decodeBase64Url(input["signatureB64u"]!!.jsonPrimitive.content)
             val expectedValid = expect["valid"]!!.jsonPrimitive.content.toBoolean()
 
-            val actual = verifyRelayChallenge(pub, token, sig)
+            val actual = verifyRelayChallenge(pub, fields, sig)
             assertThat(actual).isEqualTo(expectedValid)
         }
     }
@@ -58,24 +63,31 @@ class CryptoConformanceTest {
             val caseObj = elem.jsonObject
             val input = caseObj["input"]!!.jsonObject
             val expect = caseObj["expect"]!!.jsonObject
-            val secret = decodeBase64Url(input["pairingSecretB64u"]!!.jsonPrimitive.content)
-            val ticket = input["ticketId"]!!.jsonPrimitive.content
-            val expectedHex = expect["pairPskHex"]!!.jsonPrimitive.content
+            if (input["pairingSecretB64u"] != null) {
+                val secret = decodeBase64Url(input["pairingSecretB64u"]!!.jsonPrimitive.content)
+                val hostId = input["hostId"]!!.jsonPrimitive.content
+                val expectedHex = expect["pairPskHex"]!!.jsonPrimitive.content
 
-            val actual = derivePairPsk(secret, ticket)
-            assertThat(encodeHex(actual)).isEqualTo(expectedHex)
+                val actual = derivePairPsk(secret, hostId)
+                assertThat(encodeHex(actual)).isEqualTo(expectedHex)
+            } else {
+                val handshakeHash = decodeHex(input["handshakeHashHex"]!!.jsonPrimitive.content)
+                val expectedSas = expect["sasCode"]!!.jsonPrimitive.content
+
+                assertThat(deriveSasCode(handshakeHash)).isEqualTo(expectedSas)
+            }
         }
     }
 
     @Test
     fun testSasCodeAndQr() {
-        val hostPub = ByteArray(32) { (it + 1).toByte() }
-        val devicePub = ByteArray(32) { (100 + it).toByte() }
-        val pairingSecret = ByteArray(32) { (0xa0 + it).toByte() }
-        val psk = derivePairPsk(pairingSecret, "tkt_0192abc")
-        val sas = deriveSasCode(hostPub, devicePub, psk)
-        assertThat(sas).isEqualTo("944711")
+        // SAS from the handshake transcript hash (Crypto/1 §5.3), matching the
+        // pairing.json vector's handshakeHashHex of bytes 0x01..0x20.
+        val handshakeHash = ByteArray(32) { (it + 1).toByte() }
+        assertThat(deriveSasCode(handshakeHash)).isEqualTo("764025")
 
+        val hostPub = ByteArray(32) { (it + 1).toByte() }
+        val pairingSecret = ByteArray(32) { (0xa0 + it).toByte() }
         val pairingData = PairingData(
             relayOrigin = "https://relay.example.test",
             hostId = "h_erruijsx3ey2rmxcpeh3pgxjkm",
@@ -100,11 +112,42 @@ class CryptoConformanceTest {
     @Test
     fun testPushPayloadRoundtrip() {
         val key = ByteArray(32) { (it * 3).toByte() }
+        val context = PushContext(
+            hostId = "h_erruijsx3ey2rmxcpeh3pgxjkm",
+            deviceId = "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        )
         val json = """{"v":1,"kind":"approval","title":"Test"}"""
-        val sealed = sealPushPayload(key, json)
+        val sealed = sealPushPayload(key, json, context)
         assertThat(sealed.size).isGreaterThan(12 + 16)
-        val opened = openPushPayload(key, sealed)
+        val opened = openPushPayload(key, sealed, context)
         assertThat(opened).isEqualTo(json)
+    }
+
+    @Test
+    fun testPushVectors() {
+        val root = loadVector("push.json")
+        for (elem in root["cases"]!!.jsonArray) {
+            val caseObj = elem.jsonObject
+            val input = caseObj["input"]!!.jsonObject
+            val expect = caseObj["expect"]!!.jsonObject
+            val key = decodeBase64Url(input["pushKeyB64u"]!!.jsonPrimitive.content)
+            val context = PushContext(
+                hostId = input["hostId"]!!.jsonPrimitive.content,
+                deviceId = input["deviceId"]!!.jsonPrimitive.content,
+            )
+            val sealed = decodeBase64Url(input["sealedB64u"]!!.jsonPrimitive.content)
+            val expectedValid = expect["valid"]?.jsonPrimitive?.content?.toBoolean()
+            val expectedPlaintext = expect["plaintextJson"]?.jsonPrimitive?.content
+
+            if (expectedValid == false) {
+                val threw = try {
+                    openPushPayload(key, sealed, context); false
+                } catch (_: Exception) { true }
+                assertThat(threw).isTrue()
+            } else {
+                assertThat(openPushPayload(key, sealed, context)).isEqualTo(expectedPlaintext)
+            }
+        }
     }
 
     @Test
@@ -114,13 +157,26 @@ class CryptoConformanceTest {
             val caseObj = elem.jsonObject
             val input = caseObj["input"]!!.jsonObject
             val expect = caseObj["expect"]!!.jsonObject
-            val approvalId = input["approvalId"]!!.jsonPrimitive.content
-            val outcome = input["outcome"]!!.jsonPrimitive.content
-            val issuedAt = input["issuedAt"]!!.jsonPrimitive.content.toLong()
-            val argsDigest = input["argsDigest"]!!.jsonPrimitive.content
+            if (input["text"] != null) {
+                val expectedDigest = expect["argsDigestHex"]!!.jsonPrimitive.content
+                assertThat(computeArgsDigest(input["text"]!!.jsonPrimitive.content, input["json"]!!.jsonPrimitive.content))
+                    .isEqualTo(expectedDigest)
+                continue
+            }
+            val fields = ApprovalMessageFields(
+                hostId = input["hostId"]!!.jsonPrimitive.content,
+                deviceId = input["deviceId"]!!.jsonPrimitive.content,
+                approvalId = input["approvalId"]!!.jsonPrimitive.content,
+                sessionId = input["sessionId"]!!.jsonPrimitive.content,
+                callId = input["callId"]?.jsonPrimitive?.content,
+                toolName = input["toolName"]!!.jsonPrimitive.content,
+                argsDigest = input["argsDigest"]!!.jsonPrimitive.content,
+                outcome = input["outcome"]!!.jsonPrimitive.content,
+                issuedAt = input["issuedAt"]!!.jsonPrimitive.content.toLong(),
+            )
             val expectedMsg = expect["canonicalMessage"]!!.jsonPrimitive.content
 
-            val actual = buildCanonicalApprovalMessage(approvalId, outcome, issuedAt, argsDigest)
+            val actual = buildCanonicalApprovalMessage(fields)
             assertThat(actual).isEqualTo(expectedMsg)
         }
     }

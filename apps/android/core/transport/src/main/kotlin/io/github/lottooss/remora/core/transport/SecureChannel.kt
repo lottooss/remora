@@ -70,7 +70,7 @@ class SecureChannel(
             val record = byteArrayOf(RECORD_TYPE_HANDSHAKE_MSG1) + handshake.writeMessage(msg1PayloadJson.toByteArray())
             relayClient.sendData(channelId, PeerKind.HOST, hostRawId, record)
             val result = withTimeout(timeoutMs) { handshakeReady.await() }
-            return result to if (purpose == "pair") deriveSasCode(hostNoisePub, deviceNoiseKeypair.publicKey, psk) else null
+            return result to if (purpose == "pair") deriveSasCode(result.handshakeHash) else null
         } catch (error: Exception) { close(); throw error }
         finally {
             synchronized(cipherLock) {

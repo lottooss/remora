@@ -5,6 +5,7 @@ import io.github.lottooss.remora.core.crypto.decodeBase64Url
 import io.github.lottooss.remora.core.crypto.deriveEndpointId
 import io.github.lottooss.remora.core.crypto.generateKeypair
 import io.github.lottooss.remora.core.crypto.getRelayPublicKey
+import io.github.lottooss.remora.core.crypto.RelayAuthFields
 import io.github.lottooss.remora.core.crypto.verifyRelayChallenge
 import io.github.lottooss.remora.core.protocol.PeerKind
 import io.github.lottooss.remora.core.protocol.encodeDataFrame
@@ -96,7 +97,8 @@ class TransportTest {
         assertThat(client.connectionState.value).isEqualTo(ConnectionState.Connecting)
 
         // 1. Simulate challenge
-        val nonce = "challenge_nonce_12345"
+        // 32 zero bytes, unpadded base64url (Crypto/1 §4 nonce)
+        val nonce = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
         ws!!.simulateMessage("""{"t":"challenge","nonce":"$nonce","time":1000}""")
 
         assertThat(client.connectionState.value).isEqualTo(ConnectionState.Authenticating)
@@ -108,7 +110,11 @@ class TransportTest {
 
         val sigB64u = authSent["sig"]?.jsonPrimitive?.content ?: ""
         val sig = decodeBase64Url(sigB64u)
-        val sigValid = verifyRelayChallenge(relayPubKey, nonce, sig)
+        val sigValid = verifyRelayChallenge(
+            relayPubKey,
+            RelayAuthFields("https://relay.example.com", "device", deviceId, decodeBase64Url(nonce)),
+            sig,
+        )
         assertThat(sigValid).isTrue()
 
         // 2. Simulate ready with initial peers
