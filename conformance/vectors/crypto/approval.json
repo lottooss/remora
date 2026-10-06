@@ -2,19 +2,80 @@
   "suite": "crypto/approval",
   "version": 1,
   "source": "Crypto/1 §7 approval signatures",
-  "notes": "Canonical approval message formatting and P-256 DER signature verification",
+  "notes": "Ten-line canonical approval message and text+NUL+json args digest",
   "cases": [
     {
-      "name": "canonical approval message formatting",
+      "name": "canonical approval message with all identities",
       "input": {
+        "hostId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "deviceId": "d_erruijsx3ey2rmxcpeh3pgxjkm",
         "approvalId": "appr_01923456789a",
+        "sessionId": "sess_01923456789a",
+        "callId": "call_01923456789a",
+        "toolName": "bash",
         "outcome": "allowed-once",
         "issuedAt": 1790000000000,
-        "argsDigest": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        "argsDigest": "b0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58"
       },
       "expect": {
-        "canonicalMessage": "remora/1 approval\nappr_01923456789a\nsha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\nallowed-once\n1790000000000"
+        "canonicalMessage": "remora/1 approval\nh_erruijsx3ey2rmxcpeh3pgxjkm\nd_erruijsx3ey2rmxcpeh3pgxjkm\nappr_01923456789a\nsess_01923456789a\ncall_01923456789a\nbash\nb0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58\nallowed-once\n1790000000000"
       }
+    },
+    {
+      "name": "missing callId renders a dash line and rejected outcome",
+      "input": {
+        "hostId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "deviceId": "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        "approvalId": "appr_01923456789a",
+        "sessionId": "sess_01923456789a",
+        "toolName": "bash",
+        "outcome": "rejected",
+        "issuedAt": 1790000000000,
+        "argsDigest": "b0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58"
+      },
+      "expect": {
+        "canonicalMessage": "remora/1 approval\nh_erruijsx3ey2rmxcpeh3pgxjkm\nd_erruijsx3ey2rmxcpeh3pgxjkm\nappr_01923456789a\nsess_01923456789a\n-\nbash\nb0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58\nrejected\n1790000000000"
+      }
+    },
+    {
+      "name": "args digest over text, NUL and raw json",
+      "input": {
+        "text": "bash: pnpm test",
+        "json": "{\"cmd\":\"pnpm test\"}"
+      },
+      "expect": {
+        "argsDigestHex": "b0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58"
+      }
+    },
+    {
+      "name": "a malformed argsDigest is rejected",
+      "input": {
+        "hostId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "deviceId": "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        "approvalId": "appr_01923456789a",
+        "sessionId": "sess_01923456789a",
+        "callId": "call_01923456789a",
+        "toolName": "bash",
+        "outcome": "allowed-once",
+        "issuedAt": 1790000000000,
+        "argsDigest": "deadbeef"
+      },
+      "error": "malformed_args_digest"
+    },
+    {
+      "name": "an unknown outcome is rejected",
+      "input": {
+        "hostId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "deviceId": "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        "approvalId": "appr_01923456789a",
+        "sessionId": "sess_01923456789a",
+        "callId": "call_01923456789a",
+        "toolName": "bash",
+        "outcome": "allowed-always",
+        "issuedAt": 1790000000000,
+        "argsDigest": "b0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58"
+      },
+      "error": "invalid_outcome"
     }
   ]
 }

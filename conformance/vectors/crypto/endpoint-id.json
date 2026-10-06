@@ -23,6 +23,32 @@
       "expect": {
         "endpointId": "d_rsxgpncaiclhd6rh5auf4zmhca"
       }
+    },
+    {
+      "name": "a different key derives a different id",
+      "input": {
+        "prefix": "h_",
+        "relayPubB64u": "Q0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0M"
+      },
+      "expect": {
+        "endpointId": "h_rbqwjns77mcyap2hmegz7rok4e"
+      }
+    },
+    {
+      "name": "a prefix other than h_ or d_ is rejected",
+      "input": {
+        "prefix": "x_",
+        "relayPubB64u": "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkI"
+      },
+      "error": "invalid_prefix"
+    },
+    {
+      "name": "a relay key that is not 32 bytes is rejected",
+      "input": {
+        "prefix": "h_",
+        "relayPubB64u": "QkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQg"
+      },
+      "error": "invalid_key_length"
     }
   ]
 }

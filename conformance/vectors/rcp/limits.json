@@ -1,17 +1,70 @@
 {
   "suite": "rcp/limits",
   "version": 1,
-  "source": "Scaffolded for P0-A1 / RCP/1 \u00a711",
-  "notes": "RCP message size limits and boundary validation",
+  "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
+  "notes": "Recipe serializes exactly {\"k\":\"req\",\"id\":1,\"m\":\"sessions.prompt\",\"p\":{\"text\":\"<fill>\"}} with fill=unit repeated repeat times + padding. The 56-byte fixed syntax overhead and 49152-byte cap are manually derived; no implementation was executed to obtain expected sizes. This exercises envelope transport size, not sessions.prompt parameter validation.",
   "cases": [
     {
-      "name": "placeholder scaffold valid baseline",
+      "name": "ASCII one byte below cap",
       "input": {
-        "status": "scaffold"
+        "unit": "a",
+        "repeat": 49095,
+        "padding": ""
       },
       "expect": {
-        "ok": true
+        "bytes": 49151
       }
+    },
+    {
+      "name": "ASCII exactly at cap",
+      "input": {
+        "unit": "a",
+        "repeat": 49096,
+        "padding": ""
+      },
+      "expect": {
+        "bytes": 49152
+      }
+    },
+    {
+      "name": "ASCII one byte over cap",
+      "input": {
+        "unit": "a",
+        "repeat": 49097,
+        "padding": ""
+      },
+      "error": "too_large"
+    },
+    {
+      "name": "UTF8 two-byte characters exactly at cap",
+      "input": {
+        "unit": "é",
+        "repeat": 24548,
+        "padding": ""
+      },
+      "expect": {
+        "bytes": 49152
+      }
+    },
+    {
+      "name": "UTF8 supplementary characters exactly at cap",
+      "input": {
+        "unit": "😀",
+        "repeat": 12274,
+        "padding": ""
+      },
+      "expect": {
+        "bytes": 49152
+      }
+    },
+    {
+      "name": "UTF8 supplementary characters over cap",
+      "input": {
+        "unit": "😀",
+        "repeat": 12274,
+        "padding": "a"
+      },
+      "error": "too_large"
     }
   ]
 }

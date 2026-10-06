@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -30,7 +31,7 @@ object SessionCodecs {
 
     fun parseSessionSummary(obj: JsonObject): SessionSummary {
         val id = obj["id"]?.jsonPrimitive?.content ?: ""
-        val title = obj["title"]?.jsonPrimitive?.content
+        val title = obj["title"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content
         val status = obj["status"]?.jsonPrimitive?.content ?: "idle"
         val updatedAt = obj["updatedAt"]?.jsonPrimitive?.longOrNull ?: 0L
         val parentId = obj["parentId"]?.jsonPrimitive?.content
@@ -40,9 +41,9 @@ object SessionCodecs {
         val wsObj = obj["workspace"]?.jsonObject
         val workspace = if (wsObj != null) {
             WorkspaceRef(
-                id = wsObj["id"]?.jsonPrimitive?.content,
-                path = wsObj["path"]?.jsonPrimitive?.content,
-                title = wsObj["title"]?.jsonPrimitive?.content,
+                id = wsObj["id"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content,
+                path = wsObj["path"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content,
+                title = wsObj["title"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content,
             )
         } else {
             WorkspaceRef()
@@ -86,7 +87,7 @@ object SessionCodecs {
             "tool.call" -> {
                 val callId = obj["callId"]?.jsonPrimitive?.content ?: ""
                 val tool = obj["tool"]?.jsonPrimitive?.content ?: ""
-                val title = obj["title"]?.jsonPrimitive?.content ?: ""
+                val title = obj["title"]?.takeUnless { it is JsonNull }?.jsonPrimitive?.content ?: ""
                 val args = parsePreview(obj["args"])
                 SessionEvent.ToolCall(seq = seq, at = at, callId = callId, tool = tool, title = title, args = args)
             }

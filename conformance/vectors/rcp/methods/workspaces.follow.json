@@ -1,0 +1,134 @@
+{
+  "suite": "rcp/methods/workspaces.follow",
+  "version": 1,
+  "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
+  "notes": "input.direction chooses params/result/item/error; value is the actual JSON payload. expect is the decoded payload; error labels invalid_params/invalid_result/invalid_item/invalid_error are corpus validation categories, not host execution results. No approval digest/signature validity, policy enforcement, or exactly-once effects are claimed. Method name comes from the filename; suite labels are lowercase to satisfy the existing vector-file schema.",
+  "cases": [
+    {
+      "name": "valid request parameters",
+      "input": {
+        "direction": "params",
+        "value": {}
+      },
+      "expect": {}
+    },
+    {
+      "name": "valid response payload",
+      "input": {
+        "direction": "result",
+        "value": {
+          "sid": 11
+        }
+      },
+      "expect": {
+        "sid": 11
+      }
+    },
+    {
+      "name": "malformed request parameters",
+      "input": {
+        "direction": "params",
+        "value": false
+      },
+      "error": "invalid_params"
+    },
+    {
+      "name": "malformed response payload",
+      "input": {
+        "direction": "result",
+        "value": {}
+      },
+      "error": "invalid_result"
+    },
+    {
+      "name": "not found error payload",
+      "input": {
+        "direction": "error",
+        "value": {
+          "code": "not_found",
+          "message": "Requested resource is unavailable."
+        }
+      },
+      "expect": {
+        "code": "not_found",
+        "message": "Requested resource is unavailable."
+      }
+    },
+    {
+      "name": "workspace baseline",
+      "input": {
+        "direction": "item",
+        "value": {
+          "type": "baseline",
+          "workspaces": [
+            {
+              "id": "workspace-vector-1",
+              "title": "Remora",
+              "path": "C:\\Projects\\remora",
+              "remoteAllowed": true
+            }
+          ]
+        }
+      },
+      "expect": {
+        "type": "baseline",
+        "workspaces": [
+          {
+            "id": "workspace-vector-1",
+            "title": "Remora",
+            "path": "C:\\Projects\\remora",
+            "remoteAllowed": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "workspace upsert",
+      "input": {
+        "direction": "item",
+        "value": {
+          "type": "upsert",
+          "workspace": {
+            "id": "workspace-vector-1",
+            "title": "Remora",
+            "path": "C:\\Projects\\remora",
+            "remoteAllowed": true
+          }
+        }
+      },
+      "expect": {
+        "type": "upsert",
+        "workspace": {
+          "id": "workspace-vector-1",
+          "title": "Remora",
+          "path": "C:\\Projects\\remora",
+          "remoteAllowed": true
+        }
+      }
+    },
+    {
+      "name": "workspace removal",
+      "input": {
+        "direction": "item",
+        "value": {
+          "type": "removed",
+          "id": "workspace-vector-1"
+        }
+      },
+      "expect": {
+        "type": "removed",
+        "id": "workspace-vector-1"
+      }
+    },
+    {
+      "name": "missing workspace",
+      "input": {
+        "direction": "item",
+        "value": {
+          "type": "upsert"
+        }
+      },
+      "error": "invalid_item"
+    }
+  ]
+}

@@ -14,6 +14,11 @@ import type { ApprovalRisk } from './risk.ts'
 export const APPROVAL_FRESHNESS_WINDOW_MS = 5 * 60 * 1000
 
 export interface VerifyApprovalParams {
+  hostId: string
+  deviceId: string
+  sessionId: string
+  callId?: string | undefined
+  toolName: string
   approvalId: string
   outcome: ApprovalOutcome
   argsDigest: string
@@ -79,6 +84,7 @@ export function verifyAnswerSignaturePolicy(
   singleUseStore?: SingleUseApprovalStore,
 ): SignatureVerificationResult {
   const {
+    hostId, deviceId, sessionId, callId, toolName,
     approvalId,
     outcome,
     argsDigest,
@@ -153,6 +159,7 @@ export function verifyAnswerSignaturePolicy(
     let canonicalMsg: string
     try {
       canonicalMsg = buildCanonicalApprovalMessage({
+        hostId, deviceId, sessionId, callId, toolName,
         approvalId,
         outcome,
         issuedAt,

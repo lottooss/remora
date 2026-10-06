@@ -1,285 +1,121 @@
 package io.github.lottooss.remora.feature.settings
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import io.github.lottooss.remora.core.data.NotifyPreferences
+import io.github.lottooss.remora.core.data.SettingsUiState
+import java.text.DateFormat
+import java.util.Date
 
-/**
- * Settings screen: security, app lock, FLAG_SECURE, approval key rotation, and diagnostics.
- * (ADR-0007, blueprint §10.6).
- */
+/** Stateless settings UI. All remote controls require a connected host and loaded values. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    state: SettingsUiState,
     onOpenDiagnostics: () -> Unit,
+    onNotificationsChanged: (NotifyPreferences) -> Unit,
+    onHostOfflineChanged: (Boolean) -> Unit,
+    onRotateApprovalKey: () -> Unit,
+    onUnpair: () -> Unit,
+    onToggleFlagSecure: ((Boolean) -> Unit)?,
+    onToggleAppLock: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
     isFlagSecureEnabled: Boolean = true,
-    onToggleFlagSecure: ((Boolean) -> Unit)? = null,
     isAppLockEnabled: Boolean = true,
-    onToggleAppLock: ((Boolean) -> Unit)? = null,
-    isApprovalKeyValid: Boolean = true,
-    isRotatingKey: Boolean = false,
-    onRotateApprovalKey: (() -> Unit)? = null,
     isPushConfigured: Boolean = true,
-    isApprovalsEnabled: Boolean = true,
-    onToggleApprovals: ((Boolean) -> Unit)? = null,
-    isQuestionsEnabled: Boolean = true,
-    onToggleQuestions: ((Boolean) -> Unit)? = null,
-    isTurnEventsEnabled: Boolean = true,
-    onToggleTurnEvents: ((Boolean) -> Unit)? = null,
-    isErrorsEnabled: Boolean = true,
-    onToggleErrors: ((Boolean) -> Unit)? = null,
-    isHostOfflineEnabled: Boolean = true,
-    onToggleHostOffline: ((Boolean) -> Unit)? = null,
+    hostOffline: Boolean = true,
+    onActivatePendingApprovalKey: (() -> Unit)? = null,
+    pendingFingerprint: String? = null,
 ) {
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = { Text("Settings") },
-                navigationIcon = {
-                    if (onBack != null) {
-                        OutlinedButton(onClick = onBack, modifier = Modifier.padding(start = 8.dp)) {
-                            Text("Back")
-                        }
-                    }
-                },
-            )
-        },
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            // Security Card
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        text = "Security & Privacy",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-
-                    // FLAG_SECURE toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Block Screenshots (FLAG_SECURE)", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "Hides app content in recent tasks and blocks screenshots",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                        }
-                        Switch(
-                            checked = isFlagSecureEnabled,
-                            onCheckedChange = { onToggleFlagSecure?.invoke(it) },
-                        )
-                    }
-
-                    // App lock toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("App Lock (5 min timeout)", style = MaterialTheme.typography.bodyMedium)
-                            Text(
-                                "Requires biometric authentication on start and after 5 minutes in background",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                        }
-                        Switch(
-                            checked = isAppLockEnabled,
-                            onCheckedChange = { onToggleAppLock?.invoke(it) },
-                        )
-                    }
+    var unpairConfirmation by remember { mutableStateOf(false) }
+    val enabled = state.connected && !state.loading
+    Scaffold(modifier = modifier.fillMaxSize(), topBar = {
+        TopAppBar(title = { Text(stringResource(R.string.settings_title)) }, navigationIcon = {
+            if (onBack != null) TextButton(onClick = onBack) { Text(stringResource(R.string.settings_back)) }
+        })
+    }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (state.loading) item { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            if (!state.connected) item { Text(stringResource(R.string.settings_disconnected)) }
+            if (state.errorCode != null) item { Text(stringResource(R.string.settings_failed), color = MaterialTheme.colorScheme.error) }
+            item {
+                SettingsCard(stringResource(R.string.settings_security)) {
+                    SettingToggle(stringResource(R.string.settings_screenshots), isFlagSecureEnabled, onToggleFlagSecure)
+                    SettingToggle(stringResource(R.string.settings_app_lock), isAppLockEnabled, onToggleAppLock)
+                    if (onToggleFlagSecure == null || onToggleAppLock == null) Text(stringResource(R.string.settings_enforced))
                 }
             }
-
-            // Biometric Approval Key Card
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(
-                        text = "Biometric Approval Key",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text("Key Status", style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = if (isApprovalKeyValid) "Valid (Hardware-backed)" else "Invalidated (Re-key required)",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isApprovalKeyValid) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                        )
+            item {
+                SettingsCard(stringResource(R.string.settings_notifications)) {
+                    if (!isPushConfigured) Text(stringResource(R.string.settings_push_unavailable))
+                    val prefs = state.preferences
+                    if (prefs != null) {
+                        SettingToggle(stringResource(R.string.settings_approval), prefs.approval,
+                            if (enabled) ({ onNotificationsChanged(prefs.copy(approval = it)) }) else null)
+                        SettingToggle(stringResource(R.string.settings_question), prefs.question,
+                            if (enabled) ({ onNotificationsChanged(prefs.copy(question = it)) }) else null)
+                        SettingToggle(stringResource(R.string.settings_turn_done), prefs.turnDone,
+                            if (enabled) ({ onNotificationsChanged(prefs.copy(turnDone = it)) }) else null)
+                        SettingToggle(stringResource(R.string.settings_turn_error), prefs.turnError,
+                            if (enabled) ({ onNotificationsChanged(prefs.copy(turnError = it)) }) else null)
                     }
-
-                    Text(
-                        text = "If fingerprint enrollment changes on this phone, the hardware key is invalidated and must be rotated.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.outline,
-                    )
-
-                    if (isRotatingKey) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(top = 8.dp),
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.height(24.dp))
-                            Text("Rotating key... Confirm SAS code on PC", style = MaterialTheme.typography.bodySmall)
-                        }
-                    } else {
-                        Button(
-                            onClick = { onRotateApprovalKey?.invoke() },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Text("Rotate Approval Key (Requires PC Confirmation)")
+                    SettingToggle(stringResource(R.string.settings_offline_alert), hostOffline,
+                        if (state.device != null && isPushConfigured) onHostOfflineChanged else null)
+                }
+            }
+            item {
+                SettingsCard(stringResource(R.string.settings_device)) {
+                    state.device?.let { device ->
+                        Text(device.name)
+                        Text(stringResource(R.string.settings_device_id, device.id.take(6)))
+                        Text(stringResource(R.string.settings_paired_at, DateFormat.getDateTimeInstance().format(Date(device.pairedAt))))
+                        Text(stringResource(if (device.hardwareBacked == true) R.string.settings_hardware_verified else R.string.settings_hardware_unknown))
+                    }
+                    if (state.rotationPending) {
+                        Text(stringResource(R.string.settings_rotation_pending))
+                        if (pendingFingerprint != null) Text(stringResource(R.string.settings_pending_fingerprint, pendingFingerprint))
+                        if (onActivatePendingApprovalKey != null) Button(onClick = onActivatePendingApprovalKey,
+                            enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.settings_activate_pending_key))
                         }
                     }
+                    Button(onClick = onRotateApprovalKey, enabled = enabled && state.device != null,
+                        modifier = Modifier.fillMaxWidth()) { Text(stringResource(
+                            if (state.rotationPending) R.string.settings_retry_rotation else R.string.settings_rotate)) }
+                    OutlinedButton(onClick = { unpairConfirmation = true }, enabled = enabled && state.device != null,
+                        modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.settings_unpair)) }
                 }
             }
-
-            // Notifications Card
-            if (!isPushConfigured) {
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Push notifications disabled: google-services.json missing",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            }
-
-            Card(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Text(
-                        text = "Notifications",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-
-                    NotificationToggleRow(
-                        label = "Approvals",
-                        checked = isApprovalsEnabled,
-                        onCheckedChange = { onToggleApprovals?.invoke(it) },
-                    )
-                    NotificationToggleRow(
-                        label = "Questions",
-                        checked = isQuestionsEnabled,
-                        onCheckedChange = { onToggleQuestions?.invoke(it) },
-                    )
-                    NotificationToggleRow(
-                        label = "Turn Events",
-                        checked = isTurnEventsEnabled,
-                        onCheckedChange = { onToggleTurnEvents?.invoke(it) },
-                    )
-                    NotificationToggleRow(
-                        label = "Errors",
-                        checked = isErrorsEnabled,
-                        onCheckedChange = { onToggleErrors?.invoke(it) },
-                    )
-                    NotificationToggleRow(
-                        label = "Host Offline",
-                        checked = isHostOfflineEnabled,
-                        onCheckedChange = { onToggleHostOffline?.invoke(it) },
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Diagnostics Button
-            OutlinedButton(
-                onClick = onOpenDiagnostics,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("Diagnostics & Logs")
-            }
+            item { OutlinedButton(onClick = onOpenDiagnostics, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.settings_diagnostics)) } }
         }
     }
+    if (unpairConfirmation) AlertDialog(onDismissRequest = { unpairConfirmation = false },
+        title = { Text(stringResource(R.string.settings_unpair)) }, text = { Text(stringResource(R.string.settings_unpair_confirm)) },
+        confirmButton = { TextButton(onClick = { unpairConfirmation = false; onUnpair() }) { Text(stringResource(R.string.settings_unpair)) } },
+        dismissButton = { TextButton(onClick = { unpairConfirmation = false }) { Text(stringResource(R.string.settings_cancel)) } })
 }
 
 @Composable
-private fun NotificationToggleRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        content()
+    } }
+}
+
+@Composable
+private fun SettingToggle(label: String, value: Boolean, action: ((Boolean) -> Unit)?) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(label, Modifier.weight(1f))
+        Switch(checked = value, onCheckedChange = action, enabled = action != null)
     }
 }

@@ -319,12 +319,21 @@ describe('Policy Guard — Deterministic Risk Classifier Table Tests (ADR-0007, 
 describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto/1 §7, T10, T24)', () => {
   const keypair = generateApprovalKeypair()
   const approvalId = 'appr-test-123'
-  const expectedArgsDigest = computeArgsDigest({ command: 'pnpm test' })
+  // Identity comes from the authenticated connection, never from the answer.
+  const identityFields = {
+    hostId: 'h_erruijsx3ey2rmxcpeh3pgxjkm',
+    deviceId: 'd_erruijsx3ey2rmxcpeh3pgxjkm',
+    sessionId: 'sess-test-123',
+    callId: 'call-test-123',
+    toolName: 'bash',
+  }
+  const expectedArgsDigest = computeArgsDigest({ text: 'bash: pnpm test', json: '{"cmd":"pnpm test"}' })
   const now = 1_700_000_000_000
 
   it('verifies valid high-risk approval signature with P-256 DER', () => {
     const singleUseStore = new SingleUseApprovalStore()
     const canonicalMsg = buildCanonicalApprovalMessage({
+      ...identityFields,
       approvalId,
       outcome: 'allowed-once',
       issuedAt: now,
@@ -333,8 +342,8 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
     const sigDer = signApprovalMessage(keypair.privateKey, utf8ToBytes(canonicalMsg))
     const sigB64u = encodeBase64Url(sigDer)
 
-    const result = verifyAnswerSignaturePolicy(
-      {
+    const result = verifyAnswerSignaturePolicy({
+        ...identityFields,
         approvalId,
         outcome: 'allowed-once',
         argsDigest: expectedArgsDigest,
@@ -355,8 +364,8 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
 
   it('rejects unsigned high-risk approval when biometric is high', () => {
     const singleUseStore = new SingleUseApprovalStore()
-    const result = verifyAnswerSignaturePolicy(
-      {
+    const result = verifyAnswerSignaturePolicy({
+        ...identityFields,
         approvalId: 'appr-unsigned',
         outcome: 'allowed-once',
         argsDigest: expectedArgsDigest,
@@ -376,8 +385,8 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
 
   it('allows unsigned normal-risk approval when biometric is high', () => {
     const singleUseStore = new SingleUseApprovalStore()
-    const result = verifyAnswerSignaturePolicy(
-      {
+    const result = verifyAnswerSignaturePolicy({
+        ...identityFields,
         approvalId: 'appr-normal',
         outcome: 'allowed-once',
         argsDigest: expectedArgsDigest,
@@ -396,8 +405,8 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
 
   it('requires signature for normal-risk when approvalBiometric is all', () => {
     const singleUseStore = new SingleUseApprovalStore()
-    const result = verifyAnswerSignaturePolicy(
-      {
+    const result = verifyAnswerSignaturePolicy({
+        ...identityFields,
         approvalId: 'appr-all-req',
         outcome: 'allowed-once',
         argsDigest: expectedArgsDigest,
@@ -418,6 +427,7 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
   it('rejects bad signature from an untrusted key', () => {
     const otherKeypair = generateApprovalKeypair()
     const canonicalMsg = buildCanonicalApprovalMessage({
+      ...identityFields,
       approvalId: 'appr-wrong-key',
       outcome: 'allowed-once',
       issuedAt: now,
@@ -426,6 +436,7 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
     const sigDer = signApprovalMessage(otherKeypair.privateKey, utf8ToBytes(canonicalMsg))
 
     const result = verifyAnswerSignaturePolicy({
+      ...identityFields,
       approvalId: 'appr-wrong-key',
       outcome: 'allowed-once',
       argsDigest: expectedArgsDigest,
@@ -444,6 +455,7 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
 
   it('rejects argsDigest mismatch', () => {
     const result = verifyAnswerSignaturePolicy({
+      ...identityFields,
       approvalId: 'appr-digest-mismatch',
       outcome: 'allowed-once',
       argsDigest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
@@ -461,6 +473,7 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
   it('rejects expired issuedAt (> 5 minutes past or future)', () => {
     // Past > 5 min
     const pastResult = verifyAnswerSignaturePolicy({
+      ...identityFields,
       approvalId: 'appr-past',
       outcome: 'allowed-once',
       argsDigest: expectedArgsDigest,
@@ -475,6 +488,7 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
 
     // Future > 5 min
     const futureResult = verifyAnswerSignaturePolicy({
+      ...identityFields,
       approvalId: 'appr-future',
       outcome: 'allowed-once',
       argsDigest: expectedArgsDigest,
@@ -492,8 +506,8 @@ describe('Policy Guard — Biometric ECDSA P-256 Signatures & Single-Use (Crypto
     const singleUseStore = new SingleUseApprovalStore()
     singleUseStore.markUsed('appr-replayed', now)
 
-    const result = verifyAnswerSignaturePolicy(
-      {
+    const result = verifyAnswerSignaturePolicy({
+        ...identityFields,
         approvalId: 'appr-replayed',
         outcome: 'allowed-once',
         argsDigest: expectedArgsDigest,

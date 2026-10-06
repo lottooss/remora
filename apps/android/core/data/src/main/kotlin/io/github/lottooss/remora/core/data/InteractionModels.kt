@@ -7,18 +7,22 @@ import kotlinx.serialization.Serializable
  */
 
 @Serializable
+data class ApprovalPreview(val text: String, val json: String)
+
+@Serializable
 data class PendingApproval(
     val id: String,
     val sessionId: String,
     val callId: String? = null,
     val toolName: String,
     val reason: String? = null,
-    val preview: Preview,
+    val preview: ApprovalPreview,
     val argsDigest: String,
     val risk: String = "normal", // 'normal' | 'high'
     val requiresSignature: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val expiresAt: Long = createdAt + 3_600_000L,
+    val sessionTitle: String? = null,
 ) {
     val isExpired: Boolean get() = System.currentTimeMillis() >= expiresAt
     val remainingSeconds: Long get() = ((expiresAt - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
@@ -26,22 +30,35 @@ data class PendingApproval(
 
 @Serializable
 data class QuestionOption(
-    val id: String,
     val label: String,
     val description: String? = null,
 )
 
 @Serializable
+data class QuestionIntent(val kind: String, val approve: String)
+
+@Serializable
+data class QuestionPrompt(
+    val id: String,
+    val question: String,
+    val detail: String? = null,
+    val header: String? = null,
+    val options: List<QuestionOption> = emptyList(),
+    val multiSelect: Boolean = false,
+    val intent: QuestionIntent? = null,
+)
+
+@Serializable
+data class QuestionAnswer(val id: String, val selected: List<String>, val custom: String? = null)
+
+@Serializable
 data class PendingQuestion(
     val id: String,
     val sessionId: String,
-    val prompt: String,
-    val detail: String? = null,
-    val options: List<QuestionOption> = emptyList(),
-    val multiSelect: Boolean = false,
-    val allowCustom: Boolean = true,
+    val questions: List<QuestionPrompt>,
     val createdAt: Long = System.currentTimeMillis(),
     val expiresAt: Long = createdAt + 3_600_000L,
+    val sessionTitle: String? = null,
 ) {
     val isExpired: Boolean get() = System.currentTimeMillis() >= expiresAt
     val remainingSeconds: Long get() = ((expiresAt - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
@@ -70,6 +87,6 @@ sealed interface PendingInteraction {
 
 data class ResolvedNotice(
     val id: String,
-    val by: String, // 'pc' | 'phone' | 'timeout' | 'signal'
+    val by: String, // 'pc' | 'phone' | 'system'
     val timestamp: Long = System.currentTimeMillis(),
 )

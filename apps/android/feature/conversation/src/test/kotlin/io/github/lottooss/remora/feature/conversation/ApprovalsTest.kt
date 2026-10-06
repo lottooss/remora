@@ -5,8 +5,9 @@ import io.github.lottooss.remora.core.data.InteractionRepository
 import io.github.lottooss.remora.core.data.PendingApproval
 import io.github.lottooss.remora.core.data.PendingInteraction
 import io.github.lottooss.remora.core.data.PendingQuestion
-import io.github.lottooss.remora.core.data.Preview
+import io.github.lottooss.remora.core.data.ApprovalPreview
 import io.github.lottooss.remora.core.data.QuestionOption
+import io.github.lottooss.remora.core.data.QuestionPrompt
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
@@ -20,7 +21,7 @@ class ApprovalsTest {
             sessionId = "s_main",
             toolName = "write_to_file",
             reason = "Write new configuration",
-            preview = Preview(text = "TargetFile: /path/to/file.txt\nContent: hello", bytes = 45, truncated = false),
+            preview = ApprovalPreview(text = "TargetFile: /path/to/file.txt\nContent: hello", json = "{}"),
             argsDigest = "sha256:11223344",
             risk = "normal",
             requiresSignature = false,
@@ -31,7 +32,7 @@ class ApprovalsTest {
         assertThat(approval.toolName).isEqualTo("write_to_file")
         assertThat(approval.risk).isEqualTo("normal")
         assertThat(approval.requiresSignature).isFalse()
-        assertThat(approval.preview.truncated).isFalse()
+        assertThat(approval.preview.json).isEqualTo("{}")
     }
 
     @Test
@@ -39,21 +40,24 @@ class ApprovalsTest {
         val question = PendingQuestion(
             id = "q_plan_review",
             sessionId = "s_plan",
-            prompt = "Review the proposed implementation plan",
-            detail = "### Phase 1: Preparation\n- Setup build configs\n### Phase 2: Implementation",
-            options = listOf(
-                QuestionOption(id = "approve", label = "Approve Plan", description = "Proceed immediately"),
-                QuestionOption(id = "modify", label = "Request Changes", description = "Edit requirements"),
-            ),
-            multiSelect = false,
-            allowCustom = true,
+            questions = listOf(QuestionPrompt(
+                id = "plan",
+                question = "Review the proposed implementation plan",
+                detail = "### Phase 1: Preparation\n- Setup build configs\n### Phase 2: Implementation",
+                options = listOf(
+                    QuestionOption(label = "Approve Plan", description = "Proceed immediately"),
+                    QuestionOption(label = "Request Changes", description = "Edit requirements"),
+                ),
+                multiSelect = false,
+            )),
         )
 
-        assertThat(question.prompt).contains("Review the proposed implementation plan")
-        assertThat(question.detail).contains("Phase 1: Preparation")
-        assertThat(question.options).hasSize(2)
-        assertThat(question.options[0].id).isEqualTo("approve")
-        assertThat(question.multiSelect).isFalse()
+        val prompt = question.questions.single()
+        assertThat(prompt.question).contains("Review the proposed implementation plan")
+        assertThat(prompt.detail).contains("Phase 1: Preparation")
+        assertThat(prompt.options).hasSize(2)
+        assertThat(prompt.options[0].label).isEqualTo("Approve Plan")
+        assertThat(prompt.multiSelect).isFalse()
     }
 
     @Test
@@ -66,14 +70,14 @@ class ApprovalsTest {
             id = "a1",
             sessionId = s1,
             toolName = "bash",
-            preview = Preview(text = "echo 1"),
+            preview = ApprovalPreview(text = "echo 1", json = "{}"),
             argsDigest = "sha256:d1",
         )
         val app2 = PendingApproval(
             id = "a2",
             sessionId = s2,
             toolName = "powershell",
-            preview = Preview(text = "echo 2"),
+            preview = ApprovalPreview(text = "echo 2", json = "{}"),
             argsDigest = "sha256:d2",
         )
 

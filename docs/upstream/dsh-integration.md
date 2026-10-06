@@ -25,6 +25,7 @@ node scripts/fetch-upstream.mjs          # → .upstream/deepseek-harness at the
 - A profile lives at `$DSH_HOME/profiles/<name>` (`$DSH_HOME` defaults to `~/.dsh`). Its `package.json` field `dsh.profile.bundles` lists bundles; layers apply in order: bundles → profile `cordis.patch.yml` → `$DSH_HOME/cordis.patch.yml` → `--patch` overlays. Source: `apps/cli/reference/README.md` §Profiles, `docs/architecture.md` §Profiles and bundles.
 - `dsh --profile <new> --from-default-profile web` creates a custom profile from the shipped `web` template (custom profiles default to live patch reload).
 - `dsh plugin --profile <name> <pnpm args>` runs pnpm in the profile directory. Relative paths are anchored to the invoking directory (`add ./packages/host` installs a local checkout without build allowances). After every run, dependencies whose manifest declares `"dsh": { "bundle": { "patch": "./cordis.patch.yml" } }` join `dsh.profile.bundles`. Bundle membership changes need a restart; patch edits hot-reload in live profiles. Source: `apps/cli/reference/README.md` §Plugin management.
+- Native dependency installation (P7-H6): arguments such as `add <host.tgz> --allow-build koffi` pass through to pnpm unchanged (`apps/cli/src/plugin.ts:120–134`). pnpm 12's `--allow-build` authorizes the named dependency's install script in that profile. A built host tarball still needs this explicit allowance for its external `koffi` dependency; packing the host does not remove a dependency's script policy. No owner profile is modified by tests.
 - `--dump-config` prints the composed tree with the file that supplied each row.
 - The `desktop` profile is reserved for Electron; the CLI refuses plugin management for it.
 
@@ -151,6 +152,60 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 
 ## 9. Verification log
 
+### 9.1 Real-dsh fixture recording procedure (P7-H10)
+
+The fixtures under `packages/host/test/fixtures/dsh-0.1.5-rc.3/` are recorded
+bytes, not hand-written shapes. They were produced on the worker's machine
+against the **pinned** `@deepseek-ai/dsh@0.1.5-rc.3` with a scripted mock LLM,
+inside a temporary `DSH_HOME` (the owner's `~/.dsh` is never touched); CI
+replays the committed bytes. The recording tooling is a throwaway bundle under
+`.scratch/` (never imported by production code); this section is the procedure.
+
+Recording setup (one driver script, modeled on the P0-S2 spike):
+
+1. Install the pinned dsh and the mock server into a scratch prefix:
+   `npm install --no-fund --no-audit @deepseek-ai/dsh@0.1.5-rc.3 @deepseek-ai/dsh-llm-mock-server@0.1.5-rc.3`.
+2. Create a temporary home (`mkdtemp`) and initialize the profile from the web
+   template: `DSH_HOME=<temp> dsh --profile remora-rec --from-default-profile web --dump-config`.
+3. Add the recorder bundle to that profile:
+   `DSH_HOME=<temp> dsh plugin --profile remora-rec add <recorder-dir>`.
+4. Start the scripted LLM:
+   `startMockLlmServer({ sequence: ['tool_call_success', 'success'], toolName, toolArguments, apiKey })`
+   from `@deepseek-ai/dsh-llm-mock-server` (no published bin).
+5. Boot real dsh against it:
+   `DSH_HOME=<temp> DEEPSEEK_BASE_URL=<mock>/v1 DEEPSEEK_API_KEY=<key> dsh --profile remora-rec --no-open --port 7731`,
+   plus `P7H10_OUT` (output dir) and `P7H10_SCENARIO` (`tool-approval` | `question`).
+6. The recorder plugin drives the scenario in-process through the typert
+   gateway (§4): create a temp workspace, create a session, open a
+   `session/follow` stream, then `session/prompt` so the mock LLM emits the
+   scripted tool call, and collect frames until `turn/end`.
+
+Two scenarios were recorded:
+
+- **tool-approval** — the mock calls a registered `bash` tool with
+  `{"command":"echo remora-p7-h10 && uptime"}`. The recorder returns
+  `{ kind: 'ask', reason }` from a prepend `tools/pre-execute` hook for the
+  tool (the same seam P0-S2 verified), so dsh's **real** approval service
+  appends durable `approval/asked` / `approval/decided` events and dispatches
+  the real `approval/request` waterfall. The recorder answers `allowed-once`
+  (ADR-0008 answer-first, derived-`AbortSignal` withdrawal of the PC chain) so
+  the tool executes and a real `tool/result` follows.
+- **question** — the mock calls the real `ask_user_question` tool, which fires
+  the real `user-questions/request` waterfall; the recorder answers the first
+  option of the scripted question.
+
+Recorded artifacts per scenario: `follow-<scenario>.jsonl` (the durable
+`session/follow` frames, including `tool/call`, `approval/asked`,
+`approval/decided`, `tool/result`), `approval-request.json` /
+`question-request.json` (the raw waterfall payload, agent identity reduced to
+`{ id }`), `recorder-log.jsonl`, and `report.json`. The follow streams and raw
+request payloads are committed as fixtures; the recorder logs and report are
+local recording artifacts.
+
+Verified fact reinforced by the recording: `tool/call` data is
+`{ turn, step, callId, name, arguments }` where `arguments` is the raw **JSON
+string** the model produced — any preview logic must parse it.
+
 | Date | dsh version | Verified by | Scope | Result |
 |---|---|---|---|---|
 | 2026-09-24 | 0.1.5-rc.3 (source reading) | Integrator | §2–§7 | as documented; runtime behavior pending P0 spikes |
@@ -158,5 +213,94 @@ The controller also emits Host events `api-session/added|removed|status|error|ac
 | 2026-09-24 | 0.1.5-rc.3 | Host role (P0-S2) | Q5–Q7 | Verified: waterfall prepend ordering, AbortSignal withdrawal, and Session tool-call argument inspection |
 | 2026-09-24 | Windows 11 / Node v24 | Host role (P0-S6) | Q9 | Verified: SetThreadExecutionState via in-process koffi & non-elevated logon autostart |
 | 2026-09-25 | 0.1.5-rc.3 (source reading) | Host role (P2-H1) | §7 fetch/webserver seams re-read for the management routes | as documented; `fetch.register` exact routes inherit the `/api` fence, `webServer.register` exact matches beat prefix matches |
+| 2026-10-04 | 0.1.5-rc.3 | Host role (P7-H10) | §9.1 fixture recording (Windows 11 / Node v24, temp DSH_HOME) | Verified: real bash-tool approval and real ask_user_question flows recorded with the mock LLM; durable events match §5 event types; `tool/call.arguments` confirmed to be a JSON string |
 
+### 9.2 P7-H10 review: real Session receiver and approval metadata
 
+The pinned `Session.snapshotEvents()` method is an instance method: its default
+range reads `this.seq`, and its body reads `this.log` (`core/session/src/index.ts`
+§ `Session.snapshotEvents`). Calling a detached copy of the method throws. The
+host preserves that receiver with `snapshotEvents.call(session)`; the regression
+test creates an actual `Session` from `@deepseek-ai/dsh-session@0.1.5-rc.3` and
+appends the recorded tool call through its public API. An arrow-function journal
+reconstruction cannot establish this behavior.
+
+`ApprovalRequestEvent` carries `agent`, `toolName`, optional `callId`, `reason`,
+and `signal`; it has neither `arguments` nor `params`. Policy therefore reads the
+complete JSON arguments from the journal event matching both `callId` and
+`toolName`. Display truncation happens separately. Missing or invalid metadata
+is treated as high risk. The configured Policy Guard and timeout are passed from
+the real plugin entry point to the bridge.
+
+The real Cordis `internal/listener` hook can intercept a listener registration.
+The apply regression uses that hook to suppress the approval probes without
+mocking `apply()` or waterfall dispatch. Startup must reject, leave the fiber
+failed, and make no enrollment request when the self-check cannot run. The
+self-check executes before host resources are created and disposes its probes
+in `finally`, including after registration errors.
+
+Review regression CI before these fixes:
+[run 37236875362](https://github.com/lottooss/remora/actions/runs/37236875362),
+commit `90a59c8`: 17 failed / 341 passed. See
+[P7-H10 handoff](../agent-handoffs/P7-H10.md) for post-fix command evidence and
+remaining contract-parity limits.
+
+### 9.3 P7-H6 native dependency installation
+
+On 2026-10-04, source `apps/cli/src/plugin.ts:120–134` for dsh 0.1.5-rc.3 and local `pnpm help add` for pnpm 12.6.0 confirmed `--allow-build koffi`. Installed-tarball `apply()` native acquisition/disposal was exercised by `pnpm -F @remora/host test -- pack` (6 tests passed locally). The owner approved the isolated-profile allowance and Windows workflow; hosted validation remains pending. See [P7-H6 handoff](../agent-handoffs/P7-H6.md) for evidence and CI links.
+
+### 9.4 Foreground control stream source inspection (2026-10-05)
+
+Source read from the owner's existing pinned checkout at `a4c74a9`, matching
+`upstream.lock.json`; this entry records source inspection, not a runtime test.
+
+- `packages/api/workspace-controller/src/feed.ts:82` opens an async generator
+  that yields one baseline and then waits for increments until its AbortSignal
+  is cancelled. A Remora RCP handler must return after opening it; awaiting the
+  entire iterator prevents the `sid` response from ever reaching the phone.
+- `packages/api/session-controller/src/types.ts:551–570` defines baseline
+  `value.queues`, `value.jobs`, and `value.projections`, then `queue.items`,
+  `jobs.jobs`, or projection replacement frames. Queue/jobs changes replace only
+  the named component. Each RCP update carries the retained other component.
+- That control stream does not carry live running status. The pinned controller
+  `list.ts:summaryFor` reads `ctx.agents.get(session.id)?.status === 'running'`.
+  Remora uses the same lookup, seeded from `ctx.sessions.list()`, and typed
+  `agent/status` (`{ agent, status }`), `session/created`, and `session/disposed`
+  events. These are the underlying sources also forwarded by Session Controller
+  as `api-session/status`, `api-session/added`, and `api-session/removed`.
+- `src/adapter/session-control.ts` owns all new dsh shape knowledge. Its Cordis
+  listeners unsubscribe on RCP cancellation and stream termination. Pending
+  replacement states coalesce per session and are bounded before serialization.
+
+No upstream package, owner profile, wire schema, or conformance vector changed.
+Build, suite execution, and real-dsh verification are deferred by user request.
+
+### 9.5 Handshake runtime metadata source inspection (2026-10-05)
+
+Source-only inspection of the same pinned `a4c74a9` checkout:
+
+- `packages/boot/app-boot/src/index.ts:boot` initializes `ctx.baseUrl` to the
+  file URL of `dirname(absoluteConfigPath)`, before mounting Loader/plugins.
+  `vendor/cordis/src/context.ts` exposes `ctx.root` as the unchanged application
+  root, including from child plugin contexts.
+- `apps/cli/src/profile-boot.ts:runProfile` passes
+  `<composed.profile.dir>/cordis.yml` to `boot`. The profile name is its directory
+  basename (`packages/boot/app-boot/src/profile.ts:loadProfileDirectory`).
+  The adapter checks the root directory's package manifest contains
+  `dsh.profile.bundles` before reporting that basename.
+- `apps/cli/src/bin.ts:readVersion` reads `../package.json` relative to its
+  source `src/bin.ts` or installed `lib/bin.js`. The adapter resolves the running
+  `process.argv[1]` through symlinks, applies that same layout, and validates the
+  manifest's `name: @deepseek-ai/dsh` and nonempty version. It never substitutes
+  the pinned lock version for the running version. Unknown launchers/packaged
+  executables without this layout fail metadata calls closed.
+- `packages/core/agent/src/index.ts:Agents.list` returns all live Agent objects.
+  `agent.status === 'running'` provides the live count independently of the
+  keep-awake configuration. Cordis injection now declares `agents` and
+  `sessions`, which the foreground activity adapter also requires.
+
+Only the adapter reads these dsh-specific seams. Production composition supplies
+the real Remora package version, registered capability names, Policy Guard roots
+and policy, and the keep-awake driver's current acquisition state. The RCP server
+validates both input and output against the existing shared schemas. No shared
+schema/spec, upstream file, or owner profile changed. Builds/tests remain deferred.

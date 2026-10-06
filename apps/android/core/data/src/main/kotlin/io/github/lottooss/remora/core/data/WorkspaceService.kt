@@ -35,7 +35,7 @@ class WorkspaceService(
         this?.takeIf { it !is JsonNull }?.jsonPrimitive?.content?.takeIf { it != "null" }
 
     suspend fun listWorkspaces(rcpClient: RcpClient? = null): Result<List<Workspace>> {
-        return runCatching {
+        return dataResult {
             val res = call(rcpClient, "workspaces.list", buildJsonObject {}).jsonObject
             val arr = res["workspaces"]?.jsonArray ?: emptyList()
             arr.mapNotNull { elem ->
@@ -43,7 +43,7 @@ class WorkspaceService(
                     val id = elem["id"].stringOrNull() ?: return@mapNotNull null
                     val title = elem["title"].stringOrNull() ?: id
                     val path = elem["path"].stringOrNull() ?: ""
-                    val remoteAllowed = elem["remoteAllowed"]?.jsonPrimitive?.booleanOrNull ?: true
+                    val remoteAllowed = elem["remoteAllowed"]?.jsonPrimitive?.booleanOrNull ?: false
                     Workspace(id = id, title = title, path = path, remoteAllowed = remoteAllowed)
                 } else null
             }
@@ -51,7 +51,7 @@ class WorkspaceService(
     }
 
     suspend fun browseFs(path: String? = null, rcpClient: RcpClient? = null): Result<FsBrowseResult> {
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 if (path != null) {
                     put("path", path)
@@ -89,12 +89,12 @@ class WorkspaceService(
         if (trimmed.isEmpty()) {
             return Result.failure(IllegalArgumentException("Directory name cannot be empty"))
         }
-        if (trimmed.contains("/") || trimmed.contains("\\")) {
+        if (trimmed == "." || trimmed == ".." || trimmed.contains("/") || trimmed.contains("\\") || trimmed.contains('\u0000')) {
             return Result.failure(IllegalArgumentException("Directory name must be a single segment"))
         }
 
         val requestId = UUID.randomUUID().toString()
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("parent", parent)
                 put("name", trimmed)
@@ -119,7 +119,7 @@ class WorkspaceService(
         }
 
         val requestId = UUID.randomUUID().toString()
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("requestId", requestId)
                 put("workspace", buildJsonObject {
@@ -172,7 +172,7 @@ class WorkspaceService(
             put("delivery", "queue")
         }
 
-        return runCatching {
+        return dataResult {
             call(rcpClient, "sessions.prompt", promptParams)
             sessionId
         }

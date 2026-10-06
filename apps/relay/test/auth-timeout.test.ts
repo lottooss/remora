@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers'
 import { runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  decodeBase64Url,
   deriveEndpointId,
   encodeBase64Url,
   getRelayPublicKey,
@@ -128,6 +129,10 @@ describe('Relay authentication-timeout alarm (RLY/1 §3, P7-R2)', () => {
   const hostPriv = randomBytes(32)
   const hostPub = getRelayPublicKey(hostPriv)
   const hostId = deriveEndpointId('h_', hostPub)
+  // Crypto/1 §4: sign over the connection origin, endpoint identity and nonce.
+  const RELAY_ORIGIN = 'https://relay.test'
+  const signChallengeFor = (priv: Uint8Array, kind: 'host' | 'device', endpointId: string, nonceB64u: string): Uint8Array =>
+    signRelayChallenge(priv, { relayOrigin: RELAY_ORIGIN, kind, endpointId, nonce: decodeBase64Url(nonceB64u) })
 
   const devicePriv = randomBytes(32)
   const devicePub = getRelayPublicKey(devicePriv)
@@ -158,7 +163,7 @@ describe('Relay authentication-timeout alarm (RLY/1 §3, P7-R2)', () => {
         v: 1,
         id,
         kind,
-        sig: encodeBase64Url(signRelayChallenge(priv, challenge.nonce)),
+        sig: encodeBase64Url(signChallengeFor(priv, kind, id, challenge.nonce)),
       }),
     )
     const ready = await nextMessage<{ t?: string }>(ws)

@@ -12,7 +12,8 @@ import { defineConfig } from 'tsdown'
  * - Kept external: `@deepseek-ai/cordis` and `@deepseek-ai/schemastery`
  *   (peer dependencies — dsh provides them; duplicating them would break
  *   Loader/schema identity, see docs/upstream/dsh-integration.md Q10) and
- *   `ws` (published runtime dependency of the bundled relay-link).
+ *   `ws` (published runtime dependency of the bundled relay-link) and `koffi`
+ *   (published native FFI, whose platform binaries must remain package-relative).
  *
  * Fail closed: an import the bundler cannot resolve (for example a sibling
  * whose `lib/` was not built) must never be silently externalized.
@@ -37,7 +38,8 @@ export default defineConfig({
   failOnWarn: true,
   suppressWarnings: [/[\\/]node_modules[\\/].*[\\/]zod[\\/]v4[\\/]locales[\\/][\w-]+\.d\.cts uses CommonJS dts syntax/],
   deps: {
-    neverBundle: ['ws'],
-    onlyImport: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', 'ws'],
+    alwaysBundle: ['zod'],
+    neverBundle: ['ws', 'koffi'],
+    onlyImport: ['@deepseek-ai/cordis', '@deepseek-ai/schemastery', 'ws', 'koffi'],
   },
 })

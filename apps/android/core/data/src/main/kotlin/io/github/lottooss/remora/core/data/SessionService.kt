@@ -21,7 +21,7 @@ class SessionService(
 
     suspend fun listSessions(rcpClient: RcpClient?, limit: Int = 50): Result<List<SessionSummary>> {
         val client = rcpClient ?: return Result.failure(IllegalStateException("Host disconnected"))
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("limit", limit)
             }
@@ -37,7 +37,7 @@ class SessionService(
 
     suspend fun searchSessions(rcpClient: RcpClient?, query: String): Result<List<SearchResult>> {
         val client = rcpClient ?: return Result.failure(IllegalStateException("Host disconnected"))
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("query", query)
             }
@@ -81,7 +81,11 @@ class SessionService(
                 val res = client.call("sessions.prompt", params, timeoutMs = 8_000).jsonObject
                 val accepted = res["accepted"]?.jsonPrimitive?.booleanOrNull ?: false
                 return Result.success(accepted)
-            } catch (t: Throwable) {
+            } catch (timeout: kotlinx.coroutines.TimeoutCancellationException) {
+                lastError = timeout
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (t: Exception) {
                 lastError = t
                 // Timeout or transient network error: loop and retry with the SAME requestId
             }
@@ -95,7 +99,7 @@ class SessionService(
     ): Result<Boolean> {
         val client = rcpClient ?: return Result.failure(IllegalStateException("Cannot mutate session while disconnected"))
         val requestId = UUID.randomUUID().toString()
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("sessionId", sessionId)
                 put("requestId", requestId)
@@ -117,7 +121,7 @@ class SessionService(
             return Result.success(false)
         }
 
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("sessionId", sessionId)
                 put("beforeSeq", lowestSeq)
@@ -136,7 +140,7 @@ class SessionService(
 
     suspend fun loadModelsCatalog(rcpClient: RcpClient?): Result<List<ModelRef>> {
         val client = rcpClient ?: return Result.failure(IllegalStateException("Host disconnected"))
-        return runCatching {
+        return dataResult {
             val res = client.call("models.catalog", buildJsonObject {}).jsonObject
             val providersArr = res["providers"]?.jsonArray ?: emptyList()
             val list = mutableListOf<ModelRef>()
@@ -163,7 +167,7 @@ class SessionService(
     ): Result<ModelRef> {
         val client = rcpClient ?: return Result.failure(IllegalStateException("Cannot mutate session while disconnected"))
         val requestId = UUID.randomUUID().toString()
-        return runCatching {
+        return dataResult {
             val params = buildJsonObject {
                 put("sessionId", sessionId)
                 put("requestId", requestId)

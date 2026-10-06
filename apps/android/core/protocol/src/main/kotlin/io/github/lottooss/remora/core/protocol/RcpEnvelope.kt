@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonClassDiscriminator
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 
 class RcpException(message: String) : RuntimeException(message)
 
@@ -122,10 +123,12 @@ sealed interface RcpMessage {
     }
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 val RcpJson = Json {
     ignoreUnknownKeys = true
-    isLenient = true
+    isLenient = false
     encodeDefaults = true
+    explicitNulls = false
 }
 
 fun encodeRcpMessage(message: RcpMessage): String {
@@ -143,7 +146,8 @@ fun decodeRcpMessage(text: String): RcpMessage {
         throw RcpException("RCP message size ($byteCount bytes) exceeds limit (${Limits.MAX_RCP_MESSAGE_BYTES})")
     }
     return try {
-        RcpJson.decodeFromString(RcpMessage.serializer(), text)
+        val value = RcpPayloads.envelope(RcpJson.parseToJsonElement(text))
+        RcpJson.decodeFromJsonElement(RcpMessage.serializer(), value)
     } catch (e: Exception) {
         throw RcpException("Invalid RCP envelope: ${e.message}")
     }

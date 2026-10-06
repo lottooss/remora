@@ -3,21 +3,19 @@ package io.github.lottooss.remora.core.security
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Whether the app shell is visible or waiting behind the lock gate. */
 enum class LockState { LOCKED, UNLOCKED }
 
 /**
- * How [AppLockGate] expects the user to prove presence. The actual BiometricPrompt /
- * device-credential prompt is wired in task P3-K1 (blueprint §10.4: BIOMETRIC_STRONG
- * or device credential on cold start and after the background timeout).
+ * Strong biometric is required until a host-confirmed credential policy is available.
  */
 enum class UnlockRequirement { BIOMETRIC_STRONG, DEVICE_CREDENTIAL }
 
 /**
- * App-lock state manager: locked on cold start, unlocked by the (placeholder) prompt,
- * and re-locked after [backgroundLockMs] in the background. Owns no Android APIs, so
- * the state machine is unit-testable; P3-K1 attaches BiometricPrompt + CryptoObject.
+ * Locked on cold start; only the system authenticator can admit the app shell.
  */
 class AppLockGate(
     private val backgroundLockMs: Long = DEFAULT_BACKGROUND_LOCK_MS,
@@ -29,14 +27,24 @@ class AppLockGate(
     val unlockRequirement: UnlockRequirement = UnlockRequirement.BIOMETRIC_STRONG
 
     private var backgroundedAtMs: Long? = null
+    private val authenticationMutex = Mutex()
+    private var generation = 0L
 
-    /** Called after a successful biometric or PIN/credential check. */
-    fun unlock() {
-        backgroundedAtMs = null
-        _state.value = LockState.UNLOCKED
+    /** Cancellation, error, or an explicit lock during a prompt keeps the shell locked. */
+    suspend fun authenticate(authenticator: BiometricAuthenticator): Boolean = authenticationMutex.withLock {
+        val startedAtGeneration = generation
+        val authenticated = authenticator.authenticate()
+        if (authenticated && generation == startedAtGeneration) {
+            backgroundedAtMs = null
+            _state.value = LockState.UNLOCKED
+            true
+        } else {
+            false
+        }
     }
 
     fun lock() {
+        generation++
         backgroundedAtMs = null
         _state.value = LockState.LOCKED
     }
@@ -53,7 +61,7 @@ class AppLockGate(
         val backgroundedAt = backgroundedAtMs ?: return
         backgroundedAtMs = null
         if (now() - backgroundedAt >= backgroundLockMs) {
-            _state.value = LockState.LOCKED
+            lock()
         }
     }
 

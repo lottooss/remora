@@ -1,4 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest'
+import { createFixtureHostRuntime } from '../helpers/host-runtime.ts'
 import {
   ChannelManager,
   HostRelayConnection,
@@ -43,6 +44,7 @@ describe('End-to-End Sessions Flow (P2-H2)', () => {
     const rcpServer = new RcpServer({
       hostId: hostIdentity.hostId,
       hostName: 'E2E-Sessions-Host',
+      runtimeProvider: createFixtureHostRuntime(),
     })
 
     // Mock dsh TypertGateway for the session adapter
@@ -216,7 +218,7 @@ describe('End-to-End Sessions Flow (P2-H2)', () => {
 
     // Handshake hello
     const hello = await channel.hello()
-    expect(hello.rcp).toEqual([1])
+    expect(hello.rcp).toBe(1)
 
     // 1. sessions.list
     const listRes = await channel.call<{ items: Array<{ id: string; title: string }> }>('sessions.list', {})

@@ -1,0 +1,15 @@
+{
+  "scenario": "tool-approval",
+  "recordedAt": 1790956394085,
+  "request": {
+    "toolName": "bash",
+    "callId": "mock-call-1",
+    "reason": "remora-p7-h10 recording: shell command requires approval",
+    "hasSignal": true,
+    "agent": {
+      "id": "session-808f3343-f74b-41e8-9987-e33730481049"
+    },
+    "sessionId": "session-808f3343-f74b-41e8-9987-e33730481049"
+  },
+  "outcomeReturned": "allowed-once"
+}

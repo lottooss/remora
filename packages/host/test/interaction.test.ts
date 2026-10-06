@@ -17,6 +17,9 @@ import {
   registerInteractionMethods,
 } from '../src/index.ts'
 
+const HOST_ID = 'h_erruijsx3ey2rmxcpeh3pgxjkm'
+const DEVICE_ID = 'd_erruijsx3ey2rmxcpeh3pgxjkm'
+
 describe('P3-H1: AnswerBridge — Approvals and Questions', () => {
   it('PendingRegistry: add, list, and single-use resolution', async () => {
     const registry = new PendingRegistry()
@@ -208,13 +211,15 @@ describe('P3-H1: AnswerBridge — Approvals and Questions', () => {
   it('RCP interaction methods: follow, approvals.answer (with signature check), questions.answer', async () => {
     const pendingRegistry = new PendingRegistry()
     const deviceRegistry = new InMemoryDeviceRegistry()
-    const rcpServer = new RcpServer({ hostId: 'h_test', hostName: 'Host' })
+    const rcpServer = new RcpServer({ hostId: HOST_ID, hostName: 'Host' })
 
     // Generate EC P-256 approval key for fake device
     const { privateKey, publicKeySpkiDer } = generateApprovalKeypair()
 
+    // The device is looked up by the authenticated connection's device id
+    // (Crypto/1 §7: identity comes from the connection, never the answer).
     deviceRegistry.addDevice({
-      deviceId: 'd_test1',
+      deviceId: DEVICE_ID,
       name: 'Phone',
       noisePublicKey: new Uint8Array(32),
       devicePsk: new Uint8Array(32),
@@ -225,7 +230,7 @@ describe('P3-H1: AnswerBridge — Approvals and Questions', () => {
       revoked: false,
     })
 
-    registerInteractionMethods(rcpServer, pendingRegistry, deviceRegistry)
+    registerInteractionMethods(rcpServer, pendingRegistry, deviceRegistry, undefined, HOST_ID)
 
     // Add high-risk pending approval requiring signature
     const preview = { text: 'deploy production', json: '{"target":"prod"}' }
@@ -246,7 +251,7 @@ describe('P3-H1: AnswerBridge — Approvals and Questions', () => {
       expiresAt: issuedAt + 60_000,
     })
 
-    const ctx = { deviceId: 'd_test1', channelId: 1 }
+    const ctx = { deviceId: DEVICE_ID, channelId: 1 }
 
     // 1. approvals.answer without signature -> fails with signature_required
     const errRes: any = JSON.parse(
@@ -270,6 +275,10 @@ describe('P3-H1: AnswerBridge — Approvals and Questions', () => {
 
     // 2. approvals.answer with valid P-256 signature
     const msg = buildCanonicalApprovalMessage({
+      hostId: HOST_ID,
+      deviceId: DEVICE_ID,
+      sessionId: 'ses-1',
+      toolName: 'deploy',
       approvalId: '11111111-1111-4111-8111-111111111111',
       outcome: 'allowed-once',
       argsDigest,

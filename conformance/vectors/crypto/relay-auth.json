@@ -2,29 +2,88 @@
   "suite": "crypto/relay-auth",
   "version": 1,
   "source": "Crypto/1 §4 relay authentication",
-  "notes": "Ed25519 challenge signing and verification",
+  "notes": "Ed25519 signatures over the origin/kind/endpoint/nonce context message",
   "cases": [
     {
-      "name": "valid host relay auth challenge signature",
+      "name": "valid host relay auth signature",
       "input": {
-        "publicKeyB64u": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc",
-        "challengeToken": "https://relay.remora.local\u0000host\u0000h_test123\u0000nonce_fixed_32_bytes_test_vector",
-        "signatureB64u": "YvrD39JBvlVM2lNXLEmchgo7zhOxVYjy3QdhA68tpX4AXJCER1NgFrr-kG2aIr-xXGt5bTffZz6iAQjiky0PAA"
+        "publicKeyB64u": "dVxMuSVsp83ErP3Gz-7ahJAX5bn5UU6ZGRvWfgsNQnY",
+        "relayOrigin": "https://relay.example.test",
+        "kind": "host",
+        "endpointId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "nonceB64u": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "signatureB64u": "RhGNYHRcqbVdhl6uPI-AnTYU4iJ1h2PNBpRw81w57i42a7jqkeOGEjzapxL53ye7lwU3J-pmtGnOT4PokLgUCA"
       },
       "expect": {
         "valid": true
       }
     },
     {
-      "name": "invalid signature rejected",
+      "name": "valid device relay auth signature",
       "input": {
-        "publicKeyB64u": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc",
-        "challengeToken": "https://relay.remora.local\u0000host\u0000h_test123\u0000nonce_fixed_32_bytes_test_vector",
-        "signatureB64u": "mZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmQ"
+        "publicKeyB64u": "dVxMuSVsp83ErP3Gz-7ahJAX5bn5UU6ZGRvWfgsNQnY",
+        "relayOrigin": "https://relay.example.test",
+        "kind": "device",
+        "endpointId": "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        "nonceB64u": "QEFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFlaW1xdXl8",
+        "signatureB64u": "xnv8fScMkYEbOwbTwXj-2Xq0t_3g7oQpm74iiZsrygfQ9IrV8whOn_3lqGsLegdh46Audmad0TBv8YacOUKYAA"
+      },
+      "expect": {
+        "valid": true
+      }
+    },
+    {
+      "name": "tampered signature rejected",
+      "input": {
+        "publicKeyB64u": "dVxMuSVsp83ErP3Gz-7ahJAX5bn5UU6ZGRvWfgsNQnY",
+        "relayOrigin": "https://relay.example.test",
+        "kind": "host",
+        "endpointId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "nonceB64u": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "signatureB64u": "RxGNYHRcqbVdhl6uPI-AnTYU4iJ1h2PNBpRw81w57i42a7jqkeOGEjzapxL53ye7lwU3J-pmtGnOT4PokLgUCA"
       },
       "expect": {
         "valid": false
       }
+    },
+    {
+      "name": "mismatched origin rejected",
+      "input": {
+        "publicKeyB64u": "dVxMuSVsp83ErP3Gz-7ahJAX5bn5UU6ZGRvWfgsNQnY",
+        "relayOrigin": "https://other.example.test",
+        "kind": "host",
+        "endpointId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "nonceB64u": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "signatureB64u": "RhGNYHRcqbVdhl6uPI-AnTYU4iJ1h2PNBpRw81w57i42a7jqkeOGEjzapxL53ye7lwU3J-pmtGnOT4PokLgUCA"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "name": "mismatched endpoint rejected",
+      "input": {
+        "publicKeyB64u": "dVxMuSVsp83ErP3Gz-7ahJAX5bn5UU6ZGRvWfgsNQnY",
+        "relayOrigin": "https://relay.example.test",
+        "kind": "device",
+        "endpointId": "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        "nonceB64u": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+        "signatureB64u": "RhGNYHRcqbVdhl6uPI-AnTYU4iJ1h2PNBpRw81w57i42a7jqkeOGEjzapxL53ye7lwU3J-pmtGnOT4PokLgUCA"
+      },
+      "expect": {
+        "valid": false
+      }
+    },
+    {
+      "name": "a non-canonical origin is rejected when signing",
+      "input": {
+        "privateKeyB64u": "AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw",
+        "relayOrigin": "https://relay.example.test/path",
+        "kind": "host",
+        "endpointId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "nonceB64u": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      },
+      "error": "invalid_origin"
     }
   ]
 }

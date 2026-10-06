@@ -7,6 +7,10 @@
  */
 import { ENDPOINT_ID_PREFIX } from '@remora/crypto'
 import {
+  HelloParamsSchema,
+  HelloResultSchema,
+  HostStatusParamsSchema,
+  HostStatusResultSchema,
   MAX_RCP_MESSAGE_BYTES,
   MessageSchema,
   RCP_ERROR_CODES,
@@ -14,6 +18,7 @@ import {
   RcpErrorSchema,
   createRcpError,
   getRcpMethod,
+  type Feature,
   type RcpError,
   type RequestMessage,
 } from '@remora/protocol'
@@ -26,9 +31,6 @@ const MAX_MUTATING_REQUESTS_PER_SECOND = 5
 
 /** Concurrent streams one device may hold open (RCP/1 §11). */
 const MAX_STREAMS_PER_DEVICE = 10
-
-/** Version announced by `hello` until the bundle carries the real one. */
-const HOST_VERSION = '1.0.0'
 
 /** Largest u32 id accepted in an envelope (RCP/1 §2). */
 const U32_MAX = 0xffffffff
@@ -54,10 +56,27 @@ export interface RcpContext {
 /** A method handler. `params` is the raw, unvalidated `p` of the request. */
 export type RcpHandler = (params: unknown, ctx: RcpContext) => Promise<unknown>
 
-/** Live status `host.status` reports; absent → fail-closed defaults. */
-export interface HostStatusProvider {
-  isRelayConnected: () => boolean
-  getPairedDevicesCount: () => number
+/** Metadata supplied by the production composition after inspecting its runtime. */
+export interface HostHelloDetails {
+  os: 'win32' | 'darwin' | 'linux'
+  pathSeparator: '\\' | '/'
+  versions: { remora: string; dsh: string }
+  features: readonly Feature[]
+  roots: readonly string[]
+  policy: { approvalBiometric: 'high' | 'all' | 'never'; allowRemoteSessionStart: boolean }
+}
+
+/** Live status, excluding this RCP server's directly measured uptime. */
+export interface HostStatusSnapshot {
+  agentsRunning: number
+  keepAwake: boolean
+  dsh: { version: string; profile: string }
+}
+
+/** Missing providers fail closed; standalone servers cannot invent runtime facts. */
+export interface HostRuntimeProvider {
+  hello(): HostHelloDetails | Promise<HostHelloDetails>
+  status(): HostStatusSnapshot | Promise<HostStatusSnapshot>
 }
 
 /** Outbound transport sender function for SC/1 frames. */
@@ -70,7 +89,7 @@ export type RcpTransportSender = (
 export interface RcpServerOptions {
   hostId: string
   hostName: string
-  statusProvider?: HostStatusProvider
+  runtimeProvider?: HostRuntimeProvider
   transportSender?: RcpTransportSender
   /** Clock injection point so limits and uptime stay deterministic in tests. */
   now?: () => number
@@ -427,16 +446,32 @@ export class RcpServer {
   }
 
   private registerCoreMethods(): void {
-    this.registerMethod('hello', async () => ({
-      host: {
-        id: this.options.hostId,
-        name: this.options.hostName,
-        version: HOST_VERSION,
-      },
-      rcp: [RCP_VERSION],
-      features: ['sessions', 'files', 'diffs'],
-      policy: { maxMessageBytes: MAX_RCP_MESSAGE_BYTES },
-    }))
+    this.registerMethod('hello', async (params) => {
+      const parsed = HelloParamsSchema.safeParse(params)
+      if (!parsed.success || !parsed.data.rcp.includes(RCP_VERSION)) {
+        throw new RcpMethodError(createRcpError(RCP_ERROR_CODES.invalid_params, 'hello requires a supported RCP version and app identity'))
+      }
+      const runtime = this.options.runtimeProvider
+      if (!runtime) throw new Error('host runtime provider unavailable')
+      const details = await runtime.hello()
+      // Validate our provider too: never announce off-schema feature names or
+      // fabricated partial metadata that a conforming phone cannot consume.
+      return HelloResultSchema.parse({
+        rcp: RCP_VERSION,
+        host: {
+          id: this.options.hostId,
+          name: this.options.hostName,
+          os: details.os,
+          pathSeparator: details.pathSeparator,
+          versions: details.versions,
+        },
+        features: details.features,
+        roots: details.roots,
+        policy: details.policy,
+        limits: { maxMessageBytes: MAX_RCP_MESSAGE_BYTES, maxStreams: MAX_STREAMS_PER_DEVICE },
+        time: this.now(),
+      })
+    })
 
     this.registerMethod('ping', async (params) => {
       const t = isRecord(params) ? params.t : undefined
@@ -448,11 +483,20 @@ export class RcpServer {
       return { t, hostTime: this.now() }
     })
 
-    this.registerMethod('host.status', async () => ({
-      relayConnected: this.options.statusProvider?.isRelayConnected() ?? false,
-      pairedDevicesCount: this.options.statusProvider?.getPairedDevicesCount() ?? 0,
-      uptimeMs: this.now() - this.startTime,
-    }))
+    this.registerMethod('host.status', async (params) => {
+      if (!HostStatusParamsSchema.safeParse(params ?? {}).success) {
+        throw new RcpMethodError(createRcpError(RCP_ERROR_CODES.invalid_params, 'invalid host.status params'))
+      }
+      const runtime = this.options.runtimeProvider
+      if (!runtime) throw new Error('host runtime provider unavailable')
+      const status = await runtime.status()
+      return HostStatusResultSchema.parse({
+        uptimeMs: Math.max(0, this.now() - this.startTime),
+        agentsRunning: status.agentsRunning,
+        keepAwake: status.keepAwake,
+        dsh: status.dsh,
+      })
+    })
   }
 
   private encodeUnarySuccess(id: number, result: unknown): string {

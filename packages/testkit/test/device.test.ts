@@ -36,9 +36,12 @@ describe('FakeDevice', () => {
     const rcpServer = new RcpServer({
       hostId: hostIdentity.hostId,
       hostName: 'TestHost',
-      statusProvider: {
-        isRelayConnected: () => true,
-        getPairedDevicesCount: () => registry.listDevices().length,
+      runtimeProvider: {
+        hello: () => ({
+          os: 'linux', pathSeparator: '/', versions: { remora: '1.0.0-test', dsh: '0.0.0-test' },
+          features: [], roots: [], policy: { approvalBiometric: 'high', allowRemoteSessionStart: false },
+        }),
+        status: () => ({ agentsRunning: 0, keepAwake: false, dsh: { version: '0.0.0-test', profile: 'remora-test' } }),
       },
     })
 
@@ -88,7 +91,7 @@ describe('FakeDevice', () => {
 
     // Call hello
     const helloRes = await channel.hello('Remora-Testkit', '1.0.0')
-    expect(helloRes.rcp).toEqual([1])
+    expect(helloRes.rcp).toBe(1)
     expect(helloRes.host.id).toBe(hostIdentity.hostId)
     expect(helloRes.host.name).toBe('TestHost')
 
@@ -99,7 +102,8 @@ describe('FakeDevice', () => {
 
     // Call host.status
     const statusRes = await channel.hostStatus()
-    expect(statusRes.pairedDevicesCount).toBe(1)
+    expect(statusRes.agentsRunning).toBe(0)
+    expect(statusRes.dsh.profile).toBe('remora-test')
 
     // Cleanup
     channel.close()

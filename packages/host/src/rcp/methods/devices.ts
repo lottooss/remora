@@ -9,6 +9,7 @@
  * §11: "self only") — the subject comes from the channel's authenticated
  * device id, never from parameters.
  */
+import { normalizeApprovalPublicKey } from '../../identity/approval-key.ts'
 import { decodeBase64Url } from '@remora/crypto'
 import {
   DevicesRotateApprovalKeyParamsSchema,
@@ -27,7 +28,7 @@ export const ROTATION_PENDING_TTL_MS = 10 * 60_000
 export interface PendingApprovalKeyRotation {
   /** The device that requested the rotation. */
   deviceId: string
-  /** Uncompressed P-256 approval public key the device wants to activate. */
+  /** Canonical P-256 SubjectPublicKeyInfo DER the device wants to activate. */
   approvalPublicKey: Uint8Array
   /** Exactly-once id of the rotation request (RCP/1 §11). */
   requestId: string
@@ -150,11 +151,6 @@ export interface DevicesMethodsDeps {
   scheduleRelayRevoke?: ((deviceId: string) => void) | undefined
 }
 
-/** Uncompressed EC P-256 public key: `0x04 || X || Y` (crypto-v1.md §7). */
-function isUncompressedP256PublicKey(bytes: Uint8Array): boolean {
-  return bytes.length === 65 && bytes[0] === 0x04
-}
-
 export function registerDevicesMethods(rcpServer: RcpServer, deps: DevicesMethodsDeps): void {
   rcpServer.registerMethod('devices.self', async (p, ctx) => {
     const parsed = DevicesSelfParamsSchema.safeParse(p ?? {})
@@ -212,15 +208,10 @@ export function registerDevicesMethods(rcpServer: RcpServer, deps: DevicesMethod
     }
     let approvalPublicKey: Uint8Array
     try {
-      approvalPublicKey = decodeBase64Url(parsed.data.approvalPub)
+      approvalPublicKey = normalizeApprovalPublicKey(decodeBase64Url(parsed.data.approvalPub), true)
     } catch {
       throw new RcpMethodError(
-        createRcpError(RCP_ERROR_CODES.invalid_params, 'approvalPub is not canonical base64url'),
-      )
-    }
-    if (!isUncompressedP256PublicKey(approvalPublicKey)) {
-      throw new RcpMethodError(
-        createRcpError(RCP_ERROR_CODES.invalid_params, 'approvalPub must be an uncompressed P-256 public key'),
+        createRcpError(RCP_ERROR_CODES.invalid_params, 'approvalPub must encode a valid P-256 public key'),
       )
     }
     const outcome = deps.rotations.request(ctx.deviceId, approvalPublicKey, parsed.data.requestId)

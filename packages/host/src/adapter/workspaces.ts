@@ -109,39 +109,56 @@ export class WorkspaceAdapter {
    */
   async follow(sink: RcpStreamSink): Promise<void> {
     const stream = await gatewayWorkspaceFollow(this.gateway, sink.signal)
-
-    for await (const rawFrame of stream) {
-      if (sink.signal.aborted) break
-      const frame = rawFrame as any
-      if (!frame || typeof frame !== 'object') continue
-
-      if (frame.type === 'baseline') {
-        const items = (frame.value?.items ?? []) as any[]
-        const workspaces: Workspace[] = items.map((item) => {
-          const ws: Workspace = {
-            id: item.workspaceId,
-            title: item.title,
-            path: item.path,
-            remoteAllowed: this.policyGuard.checkPathAccess(item.path),
+    // RcpServer waits for this method before returning sid. Consume the live
+    // iterator in the background; its signal is aborted on cancel/disconnect.
+    void (async () => {
+      try {
+        for await (const rawFrame of stream) {
+          if (sink.signal.aborted) break
+          if (!isRecord(rawFrame)) throw new Error('invalid workspace stream frame')
+          if (rawFrame['type'] === 'baseline') {
+            const value = rawFrame['value']
+            if (!isRecord(value) || !Array.isArray(value['items'])) throw new Error('invalid workspace baseline')
+            const workspaces = value['items'].map((item: unknown) => this.mapWorkspace(item))
+            // A reconnect baseline replaces the entire cache, including removals.
+            this.workspacesById.clear()
+            for (const workspace of workspaces) this.workspacesById.set(workspace.id, workspace)
+            if (!await sink.sendItem({ type: 'baseline', workspaces })) throw new Error('workspace delivery failed')
+          } else if (rawFrame['type'] === 'upsert') {
+            const workspace = this.mapWorkspace(rawFrame['workspace'])
+            this.workspacesById.set(workspace.id, workspace)
+            if (!await sink.sendItem({ type: 'upsert', workspace })) throw new Error('workspace delivery failed')
+          } else if (rawFrame['type'] === 'remove') {
+            const id = rawFrame['workspaceId']
+            if (typeof id !== 'string' || id.length === 0) throw new Error('invalid workspace removal')
+            this.workspacesById.delete(id)
+            if (!await sink.sendItem({ type: 'removed', id })) throw new Error('workspace delivery failed')
           }
-          this.workspacesById.set(ws.id, ws)
-          return ws
-        })
-        await sink.sendItem({ type: 'baseline', workspaces })
-      } else if (frame.type === 'upsert' && frame.workspace) {
-        const item = frame.workspace
-        const ws: Workspace = {
-          id: item.workspaceId,
-          title: item.title,
-          path: item.path,
-          remoteAllowed: this.policyGuard.checkPathAccess(item.path),
+          // dsh order/archive frames do not change RCP's workspace row shape.
         }
-        this.workspacesById.set(ws.id, ws)
-        await sink.sendItem({ type: 'upsert', workspace: ws })
-      } else if (frame.type === 'remove' && frame.workspaceId) {
-        this.workspacesById.delete(frame.workspaceId)
-        await sink.sendItem({ type: 'removed', id: frame.workspaceId })
+        if (!sink.signal.aborted) await sink.end(true)
+      } catch {
+        if (!sink.signal.aborted) {
+          await sink.end(false, createRcpError(RCP_ERROR_CODES.internal_error, 'workspace stream failed'))
+        }
       }
+    })().catch(() => { /* The channel may close while the terminal frame is sent. */ })
+  }
+
+  private mapWorkspace(value: unknown): Workspace {
+    if (!isRecord(value) || typeof value['workspaceId'] !== 'string' || value['workspaceId'].length === 0
+      || typeof value['title'] !== 'string' || typeof value['path'] !== 'string') {
+      throw new Error('invalid workspace stream row')
+    }
+    return {
+      id: value['workspaceId'],
+      title: value['title'],
+      path: value['path'],
+      remoteAllowed: this.policyGuard.checkPathAccess(value['path']),
     }
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

@@ -5,7 +5,9 @@ import com.google.firebase.messaging.RemoteMessage
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.lottooss.remora.core.crypto.decodeBase64Url
 import io.github.lottooss.remora.core.crypto.openPushPayload
+import io.github.lottooss.remora.core.crypto.PushContext
 import io.github.lottooss.remora.core.data.HostRepository
+import io.github.lottooss.remora.core.data.PushTokenRegistrar
 import io.github.lottooss.remora.core.security.KeyStorage
 import io.github.lottooss.remora.notification.RemoraNotificationChannel
 import io.github.lottooss.remora.notification.RemoraNotificationManager
@@ -24,12 +26,14 @@ class RemoraMessagingService : FirebaseMessagingService() {
 
     @Inject lateinit var keyStorage: KeyStorage
     @Inject lateinit var hostRepository: HostRepository
+    @Inject lateinit var pushTokenRegistrar: PushTokenRegistrar
 
     private val notificationManager by lazy { RemoraNotificationManager(this) }
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onMessageReceived(remoteMessage: RemoteMessage) {
         val data = remoteMessage.data
+        if (data["v"] != "1") return
 
         if (data["k"] == "host_offline") {
             handleHostOffline(data["h"].orEmpty())
@@ -45,7 +49,7 @@ class RemoraMessagingService : FirebaseMessagingService() {
     }
 
     override fun onNewToken(token: String) {
-        // TODO: send token to relay via PushTokenRequest
+        pushTokenRegistrar.updateToken(token)
     }
 
     override fun onDestroy() {
@@ -54,42 +58,38 @@ class RemoraMessagingService : FirebaseMessagingService() {
     }
 
     private fun handleHostOffline(hostId: String) {
-        val host = hostRepository.hosts.value.find { it.id.value == hostId }
-        val hostName = host?.name ?: "Unknown Host"
+        val host = hostRepository.hosts.value.find { it.id.value == hostId } ?: return
+        if (!pushTokenRegistrar.preference(hostId)) return
+        val hostName = host.name
         notificationManager.showNotification(
             channel = RemoraNotificationChannel.HOST_OFFLINE,
-            title = "Host Offline",
-            body = "$hostName is offline",
+            title = getString(R.string.notification_host_offline),
+            body = getString(R.string.notification_host_offline_body, hostName),
             deepLink = "remora://hosts",
-            notificationId = NOTIFICATION_ID_HOST_OFFLINE,
+            notificationId = hostId.hashCode(),
         )
     }
 
     private suspend fun handleEncryptedPayload(hostId: String, ct: String) {
+        if (hostRepository.hosts.value.none { it.id.value == hostId } || ct.length > 3_072) return
         val keys = keyStorage.getHostKeys(hostId) ?: return
-        val pushKey = keys.pushKey
-        keys.wipe()
-
         val plaintext = try {
-            openPushPayload(pushKey, decodeBase64Url(ct))
-        } catch (_: Exception) {
-            return
-        }
+            openPushPayload(keys.pushKey, decodeBase64Url(ct), PushContext(hostId, keys.deviceId))
+        } catch (_: Exception) { return }
+        finally { keys.wipe() }
+        if (plaintext.toByteArray().size > 2_048) return
 
         val payload = parsePushPayload(plaintext) ?: return
         val channel = channelForKind(payload.kind)
-        val deepLink = deepLinkForPayload(payload)
+        val deepLink = deepLinkForPayload(payload, hostId)
 
         notificationManager.showNotification(
             channel = channel,
             title = payload.title,
             body = payload.body,
             deepLink = deepLink,
-            notificationId = payload.sessionId?.hashCode() ?: payload.title.hashCode(),
+            notificationId = (hostId + ":" + (payload.pendingId ?: payload.sessionId ?: payload.kind.name)).hashCode(),
         )
     }
 
-    companion object {
-        private const val NOTIFICATION_ID_HOST_OFFLINE = 1001
-    }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 import { RelayLink } from '../src/index.js'
 import { CloseCodes, PeerKind, encodeDataFrame } from '@remora/protocol'
+import { decodeBase64Url, getRelayPublicKey, verifyRelayChallenge } from '@remora/crypto'
 
 class FakeWebSocket extends EventEmitter {
   static OPEN = 1
@@ -49,7 +50,9 @@ class FakeWebSocket extends EventEmitter {
 
 describe('RelayLink', () => {
   const relayPrivateKey = new Uint8Array(32).fill(0x07)
-  const endpointId = 'h_test12345678901234567890'
+  // A well-formed endpoint id (h_ + 26 base32 characters, Crypto/1 §2):
+  // signing the relay challenge asserts this shape and fails closed.
+  const endpointId = 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
 
   it('connects and authenticates on receiving challenge', async () => {
     let wsInstance: FakeWebSocket | null = null
@@ -77,24 +80,40 @@ describe('RelayLink', () => {
 
     await vi.waitFor(() => expect(wsInstance).not.toBeNull())
 
-    // Server sends challenge
+    // Server sends challenge (RLY/1 §3: version + fresh 32-byte nonce, b64u)
     wsInstance!.emit('message', {
       data: JSON.stringify({
         t: 'challenge',
         v: 1,
-        nonce: 'test_nonce_32_bytes_fixed',
+        nonce: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
         time: 1790000000,
       }),
     })
 
     expect(link.state).toBe('authenticating')
 
-    // Expect auth frame sent
+    // Expect auth frame sent with the full context-bound field set
     expect(wsInstance!.sent.length).toBe(1)
     const authFrame = JSON.parse(wsInstance!.sent[0] as string)
     expect(authFrame.t).toBe('auth')
+    expect(authFrame.v).toBe(1)
+    expect(authFrame.kind).toBe('host')
     expect(authFrame.id).toBe(endpointId)
     expect(authFrame.sig).toBeDefined()
+    // The signature binds the canonical origin of the connection (wss:// →
+    // https://), kind, endpoint id and nonce (Crypto/1 §4).
+    expect(
+      verifyRelayChallenge(
+        getRelayPublicKey(relayPrivateKey),
+        {
+          relayOrigin: 'https://relay.example.com',
+          kind: 'host',
+          endpointId,
+          nonce: decodeBase64Url('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'),
+        },
+        decodeBase64Url(authFrame.sig),
+      ),
+    ).toBe(true)
 
     // Server sends ready
     wsInstance!.emit('message', {

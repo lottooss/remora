@@ -204,9 +204,10 @@ export async function startFakeRelay(options: FakeRelayOptions): Promise<FakeRel
     sendJson(response, 200, { v: 1, id })
   }
 
-  const handleAuth = (socket: Socket, attempt: FakeConnectAttempt, nonce: string, frame: unknown): void => {
+  const handleAuth = (socket: Socket, attempt: FakeConnectAttempt, nonce: string, origin: string, frame: unknown): void => {
     const id = typeof frame === 'object' && frame !== null && 'id' in frame && typeof frame.id === 'string' ? frame.id : ''
     const sig = typeof frame === 'object' && frame !== null && 'sig' in frame && typeof frame.sig === 'string' ? frame.sig : ''
+    const kind = typeof frame === 'object' && frame !== null && 'kind' in frame && (frame.kind === 'host' || frame.kind === 'device') ? frame.kind : null
     attempt.endpointId = id
     const publicKey = endpoints.get(id)
     if (publicKey === undefined) {
@@ -217,7 +218,8 @@ export async function startFakeRelay(options: FakeRelayOptions): Promise<FakeRel
     }
     let valid = false
     try {
-      valid = verifyRelayChallenge(publicKey, nonce, decodeBase64Url(sig))
+      if (kind === null) throw new Error('kind')
+      valid = verifyRelayChallenge(publicKey, { relayOrigin: origin, kind, endpointId: id, nonce: decodeBase64Url(nonce) }, decodeBase64Url(sig))
     } catch {
       valid = false
     }
@@ -248,6 +250,7 @@ export async function startFakeRelay(options: FakeRelayOptions): Promise<FakeRel
         `Sec-WebSocket-Accept: ${accept}\r\nSec-WebSocket-Protocol: ${RLY_SUBPROTOCOL}\r\n\r\n`,
     )
     const nonce = encodeBase64Url(randomBytes(32))
+    const origin = `http://${String(request.headers.host ?? 'unknown')}`
     sendText(socket, { t: 'challenge', v: 1, nonce, time: Date.now() })
 
     let pending = Buffer.alloc(0)
@@ -271,7 +274,7 @@ export async function startFakeRelay(options: FakeRelayOptions): Promise<FakeRel
           continue
         }
         const type = typeof message === 'object' && message !== null && 't' in message ? message.t : undefined
-        if (type === 'auth' && attempt.outcome === 'pending') handleAuth(socket, attempt, nonce, message)
+        if (type === 'auth' && attempt.outcome === 'pending') handleAuth(socket, attempt, nonce, origin, message)
         else if (type === 'ping') sendText(socket, { t: 'pong' })
       }
     })

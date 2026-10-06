@@ -6,12 +6,17 @@ import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
+import android.security.keystore.KeyInfo
+import android.security.keystore.StrongBoxUnavailableException
 import androidx.biometric.BiometricPrompt
 import java.security.KeyPairGenerator
+import java.security.KeyFactory
 import java.security.KeyStore
 import java.security.PrivateKey
 import java.security.Signature
+import java.security.MessageDigest
 import java.security.spec.ECGenParameterSpec
+import java.util.UUID
 
 data class ApprovalKeyInfo(
     val alias: String,
@@ -39,42 +44,48 @@ data class ApprovalKeyInfo(
  * Manages biometric-bound hardware-backed EC P-256 approval keys in Android Keystore
  * per Crypto/1 §7 and spike P0-S5.
  */
-class ApprovalKeyManager(private val context: Context? = null) {
+class ApprovalKeyManager(private val context: Context) {
+
+    private val aliases by lazy { context.applicationContext.getSharedPreferences("remora_approval_aliases", Context.MODE_PRIVATE) }
 
     private val keyStore: KeyStore by lazy {
         KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }
     }
 
+    @Synchronized
     fun getOrCreateApprovalKey(hostId: String): ApprovalKeyInfo {
-        val alias = Security.approvalKeyAlias(hostId)
+        val alias = activeAlias(hostId)
+        return getOrCreateKey(alias)
+    }
+
+    private fun getOrCreateKey(alias: String): ApprovalKeyInfo {
         if (keyStore.containsAlias(alias)) {
             val cert = keyStore.getCertificate(alias)
             if (cert != null) {
                 return ApprovalKeyInfo(
                     alias = alias,
                     publicKeySpkiDer = cert.publicKey.encoded,
-                    isHardwareBacked = true,
+                    isHardwareBacked = isHardwareBacked(alias),
                 )
             }
         }
 
-        val hasStrongBox = context?.packageManager?.hasSystemFeature(
+        val hasStrongBox = context.packageManager.hasSystemFeature(
             PackageManager.FEATURE_STRONGBOX_KEYSTORE,
-        ) ?: false
+        )
 
         val kpg = KeyPairGenerator.getInstance(
             KeyProperties.KEY_ALGORITHM_EC,
             KEYSTORE_PROVIDER,
         )
 
-        var isHardware = true
         try {
             val specBuilder = createSpecBuilder(alias, useStrongBox = hasStrongBox)
             kpg.initialize(specBuilder.build())
             kpg.generateKeyPair()
-        } catch (e: Exception) {
+        } catch (e: StrongBoxUnavailableException) {
             if (hasStrongBox) {
-                // Fallback to standard TEE if StrongBox is unavailable or fails
+                // StrongBox is optional; per-use biometric policy stays identical.
                 val fallbackSpec = createSpecBuilder(alias, useStrongBox = false)
                 kpg.initialize(fallbackSpec.build())
                 kpg.generateKeyPair()
@@ -84,27 +95,29 @@ class ApprovalKeyManager(private val context: Context? = null) {
         }
 
         val cert = keyStore.getCertificate(alias)
-            ?: throw IllegalStateException("Keystore certificate missing after generation for $alias")
+            ?: throw IllegalStateException("Approval certificate is unavailable")
 
         return ApprovalKeyInfo(
             alias = alias,
             publicKeySpkiDer = cert.publicKey.encoded,
-            isHardwareBacked = isHardware,
+            isHardwareBacked = isHardwareBacked(alias),
         )
     }
 
+    @Synchronized
     fun createCryptoObject(hostId: String): BiometricPrompt.CryptoObject {
-        val alias = Security.approvalKeyAlias(hostId)
+        val alias = activeAlias(hostId)
         val privateKey = keyStore.getKey(alias, null) as? PrivateKey
-            ?: throw IllegalStateException("Approval private key not found for host $hostId")
+            ?: throw IllegalStateException("Approval key is unavailable")
 
         val signature = Signature.getInstance(SIGNATURE_ALGORITHM)
         signature.initSign(privateKey)
         return BiometricPrompt.CryptoObject(signature)
     }
 
+    @Synchronized
     fun isKeyValid(hostId: String): Boolean {
-        val alias = Security.approvalKeyAlias(hostId)
+        val alias = activeAlias(hostId)
         return try {
             if (!keyStore.containsAlias(alias)) return false
             val privateKey = keyStore.getKey(alias, null) as? PrivateKey ?: return false
@@ -118,11 +131,81 @@ class ApprovalKeyManager(private val context: Context? = null) {
         }
     }
 
+    @Synchronized
     fun deleteApprovalKey(hostId: String) {
-        val alias = Security.approvalKeyAlias(hostId)
-        if (keyStore.containsAlias(alias)) {
-            keyStore.deleteEntry(alias)
+        val base = Security.approvalKeyAlias(hostId)
+        val entries = keyStore.aliases().toList().filter { it == base || it.startsWith(base + "_pending_") }
+        entries.forEach { keyStore.deleteEntry(it) }
+        check(aliases.edit().remove("active_$hostId").remove("pending_$hostId").commit()) {
+            "Approval key removal failed"
         }
+    }
+
+    /** Generates a candidate without replacing the host's currently registered signing key. */
+    @Synchronized
+    fun createPendingApprovalKey(hostId: String): ApprovalKeyInfo {
+        pendingApprovalKey(hostId)?.let { return it }
+        val alias = Security.approvalKeyAlias(hostId) + "_pending_" + UUID.randomUUID()
+        val info = getOrCreateKey(alias)
+        if (!aliases.edit().putString("pending_$hostId", alias).commit()) {
+            keyStore.deleteEntry(alias)
+            throw IllegalStateException("Approval key persistence failed")
+        }
+        return info
+    }
+
+    /** Reads a candidate across process restarts without silently regenerating it. */
+    @Synchronized
+    fun pendingApprovalKey(hostId: String): ApprovalKeyInfo? {
+        val alias = aliases.getString("pending_$hostId", null) ?: return null
+        checkedAlias(hostId, alias)
+        val certificate = keyStore.getCertificate(alias)
+            ?: throw IllegalStateException("Pending approval key is unavailable")
+        return ApprovalKeyInfo(alias, certificate.publicKey.encoded, isHardwareBacked(alias))
+    }
+
+    /** Activate only after the owner confirms the pending change on the PC. */
+    @Synchronized
+    fun activatePendingApprovalKey(hostId: String, expectedPublicKeySpkiDer: ByteArray) {
+        val pending = aliases.getString("pending_$hostId", null)
+            ?: throw IllegalStateException("No pending approval key")
+        checkedAlias(hostId, pending)
+        val actual = keyStore.getCertificate(pending)?.publicKey?.encoded
+            ?: throw IllegalStateException("Pending approval key is unavailable")
+        check(MessageDigest.isEqual(actual, expectedPublicKeySpkiDer)) { "Approval key mismatch" }
+        val previous = activeAlias(hostId)
+        check(aliases.edit().putString("active_$hostId", pending).remove("pending_$hostId").commit()) {
+            "Approval key persistence failed"
+        }
+        if (previous != pending && keyStore.containsAlias(previous)) keyStore.deleteEntry(previous)
+    }
+
+    /** Cancels only the unregistered candidate, preserving the active signing key. */
+    @Synchronized
+    fun discardPendingApprovalKey(hostId: String) {
+        val pending = aliases.getString("pending_$hostId", null) ?: return
+        checkedAlias(hostId, pending)
+        check(pending != activeAlias(hostId)) { "Cannot remove active approval key" }
+        keyStore.deleteEntry(pending)
+        check(aliases.edit().remove("pending_$hostId").commit()) { "Approval key removal failed" }
+    }
+
+    private fun activeAlias(hostId: String): String = checkedAlias(hostId,
+        aliases.getString("active_$hostId", null) ?: Security.approvalKeyAlias(hostId))
+
+    private fun checkedAlias(hostId: String, alias: String): String {
+        val base = Security.approvalKeyAlias(hostId)
+        require(alias == base || alias.startsWith(base + "_pending_")) { "Invalid approval key alias" }
+        return alias
+    }
+
+    private fun isHardwareBacked(alias: String): Boolean {
+        val key = keyStore.getKey(alias, null) as? PrivateKey
+            ?: throw IllegalStateException("Approval key is unavailable")
+        val info = KeyFactory.getInstance(key.algorithm, KEYSTORE_PROVIDER)
+            .getKeySpec(key, KeyInfo::class.java)
+        @Suppress("DEPRECATION")
+        return info.isInsideSecureHardware
     }
 
     private fun createSpecBuilder(alias: String, useStrongBox: Boolean): KeyGenParameterSpec.Builder {

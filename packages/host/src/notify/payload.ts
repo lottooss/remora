@@ -7,7 +7,7 @@
  * FCM only ever handle ciphertext (AGENTS §1.1, §1.8).
  */
 
-import { encodeBase64Url, sealPushPayload } from '@remora/crypto'
+import { encodeBase64Url, sealPushPayload, type PushContext } from '@remora/crypto'
 
 /** Push kinds on the wire (Crypto/1 §8). */
 export type PushKind = 'approval' | 'question' | 'turn_done' | 'turn_error'
@@ -68,8 +68,8 @@ export function buildPushPayload(kind: PushKind, options: BuildPushPayloadOption
  * (12-byte nonce prepended), unpadded base64url (Crypto/1 §8). Callers build
  * via `buildPushPayload`, which enforces the plaintext budget.
  */
-export function sealPush(devicePushKey: Uint8Array, payload: unknown): string {
-  return encodeBase64Url(sealPushPayload(devicePushKey, payload))
+export function sealPush(devicePushKey: Uint8Array, payload: unknown, context: PushContext): string {
+  return encodeBase64Url(sealPushPayload(devicePushKey, payload, context))
 }
 
 function sanitizeText(input: string): string {

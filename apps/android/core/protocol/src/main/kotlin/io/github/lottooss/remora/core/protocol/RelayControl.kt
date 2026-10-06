@@ -31,6 +31,11 @@ object RelayErrorCodes {
     const val INTERNAL_ERROR: String = "internal_error"
 }
 
+/** Normative RLY/1 §5 bounds shared by the control-frame validators. */
+const val MAX_RID_LENGTH: Int = 32
+const val MAX_PUSH_CT_LENGTH: Int = 3_072
+val PUSH_STATUSES: Set<String> = setOf("sent", "no_token", "unregistered", "error")
+
 @Serializable
 data class PeerInfo(
     val id: String,
@@ -38,7 +43,12 @@ data class PeerInfo(
     val name: String,
     val online: Boolean,
     val lastSeenAt: Long,
-)
+) {
+    init {
+        require(kind == "host" || kind == "device") { "peer kind must be host or device" }
+        require(lastSeenAt >= 0) { "lastSeenAt must be non-negative" }
+    }
+}
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -51,7 +61,12 @@ sealed interface ControlFrame {
         val v: Int = 1,
         val nonce: String,
         val time: Long,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init {
+            require(v == 1) { "unsupported RLY version: $v" }
+            require(time >= 0) { "time must be non-negative" }
+        }
+    }
 
     @Serializable
     @SerialName("auth")
@@ -61,7 +76,12 @@ sealed interface ControlFrame {
         val id: String,
         val sig: String,
         val app: String? = null,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init {
+            require(v == 1) { "unsupported RLY version: $v" }
+            require(kind == "host" || kind == "device") { "auth kind must be host or device" }
+        }
+    }
 
     @Serializable
     @SerialName("ready")
@@ -70,7 +90,11 @@ sealed interface ControlFrame {
         val id: String,
         val peers: List<PeerInfo> = emptyList(),
         val limits: JsonObject? = null,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init {
+            require(v == 1) { "unsupported RLY version: $v" }
+        }
+    }
 
     @Serializable
     @SerialName("ping")
@@ -87,13 +111,20 @@ sealed interface ControlFrame {
         val kind: String,
         val online: Boolean,
         val at: Long,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init {
+            require(kind == "host" || kind == "device") { "presence kind must be host or device" }
+            require(at >= 0) { "at must be non-negative" }
+        }
+    }
 
     @Serializable
     @SerialName("enroll.ticket")
     data class EnrollTicketRequest(
         val rid: String,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init { require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" } }
+    }
 
     @Serializable
     @SerialName("enroll.ticket.ok")
@@ -101,27 +132,38 @@ sealed interface ControlFrame {
         val rid: String,
         val ticket: String,
         val expiresAt: Long,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init {
+            require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" }
+            require(expiresAt >= 0) { "expiresAt must be non-negative" }
+        }
+    }
 
     @Serializable
     @SerialName("endpoint.list")
     data class EndpointListRequest(
         val rid: String,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init { require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" } }
+    }
 
     @Serializable
     @SerialName("endpoint.list.ok")
     data class EndpointListResponse(
         val rid: String,
         val devices: List<PeerInfo> = emptyList(),
-    ) : ControlFrame
+    ) : ControlFrame {
+        init { require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" } }
+    }
 
     @Serializable
     @SerialName("endpoint.revoke")
     data class EndpointRevokeRequest(
         val rid: String,
         val id: String,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init { require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" } }
+    }
 
     @Serializable
     @SerialName("push")
@@ -132,20 +174,33 @@ sealed interface ControlFrame {
         val collapse: String? = null,
         val priority: String = "normal",
         val ttl: Int = 86400,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init {
+            require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" }
+            require(priority == "high" || priority == "normal") { "push priority must be high or normal" }
+            require(ttl in 0..86_400) { "push ttl must be 0..86400 seconds" }
+            require(ct.length <= MAX_PUSH_CT_LENGTH) { "push ct above 3072 characters" }
+        }
+    }
 
     @Serializable
     data class PushResultItem(
         val id: String,
         val status: String,
-    )
+    ) {
+        init {
+            require(status in PUSH_STATUSES) { "push status outside the documented set" }
+        }
+    }
 
     @Serializable
     @SerialName("push.result")
     data class PushResponse(
         val rid: String,
         val results: List<PushResultItem> = emptyList(),
-    ) : ControlFrame
+    ) : ControlFrame {
+        init { require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" } }
+    }
 
     @Serializable
     @SerialName("push.token")
@@ -153,7 +208,9 @@ sealed interface ControlFrame {
         val rid: String,
         val token: String,
         val hostOffline: Boolean,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init { require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" } }
+    }
 
     @Serializable
     @SerialName("bye")
@@ -165,7 +222,9 @@ sealed interface ControlFrame {
     @SerialName("ok")
     data class Ok(
         val rid: String,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init { require(rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" } }
+    }
 
     @Serializable
     @SerialName("error")
@@ -174,7 +233,9 @@ sealed interface ControlFrame {
         val code: String,
         val message: String,
         val ref: String? = null,
-    ) : ControlFrame
+    ) : ControlFrame {
+        init { require(rid == null || rid.length <= MAX_RID_LENGTH) { "rid above 32 characters" } }
+    }
 }
 
 val RelayJson = Json {

@@ -1,0 +1,83 @@
+{
+  "suite": "rcp/methods/files.list",
+  "version": 1,
+  "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
+  "notes": "input.direction chooses params/result/item/error; value is the actual JSON payload. expect is the decoded payload; error labels invalid_params/invalid_result/invalid_item/invalid_error are corpus validation categories, not host execution results. No approval digest/signature validity, policy enforcement, or exactly-once effects are claimed. Method name comes from the filename; suite labels are lowercase to satisfy the existing vector-file schema.",
+  "cases": [
+    {
+      "name": "valid request parameters",
+      "input": {
+        "direction": "params",
+        "value": {
+          "sessionId": "session-vector-1",
+          "path": "C:\\Projects\\remora"
+        }
+      },
+      "expect": {
+        "sessionId": "session-vector-1",
+        "path": "C:\\Projects\\remora"
+      }
+    },
+    {
+      "name": "valid response payload",
+      "input": {
+        "direction": "result",
+        "value": {
+          "path": "C:\\Projects\\remora",
+          "entries": [
+            {
+              "name": "README.md",
+              "kind": "file",
+              "bytes": 7
+            }
+          ],
+          "truncated": false
+        }
+      },
+      "expect": {
+        "path": "C:\\Projects\\remora",
+        "entries": [
+          {
+            "name": "README.md",
+            "kind": "file",
+            "bytes": 7
+          }
+        ],
+        "truncated": false
+      }
+    },
+    {
+      "name": "malformed request parameters",
+      "input": {
+        "direction": "params",
+        "value": {
+          "sessionId": "session-vector-1",
+          "path": ""
+        }
+      },
+      "error": "invalid_params"
+    },
+    {
+      "name": "malformed response payload",
+      "input": {
+        "direction": "result",
+        "value": {}
+      },
+      "error": "invalid_result"
+    },
+    {
+      "name": "not found error payload",
+      "input": {
+        "direction": "error",
+        "value": {
+          "code": "not_found",
+          "message": "Requested resource is unavailable."
+        }
+      },
+      "expect": {
+        "code": "not_found",
+        "message": "Requested resource is unavailable."
+      }
+    }
+  ]
+}

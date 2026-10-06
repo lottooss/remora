@@ -10,8 +10,6 @@ import path from 'node:path'
 import {
   RCP_ERROR_CODES,
   createRcpError,
-  type ControlItem,
-  type ControlState,
   type ModelRef,
   type SessionEvent,
   type SessionSummary,
@@ -27,7 +25,6 @@ function getEventSeq(event: SessionEvent): number {
 import {
   gatewayModelCatalog,
   gatewaySessionCancel,
-  gatewaySessionControl,
   gatewaySessionCreate,
   gatewaySessionFollow,
   gatewaySessionList,
@@ -40,6 +37,7 @@ import {
   type TypertGateway,
 } from './gateway.ts'
 import { LiveCoalescer } from './live.ts'
+import { openSessionControl, type SessionActivitySource } from './session-control.ts'
 import type { PolicyGuard } from '../policy/index.ts'
 import type { WorkspaceAdapter } from './workspaces.ts'
 
@@ -58,6 +56,7 @@ export interface SessionAdapterOptions {
   now?: () => number
   policyGuard?: PolicyGuard | undefined
   workspaceAdapter?: WorkspaceAdapter | undefined
+  activity?: SessionActivitySource | undefined
 }
 
 export class SessionAdapter {
@@ -66,6 +65,7 @@ export class SessionAdapter {
   private readonly now: () => number
   private readonly policyGuard?: PolicyGuard | undefined
   private readonly workspaceAdapter?: WorkspaceAdapter | undefined
+  private readonly activity?: SessionActivitySource | undefined
   private readonly promptDedupeCache = new Map<string, PromptDedupeEntry>()
   private readonly sessionCreateDedupeCache = new Map<string, { result: { sessionId: string; workspaceId: string }; time: number }>()
   /** Cache of text events by sessionId:seq for eventText reads. */
@@ -79,6 +79,7 @@ export class SessionAdapter {
     this.now = options.now ?? Date.now
     this.policyGuard = options.policyGuard
     this.workspaceAdapter = options.workspaceAdapter
+    this.activity = options.activity
   }
 
   /**
@@ -621,70 +622,7 @@ export class SessionAdapter {
    * sessions.control (RCP/1 §5)
    */
   async control(sink: RcpStreamSink): Promise<Record<string, unknown>> {
-    const stream = await gatewaySessionControl(this.gateway, sink.signal)
-
-    void (async () => {
-      try {
-        for await (const rawFrame of stream) {
-          if (sink.signal.aborted) break
-          if (typeof rawFrame !== 'object' || rawFrame === null) continue
-          const f = rawFrame as Record<string, unknown>
-          const type = f['type']
-
-          if (type === 'baseline') {
-            const val = f['value'] as Record<string, unknown> | undefined
-            const queues = (val?.['queues'] ?? {}) as Record<string, Array<Record<string, unknown>>>
-            const jobs = (val?.['jobs'] ?? {}) as Record<string, Array<Record<string, unknown>>>
-
-            const sessions: ControlState[] = []
-            const sessionIds = new Set([...Object.keys(queues), ...Object.keys(jobs)])
-            for (const sId of sessionIds) {
-              const q = queues[sId] ?? []
-              const j = jobs[sId] ?? []
-              sessions.push({
-                sessionId: sId,
-                running: false,
-                queue: q.map((item) => ({
-                  itemId: String(item['id'] ?? ''),
-                  text: this.extractQueueText(item['message']),
-                  delivery: item['placement'] === 'steering' ? 'steer' : 'queue',
-                })),
-                jobs: j.map((job) => ({
-                  id: String(job['id'] ?? ''),
-                  title: String(job['label'] ?? job['kind'] ?? ''),
-                  state: String(job['status'] ?? 'running'),
-                })),
-              })
-            }
-
-            const item: ControlItem = { type: 'baseline', sessions }
-            await sink.sendItem(item as unknown as Record<string, unknown>)
-          } else if (type === 'queue' || type === 'jobs') {
-            const sId = String(f['sessionId'] ?? '')
-            if (sId) {
-              const updateItem: ControlItem = {
-                type: 'update',
-                session: {
-                  sessionId: sId,
-                  running: false,
-                  queue: [],
-                  jobs: [],
-                },
-              }
-              await sink.sendItem(updateItem as unknown as Record<string, unknown>)
-            }
-          }
-        }
-      } catch {
-        // cancellation
-      } finally {
-        if (!sink.signal.aborted) {
-          await sink.end(true)
-        }
-      }
-    })()
-
-    return {}
+    return openSessionControl(this.gateway, sink, this.activity)
   }
 
   /**
@@ -791,14 +729,6 @@ export class SessionAdapter {
     }
   }
 
-  private extractQueueText(msg: unknown): string {
-    if (typeof msg !== 'object' || msg === null) return ''
-    const content = (msg as { content?: unknown[] }).content
-    if (!Array.isArray(content)) return ''
-    const textPart = content.find((c) => (c as { type?: string })?.type === 'text') as { text?: string } | undefined
-    return textPart?.text ?? ''
-  }
-
   /**
    * Retrieves session workspace path and recent events for file and diff operations.
    */
@@ -822,4 +752,3 @@ export class SessionAdapter {
     }
   }
 }
-

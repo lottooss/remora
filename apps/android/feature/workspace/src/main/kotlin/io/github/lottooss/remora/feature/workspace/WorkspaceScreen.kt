@@ -61,12 +61,13 @@ import io.github.lottooss.remora.core.data.Workspace
 import io.github.lottooss.remora.core.data.WorkspaceService
 import kotlinx.coroutines.launch
 
-val DEFAULT_MODELS = listOf(
-    ModelRef("deepseek", "deepseek-flash"),
-    ModelRef("deepseek", "deepseek-v4-pro"),
-    ModelRef("anthropic", "claude-3-7-sonnet"),
-    ModelRef("openai", "gpt-4o"),
-)
+/**
+ * The selected model for a host-supplied model list: keeps the current
+ * selection while it is still offered, otherwise takes the first host-supplied
+ * model, or none — the app never fabricates a model the host did not offer.
+ */
+fun resolveSelectedModel(current: ModelRef?, availableModels: List<ModelRef>): ModelRef? =
+    if (current != null && current in availableModels) current else availableModels.firstOrNull()
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,6 +79,7 @@ fun WorkspaceScreen(
     allowRemoteSessionStart: Boolean = true,
     initialWorkspaces: List<Workspace>? = null,
     initialRoots: List<String>? = null,
+    availableModels: List<ModelRef> = emptyList(),
 ) {
     val service = remember(workspaceService) { workspaceService ?: WorkspaceService() }
     val scope = rememberCoroutineScope()
@@ -97,7 +99,13 @@ fun WorkspaceScreen(
     var selectedDirectoryPath by remember { mutableStateOf<String?>(null) }
 
     // Model and prompt
-    var selectedModel by remember { mutableStateOf(DEFAULT_MODELS.first()) }
+    var selectedModel by remember { mutableStateOf<ModelRef?>(null) }
+    LaunchedEffect(availableModels) {
+        selectedModel = resolveSelectedModel(selectedModel, availableModels)
+    }
+    LaunchedEffect(initialWorkspaces) {
+        if (initialWorkspaces != null) registeredWorkspaces = initialWorkspaces
+    }
     var promptText by remember { mutableStateOf("") }
     var isStartingSession by remember { mutableStateOf(false) }
     var sessionError by remember { mutableStateOf<String?>(null) }
@@ -546,7 +554,7 @@ fun WorkspaceScreen(
                     .fillMaxWidth()
                     .padding(vertical = 4.dp),
             ) {
-                items(DEFAULT_MODELS) { m ->
+                items(availableModels) { m ->
                     FilterChip(
                         selected = selectedModel == m,
                         onClick = { selectedModel = m },

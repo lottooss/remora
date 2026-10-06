@@ -1,17 +1,260 @@
 {
   "suite": "rcp/methods/interaction.follow",
   "version": 1,
-  "source": "Scaffolded for P0-A1",
-  "notes": "interaction.follow request/response",
+  "source": "Authored deterministic examples in packages/protocol/scripts/gen-rcp-vectors.mjs from RCP/1 and existing TS schemas; not captured implementation output; execution/independent verification deferred.",
+  "notes": "input.direction chooses params/result/item/error; value is the actual JSON payload. expect is the decoded payload; error labels invalid_params/invalid_result/invalid_item/invalid_error are corpus validation categories, not host execution results. No approval digest/signature validity, policy enforcement, or exactly-once effects are claimed. Method name comes from the filename; suite labels are lowercase to satisfy the existing vector-file schema.",
   "cases": [
     {
-      "name": "placeholder scaffold valid baseline",
+      "name": "valid request parameters",
       "input": {
-        "status": "scaffold"
+        "direction": "params",
+        "value": {}
+      },
+      "expect": {}
+    },
+    {
+      "name": "valid response payload",
+      "input": {
+        "direction": "result",
+        "value": {
+          "sid": 12
+        }
       },
       "expect": {
-        "ok": true
+        "sid": 12
       }
+    },
+    {
+      "name": "malformed request parameters",
+      "input": {
+        "direction": "params",
+        "value": "empty"
+      },
+      "error": "invalid_params"
+    },
+    {
+      "name": "malformed response payload",
+      "input": {
+        "direction": "result",
+        "value": {}
+      },
+      "error": "invalid_result"
+    },
+    {
+      "name": "not found error payload",
+      "input": {
+        "direction": "error",
+        "value": {
+          "code": "not_found",
+          "message": "Requested resource is unavailable."
+        }
+      },
+      "expect": {
+        "code": "not_found",
+        "message": "Requested resource is unavailable."
+      }
+    },
+    {
+      "name": "pending baseline",
+      "input": {
+        "direction": "item",
+        "value": {
+          "type": "baseline",
+          "pending": [
+            {
+              "kind": "approval",
+              "id": "11111111-2222-4333-8444-555555555555",
+              "sessionId": "session-vector-1",
+              "sessionTitle": "Review changes",
+              "toolName": "shell",
+              "callId": "call-1",
+              "preview": {
+                "text": "Run git status",
+                "json": "{\"command\":\"git status\"}"
+              },
+              "argsDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "risk": "normal",
+              "requiresSignature": false,
+              "createdAt": 1791158400000,
+              "expiresAt": 1791158460000
+            },
+            {
+              "kind": "question",
+              "id": "11111111-2222-4333-8444-555555555555",
+              "sessionId": "session-vector-1",
+              "sessionTitle": null,
+              "questions": [
+                {
+                  "id": "q-1",
+                  "question": "Which checks?",
+                  "options": [
+                    {
+                      "label": "Types",
+                      "description": "Static compilation"
+                    },
+                    {
+                      "label": "Lint"
+                    }
+                  ],
+                  "multiSelect": true
+                }
+              ],
+              "createdAt": 1791158400000,
+              "expiresAt": 1791158460000
+            }
+          ]
+        }
+      },
+      "expect": {
+        "type": "baseline",
+        "pending": [
+          {
+            "kind": "approval",
+            "id": "11111111-2222-4333-8444-555555555555",
+            "sessionId": "session-vector-1",
+            "sessionTitle": "Review changes",
+            "toolName": "shell",
+            "callId": "call-1",
+            "preview": {
+              "text": "Run git status",
+              "json": "{\"command\":\"git status\"}"
+            },
+            "argsDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "risk": "normal",
+            "requiresSignature": false,
+            "createdAt": 1791158400000,
+            "expiresAt": 1791158460000
+          },
+          {
+            "kind": "question",
+            "id": "11111111-2222-4333-8444-555555555555",
+            "sessionId": "session-vector-1",
+            "sessionTitle": null,
+            "questions": [
+              {
+                "id": "q-1",
+                "question": "Which checks?",
+                "options": [
+                  {
+                    "label": "Types",
+                    "description": "Static compilation"
+                  },
+                  {
+                    "label": "Lint"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "createdAt": 1791158400000,
+            "expiresAt": 1791158460000
+          }
+        ]
+      }
+    },
+    {
+      "name": "requested question",
+      "input": {
+        "direction": "item",
+        "value": {
+          "type": "requested",
+          "pending": {
+            "kind": "question",
+            "id": "11111111-2222-4333-8444-555555555555",
+            "sessionId": "session-vector-1",
+            "sessionTitle": null,
+            "questions": [
+              {
+                "id": "q-1",
+                "question": "Which checks?",
+                "options": [
+                  {
+                    "label": "Types",
+                    "description": "Static compilation"
+                  },
+                  {
+                    "label": "Lint"
+                  }
+                ],
+                "multiSelect": true
+              }
+            ],
+            "createdAt": 1791158400000,
+            "expiresAt": 1791158460000
+          }
+        }
+      },
+      "expect": {
+        "type": "requested",
+        "pending": {
+          "kind": "question",
+          "id": "11111111-2222-4333-8444-555555555555",
+          "sessionId": "session-vector-1",
+          "sessionTitle": null,
+          "questions": [
+            {
+              "id": "q-1",
+              "question": "Which checks?",
+              "options": [
+                {
+                  "label": "Types",
+                  "description": "Static compilation"
+                },
+                {
+                  "label": "Lint"
+                }
+              ],
+              "multiSelect": true
+            }
+          ],
+          "createdAt": 1791158400000,
+          "expiresAt": 1791158460000
+        }
+      }
+    },
+    {
+      "name": "resolution by PC",
+      "input": {
+        "direction": "item",
+        "value": {
+          "type": "resolved",
+          "id": "11111111-2222-4333-8444-555555555555",
+          "outcome": "rejected",
+          "by": "pc"
+        }
+      },
+      "expect": {
+        "type": "resolved",
+        "id": "11111111-2222-4333-8444-555555555555",
+        "outcome": "rejected",
+        "by": "pc"
+      }
+    },
+    {
+      "name": "approval missing raw JSON preview",
+      "input": {
+        "direction": "item",
+        "value": {
+          "type": "requested",
+          "pending": {
+            "kind": "approval",
+            "id": "11111111-2222-4333-8444-555555555555",
+            "sessionId": "session-vector-1",
+            "sessionTitle": "Review changes",
+            "toolName": "shell",
+            "callId": "call-1",
+            "preview": {
+              "text": "Run git status"
+            },
+            "argsDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "risk": "normal",
+            "requiresSignature": false,
+            "createdAt": 1791158400000,
+            "expiresAt": 1791158460000
+          }
+        }
+      },
+      "error": "invalid_item"
     }
   ]
 }

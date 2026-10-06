@@ -26,9 +26,9 @@ import {
 
 const RELAY_PUB = Uint8Array.from({ length: 32 }, (_, i) => i)
 const HOST_ID = 'h_erruijsx3ey2rmxcpeh3pgxjkm'
+const DEVICE_ID = 'd_erruijsx3ey2rmxcpeh3pgxjkm'
 const PAIRING_SECRET = Uint8Array.from({ length: 32 }, (_, i) => 0xa0 + i)
 const HOST_NOISE_PUB = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
-const DEVICE_NOISE_PUB = Uint8Array.from({ length: 32 }, (_, i) => 100 + i)
 const TICKET = Uint8Array.from({ length: 32 }, (_, i) => 0xf0 + (i % 16))
 
 /** Wraps a SEC1 point into a P-256 SubjectPublicKeyInfo DER (test fixture helper). */
@@ -151,25 +151,38 @@ describe('endpoint ids (Crypto/1 §2)', () => {
 describe('relay auth (Crypto/1 §4)', () => {
   const seed = Uint8Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 256)
   const publicKey = ed25519.getPublicKey(seed)
-  const challengeToken = `https://relay.example.test\x00host\x00${HOST_ID}\x00${bytesToHex(randomBytes(16))}`
+  const nonce = Uint8Array.from({ length: 32 }, (_, i) => i)
+  const fields = {
+    relayOrigin: 'https://relay.example.test',
+    kind: 'host' as const,
+    endpointId: HOST_ID,
+    nonce,
+  }
 
-  it('signs and verifies a challenge', () => {
-    const signature = signRelayChallenge(seed, challengeToken)
+  it('signs and verifies a context-bound challenge', () => {
+    const signature = signRelayChallenge(seed, fields)
     expect(signature.length).toBe(64)
-    expect(verifyRelayChallenge(publicKey, challengeToken, signature)).toBe(true)
+    expect(verifyRelayChallenge(publicKey, fields, signature)).toBe(true)
   })
 
-  it('fails closed on tampering and malformed inputs', () => {
-    const signature = signRelayChallenge(seed, challengeToken)
-    expect(verifyRelayChallenge(publicKey, `${challengeToken}x`, signature)).toBe(false)
+  it('fails closed on tampered context and malformed inputs', () => {
+    const signature = signRelayChallenge(seed, fields)
+    expect(verifyRelayChallenge(publicKey, { ...fields, relayOrigin: 'https://other.example.test' }, signature)).toBe(false)
+    expect(verifyRelayChallenge(publicKey, { ...fields, kind: 'device' }, signature)).toBe(false)
+    expect(verifyRelayChallenge(publicKey, { ...fields, endpointId: 'd_erruijsx3ey2rmxcpeh3pgxjki' }, signature)).toBe(false)
+    expect(verifyRelayChallenge(publicKey, { ...fields, nonce: Uint8Array.from({ length: 32 }, (_, i) => i + 1) }, signature)).toBe(false)
     const otherKey = ed25519.getPublicKey(Uint8Array.from(seed).fill(9))
-    expect(verifyRelayChallenge(otherKey, challengeToken, signature)).toBe(false)
+    expect(verifyRelayChallenge(otherKey, fields, signature)).toBe(false)
     const flipped = Uint8Array.from(signature)
     flipped[0] = (flipped[0] ?? 0) ^ 1
-    expect(verifyRelayChallenge(publicKey, challengeToken, flipped)).toBe(false)
-    expect(verifyRelayChallenge(publicKey, challengeToken, new Uint8Array(63))).toBe(false)
-    expect(verifyRelayChallenge(new Uint8Array(31), challengeToken, signature)).toBe(false)
-    expect(() => signRelayChallenge(new Uint8Array(31), challengeToken)).toThrow(/32-byte/)
+    expect(verifyRelayChallenge(publicKey, fields, flipped)).toBe(false)
+    expect(verifyRelayChallenge(publicKey, fields, new Uint8Array(63))).toBe(false)
+    expect(verifyRelayChallenge(new Uint8Array(31), fields, signature)).toBe(false)
+    expect(() => signRelayChallenge(new Uint8Array(31), fields)).toThrow(/32-byte/)
+    expect(() =>
+      signRelayChallenge(seed, { ...fields, relayOrigin: 'https://relay.example.test/path' }),
+    ).toThrow(/origin/)
+    expect(() => signRelayChallenge(seed, { ...fields, nonce: new Uint8Array(31) })).toThrow(/32 bytes/)
   })
 })
 
@@ -217,80 +230,97 @@ describe('pairing (Crypto/1 §5)', () => {
     )
   })
 
-  it('derives pairPsk to the independent HKDF reference', () => {
-    const psk = derivePairPsk(PAIRING_SECRET, 'tkt_0192abc')
+  it('derives the host-bound pairPsk to the independent HKDF reference', () => {
+    const psk = derivePairPsk(PAIRING_SECRET, HOST_ID)
     expect(psk.length).toBe(32)
-    expect(bytesToHex(psk)).toBe('8a8e00280ec19fd3cd1d0f910c39d7243e6effa9523503f84c1c674c662a030d')
-    expect(derivePairPsk(PAIRING_SECRET, 'other')).not.toEqual(psk)
-    expect(() => derivePairPsk(new Uint8Array(31), 'tkt')).toThrow(/32 bytes/)
+    expect(bytesToHex(psk)).toBe('99c4b4d5d4435a7604a28bc116507469871731aed99a3fec9d8f2018a2a0fb03')
+    expect(derivePairPsk(PAIRING_SECRET, 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa')).not.toEqual(psk)
+    expect(() => derivePairPsk(new Uint8Array(31), HOST_ID)).toThrow(/32 bytes/)
+    expect(() => derivePairPsk(PAIRING_SECRET, 'h_short')).toThrow(/endpoint id/)
   })
 
-  it('derives the six-digit SAS to the independent HMAC reference', () => {
-    const psk = derivePairPsk(PAIRING_SECRET, 'tkt_0192abc')
-    expect(deriveSasCode(HOST_NOISE_PUB, DEVICE_NOISE_PUB, psk)).toBe('944711')
-    expect(deriveSasCode(HOST_NOISE_PUB, DEVICE_NOISE_PUB, psk)).toMatch(/^\d{6}$/)
-    expect(deriveSasCode(DEVICE_NOISE_PUB, HOST_NOISE_PUB, psk)).toMatch(/^\d{6}$/)
-    expect(() => deriveSasCode(new Uint8Array(31), DEVICE_NOISE_PUB, psk)).toThrow(/32 bytes/)
+  it('derives the six-digit SAS from the handshake hash to the independent HMAC reference', () => {
+    const handshakeHash = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
+    expect(deriveSasCode(handshakeHash)).toBe('764025')
+    expect(deriveSasCode(handshakeHash)).toMatch(/^\d{6}$/)
+    expect(deriveSasCode(Uint8Array.from({ length: 32 }, (_, i) => i + 2))).toMatch(/^\d{6}$/)
+    expect(() => deriveSasCode(new Uint8Array(31))).toThrow(/32 bytes/)
   })
 })
 
 describe('approval signatures (Crypto/1 §7)', () => {
-  it('builds the canonical message with the frozen header and field lines', () => {
-    const argsDigest = `sha256:${'a'.repeat(64)}`
-    const message = buildCanonicalApprovalMessage({
-      approvalId: 'appr_01923456789a',
-      outcome: 'allowed-once',
-      issuedAt: 1_790_000_000_000,
-      argsDigest,
-    })
+  const base = {
+    hostId: HOST_ID,
+    deviceId: DEVICE_ID,
+    approvalId: 'appr_01923456789a',
+    sessionId: 'sess_01923456789a',
+    callId: 'call_01923456789a' as string | undefined,
+    toolName: 'bash',
+    outcome: 'allowed-once' as ApprovalOutcome,
+    issuedAt: 1_790_000_000_000,
+    argsDigest: 'a'.repeat(64),
+  }
+
+  it('builds the ten-line canonical message with the frozen header and identities', () => {
+    const message = buildCanonicalApprovalMessage(base)
     expect(message.split('\n')).toEqual([
       'remora/1 approval',
+      HOST_ID,
+      DEVICE_ID,
       'appr_01923456789a',
-      argsDigest,
+      'sess_01923456789a',
+      'call_01923456789a',
+      'bash',
+      base.argsDigest,
       'allowed-once',
       '1790000000000',
     ])
     expect(message.endsWith('\n')).toBe(false)
   })
 
+  it('renders a dash for a missing callId', () => {
+    const message = buildCanonicalApprovalMessage({ ...base, callId: undefined })
+    expect(message.split('\n')[5]).toBe('-')
+  })
+
   it('rejects malformed canonical fields', () => {
-    const base = {
-      approvalId: 'a',
-      outcome: 'allowed-once' as const,
-      issuedAt: 1,
-      argsDigest: `sha256:${'a'.repeat(64)}`,
-    }
-    expect(() => buildCanonicalApprovalMessage({ ...base, approvalId: '' })).toThrow(/approvalId/)
-    expect(() => buildCanonicalApprovalMessage({ ...base, approvalId: 'a\nb' })).toThrow(/approvalId/)
-    expect(() => buildCanonicalApprovalMessage({ ...base, approvalId: 'a\rb' })).toThrow(/approvalId/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, approvalId: '' })).toThrow(/approval/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, approvalId: 'a\nb' })).toThrow(/approval/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, approvalId: 'a\rb' })).toThrow(/approval/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, approvalId: 'a'.repeat(129) })).toThrow(/approval/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, callId: '-' })).toThrow(/callId/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, sessionId: 'a\u0000b' })).toThrow(/sessionId/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, toolName: '' })).toThrow(/toolName/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, hostId: 'h_short' })).toThrow(/endpoint id/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, deviceId: 'd_short' })).toThrow(/endpoint id/)
     expect(() => buildCanonicalApprovalMessage({ ...base, issuedAt: -1 })).toThrow(/issuedAt/)
     expect(() => buildCanonicalApprovalMessage({ ...base, issuedAt: 1.5 })).toThrow(/issuedAt/)
     expect(() => buildCanonicalApprovalMessage({ ...base, argsDigest: 'deadbeef' })).toThrow(/argsDigest/)
-    expect(() =>
-      buildCanonicalApprovalMessage({ ...base, outcome: 'bogus' as unknown as ApprovalOutcome }),
-    ).toThrow(/outcome/)
+    expect(() => buildCanonicalApprovalMessage({ ...base, outcome: 'bogus' as unknown as ApprovalOutcome })).toThrow(
+      /outcome/,
+    )
   })
 
-  it('computes a canonical, key-order-independent args digest', () => {
+  it('computes the text + NUL + json args digest', () => {
     const digest = computeArgsDigest({ text: 'bash: pnpm test', json: '{"cmd":"pnpm test"}' })
-    expect(digest).toMatch(/^sha256:[0-9a-f]{64}$/)
-    expect(computeArgsDigest({ json: '{"cmd":"pnpm test"}', text: 'bash: pnpm test' })).toBe(digest)
+    expect(digest).toMatch(/^[0-9a-f]{64}$/)
+    expect(digest).toBe('b0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58')
     expect(computeArgsDigest({ text: 'other', json: '{}' })).not.toBe(digest)
-    expect(() => computeArgsDigest({ n: Number.POSITIVE_INFINITY })).toThrow(/finite/)
-    expect(() => computeArgsDigest(1n)).toThrow(/unsupported/)
+    expect(() => computeArgsDigest({ text: 'a\ud800b', json: '{}' })).toThrow(/Unicode/)
   })
 
   it('verifies P-256 DER signatures and accepts high-S variants', () => {
     const { secretKey, publicKey } = p256.keygen()
     const message = new TextEncoder().encode(
       buildCanonicalApprovalMessage({
-        approvalId: 'appr_01923456789a',
-        outcome: 'allowed-once',
-        issuedAt: 1_790_000_000_000,
+        ...base,
         argsDigest: computeArgsDigest({ text: 'bash: pnpm test', json: '{"cmd":"pnpm test"}' }),
       }),
     )
-    const spki = pointToSpki(publicKey)
+    // `p256.keygen().publicKey` is compressed (Crypto/1 §5.3 requires the
+    // stored approvalPub to be an uncompressed SEC1 point), so wrap the
+    // uncompressed encoding into the SPKI like Android Keystore does.
+    const spki = pointToSpki(p256.getPublicKey(secretKey, false))
     const signature = p256.sign(message, secretKey, { prehash: true, lowS: true, format: 'der' })
     expect(verifyApprovalSignature(spki, signature, message)).toBe(true)
 
@@ -309,12 +339,16 @@ describe('approval signatures (Crypto/1 §7)', () => {
     expect(verifyApprovalSignature(spki, new Uint8Array(70), message)).toBe(false)
     expect(verifyApprovalSignature(new Uint8Array(0), signature, message)).toBe(false)
     expect(verifyApprovalSignature(Uint8Array.of(0x30, 0x00), signature, message)).toBe(false)
-    expect(verifyApprovalSignature(pointToSpki(p256.keygen().publicKey), signature, message)).toBe(false)
+    expect(verifyApprovalSignature(pointToSpki(p256.getPublicKey(p256.keygen().secretKey, false)), signature, message)).toBe(false)
+    // A compressed-point SPKI is not the normative approvalPub shape: fail closed.
+    expect(verifyApprovalSignature(pointToSpki(publicKey), signature, message)).toBe(false)
   })
 })
 
 describe('push payloads (Crypto/1 §8)', () => {
-  it('seals and opens a payload with a random nonce prefix', () => {
+  const context = { hostId: HOST_ID, deviceId: DEVICE_ID }
+
+  it('seals and opens a payload with a random nonce prefix and identity AAD', () => {
     const key = randomBytes(32)
     const payload = {
       v: 1,
@@ -323,25 +357,29 @@ describe('push payloads (Crypto/1 §8)', () => {
       title: 'Approval needed · ds',
       body: 'bash: pnpm test',
     }
-    const sealed = sealPushPayload(key, payload)
+    const sealed = sealPushPayload(key, payload, context)
     expect(sealed.length).toBeGreaterThan(12 + 16)
-    expect(openPushPayload(key, sealed)).toEqual(payload)
+    expect(openPushPayload(key, sealed, context)).toEqual(payload)
 
-    const again = sealPushPayload(key, payload)
+    const again = sealPushPayload(key, payload, context)
     expect(again.slice(0, 12)).not.toEqual(sealed.slice(0, 12))
-    expect(openPushPayload(key, again)).toEqual(payload)
+    expect(openPushPayload(key, again, context)).toEqual(payload)
   })
 
-  it('fails closed on tampering, wrong keys, short input, and oversize payloads', () => {
+  it('fails closed on tampering, wrong keys, wrong context, and oversize payloads', () => {
     const key = randomBytes(32)
-    const sealed = sealPushPayload(key, { v: 1, kind: 'question' })
+    const sealed = sealPushPayload(key, { v: 1, kind: 'question' }, context)
     const flipped = Uint8Array.from(sealed)
     flipped[20] = (flipped[20] ?? 0) ^ 1
-    expect(() => openPushPayload(key, flipped)).toThrow()
-    expect(() => openPushPayload(randomBytes(32), sealed)).toThrow()
-    expect(() => openPushPayload(key, new Uint8Array(27))).toThrow(/too short/)
-    expect(() => sealPushPayload(new Uint8Array(16), { v: 1 })).toThrow(/32 bytes/)
-    expect(() => sealPushPayload(key, { blob: 'x'.repeat(3_000) })).toThrow(/2048/)
-    expect(() => sealPushPayload(key, undefined)).toThrow(/serializable/)
+    expect(() => openPushPayload(key, flipped, context)).toThrow()
+    expect(() => openPushPayload(randomBytes(32), sealed, context)).toThrow()
+    expect(() => openPushPayload(key, sealed, { hostId: HOST_ID, deviceId: 'd_erruijsx3ey2rmxcpeh3pgxjki' })).toThrow()
+    expect(() => openPushPayload(key, sealed, { hostId: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa', deviceId: DEVICE_ID })).toThrow()
+    expect(() => openPushPayload(key, new Uint8Array(27), context)).toThrow(/too short/)
+    expect(() => openPushPayload(key, new Uint8Array(3_000), context)).toThrow(/too large/)
+    expect(() => sealPushPayload(new Uint8Array(16), { v: 1 }, context)).toThrow(/32 bytes/)
+    expect(() => sealPushPayload(key, { blob: 'x'.repeat(3_000) }, context)).toThrow(/2048/)
+    expect(() => sealPushPayload(key, undefined, context)).toThrow(/serializable/)
+    expect(() => sealPushPayload(key, { v: 1 }, { hostId: 'h_short', deviceId: DEVICE_ID })).toThrow(/endpoint id/)
   })
 })

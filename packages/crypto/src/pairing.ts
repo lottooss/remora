@@ -1,8 +1,9 @@
 import { hkdf } from '@noble/hashes/hkdf.js'
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
-import { concatBytes, utf8ToBytes } from '@noble/hashes/utils.js'
+import { utf8ToBytes } from '@noble/hashes/utils.js'
 import { decodeBase64Url, encodeBase64Url } from './b64u.ts'
+import { assertEndpointId, assertRelayOrigin, assertUnicode } from './context.ts'
 
 const QR_PREFIX = 'remora://pair?'
 const QR_PARAM_KEYS: ReadonlySet<string> = new Set(['v', 'r', 'h', 'k', 't', 's', 'n', 'x'])
@@ -33,26 +34,12 @@ function containsControlCharacter(value: string): boolean {
   return false
 }
 
-function assertRelayOrigin(relayOrigin: string): void {
-  let url: URL
-  try {
-    url = new URL(relayOrigin)
-  } catch {
-    throw new Error('pairing: relay origin must be an absolute URL')
-  }
-  if (url.origin !== relayOrigin) throw new Error('pairing: relay origin must contain no path or fragment')
-  if (url.protocol === 'https:') return
-  if (url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === '10.0.2.2')) return
-  throw new Error('pairing: relay origin must be https (http allowed only for 127.0.0.1 / 10.0.2.2)')
-}
-
 function assertHostId(hostId: string): void {
-  if (hostId.length === 0 || hostId.length > 64 || containsControlCharacter(hostId)) {
-    throw new Error('pairing: malformed host id')
-  }
+  assertEndpointId(hostId, 'host')
 }
 
 function assertHostName(hostName: string): void {
+  assertUnicode(hostName)
   if (hostName.length === 0 || hostName.length > 40 || containsControlCharacter(hostName)) {
     throw new Error('pairing: host name must be 1-40 characters without control characters')
   }
@@ -105,7 +92,8 @@ export function buildPairingQr(data: PairingData): string {
  * named in Crypto/1 §5.1), malformed keys, and out-of-range fields. Expiry is
  * a wall-clock policy: callers MUST also reject QRs whose `x` has passed.
  */
-export function parsePairingQr(qr: string): PairingData {
+export function parsePairingQr(qr: string, nowSeconds?: number): PairingData {
+  if (qr.length > 4096) throw new Error('pairing: QR is too large')
   if (!qr.startsWith(QR_PREFIX)) throw new Error('pairing: QR must start with remora://pair?')
   if (qr.includes('#')) throw new Error('pairing: QR must not contain a fragment')
   const params = new Map<string, string>()
@@ -146,36 +134,21 @@ export function parsePairingQr(qr: string): PairingData {
   if (!/^\d+$/.test(expiryText)) throw new Error('pairing: expiry must be unix seconds')
   const expiry = Number(expiryText)
   assertExpiry(expiry)
+  if (nowSeconds !== undefined && expiry <= nowSeconds) throw new Error('pairing: QR expired')
   return { relayOrigin, hostId, hostNoisePub, ticket, pairingSecret, hostName, expiry }
 }
 
-/**
- * Derives the pairing PSK with HKDF-SHA256 (Crypto/1 §5.2), L = 32:
- *
- * `HKDF(ikm = pairingSecret, salt = "remora/1", info = "pair-psk" ‖ 0x00 ‖ ticketId)`
- */
-export function derivePairPsk(pairingSecret: Uint8Array, ticketId: string): Uint8Array {
+/** Derives the host-bound pairing PSK (Crypto/1 §5.2). */
+export function derivePairPsk(pairingSecret: Uint8Array, hostId: string): Uint8Array {
   if (pairingSecret.length !== 32) throw new Error('pairing: pairing secret must be 32 bytes')
-  const info = utf8ToBytes(`pair-psk\x00${ticketId}`)
-  return hkdf(sha256, pairingSecret, utf8ToBytes('remora/1'), info, 32)
+  assertHostId(hostId)
+  return hkdf(sha256, pairingSecret, utf8ToBytes('remora/1'), utf8ToBytes(`pair-psk\x00${hostId}`), 32)
 }
 
-/**
- * Six-digit short authentication string binding both static Noise public keys
- * under the pairing PSK, shaped like Crypto/1 §5.6:
- *
- * `uint32_be(HMAC-SHA256(key = psk, "remora/1 sas" ‖ 0x00 ‖ hostPub ‖ devicePub)[0..4]) mod 1 000 000`
- *
- * Rendered with leading zeros, e.g. `"048219"`.
- */
-export function deriveSasCode(hostNoisePub: Uint8Array, deviceNoisePub: Uint8Array, psk: Uint8Array): string {
-  if (hostNoisePub.length !== 32 || deviceNoisePub.length !== 32) {
-    throw new Error('pairing: noise public keys must be 32 bytes')
-  }
-  if (psk.length !== 32) throw new Error('pairing: psk must be 32 bytes')
-  const message = concatBytes(utf8ToBytes('remora/1 sas'), Uint8Array.of(0x00), hostNoisePub, deviceNoisePub)
-  const mac = hmac(sha256, psk, message)
-  const value =
-    (((mac[0] ?? 0) << 24) | ((mac[1] ?? 0) << 16) | ((mac[2] ?? 0) << 8) | (mac[3] ?? 0)) >>> 0
+/** Six decimal digits from the completed Noise transcript (Crypto/1 §5.3). */
+export function deriveSasCode(handshakeHash: Uint8Array): string {
+  if (handshakeHash.length !== 32) throw new Error('pairing: handshake hash must be 32 bytes')
+  const mac = hmac(sha256, handshakeHash, utf8ToBytes('remora/1 sas'))
+  const value = new DataView(mac.buffer, mac.byteOffset, mac.byteLength).getUint32(0, false)
   return String(value % 1_000_000).padStart(6, '0')
 }

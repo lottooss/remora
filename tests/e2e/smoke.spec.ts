@@ -8,6 +8,7 @@ import {
   enrollHost,
 } from '@remora/host'
 import { E2eEnvironment, FakeDevice } from '@remora/testkit'
+import { createFixtureHostRuntime } from '../helpers/host-runtime.ts'
 
 describe('End-to-End Smoke Tests (P1-T1)', () => {
   let env: E2eEnvironment | null = null
@@ -42,10 +43,7 @@ describe('End-to-End Smoke Tests (P1-T1)', () => {
     const rcpServer = new RcpServer({
       hostId: hostIdentity.hostId,
       hostName: 'E2E-Host',
-      statusProvider: {
-        isRelayConnected: () => hostRelay?.isConnected ?? false,
-        getPairedDevicesCount: () => registry.listDevices().filter((d) => !d.revoked).length,
-      },
+      runtimeProvider: createFixtureHostRuntime(),
     })
 
     hostRelay = new HostRelayConnection({
@@ -117,7 +115,7 @@ describe('End-to-End Smoke Tests (P1-T1)', () => {
 
     // 7. Send RCP hello RPC
     const helloRes = await channel.hello('Remora-Android', '0.1.0')
-    expect(helloRes.rcp).toEqual([1])
+    expect(helloRes.rcp).toBe(1)
     expect(helloRes.host.id).toBe(hostIdentity.hostId)
     expect(helloRes.host.name).toBe('E2E-Host')
     expect(helloRes.features).toContain('sessions')
@@ -129,8 +127,11 @@ describe('End-to-End Smoke Tests (P1-T1)', () => {
 
     // 9. Send RCP host.status RPC
     const statusRes = await channel.hostStatus()
-    expect(statusRes.relayConnected).toBe(true)
-    expect(statusRes.pairedDevicesCount).toBe(1)
+    expect(hostRelay.isConnected).toBe(true)
+    expect(registry.listDevices().filter((d) => !d.revoked)).toHaveLength(1)
+    expect(statusRes.agentsRunning).toBe(0)
+    expect(statusRes.keepAwake).toBe(false)
+    expect(statusRes.dsh).toEqual({ version: 'fake-dsh', profile: 'remora-e2e' })
     expect(statusRes.uptimeMs).toBeGreaterThanOrEqual(0)
   })
 

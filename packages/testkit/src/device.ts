@@ -11,7 +11,6 @@ import {
   deriveEndpointId,
   derivePairPsk,
   deriveSasCode,
-  encodeBase32,
   encodeBase64Url,
   generateKeypair,
   getRelayPublicKey,
@@ -22,7 +21,10 @@ import {
   type Keypair,
 } from '@remora/crypto'
 import {
+  HelloResultSchema,
+  HostStatusResultSchema,
   PeerKind,
+  RCP_VERSION,
   type DataFrame,
 } from '@remora/protocol'
 import { RelayLink, type RelayLinkState } from '@remora/relay-link'
@@ -216,27 +218,20 @@ export class FakeDeviceChannel {
     })
   }
 
-  async hello(clientName = 'Remora Testkit', clientVersion = '1.0.0'): Promise<{
-    host: { id: string; name: string; version: string }
-    rcp: number[]
-    features: string[]
-    policy: Record<string, unknown>
-  }> {
-    return this.call('hello', {
-      client: { name: clientName, version: clientVersion },
-    })
+  /** The testkit's wire app identity is fixed, independent of its display name. */
+  async hello(_clientName = 'remora-testkit', clientVersion = '1.0.0'): Promise<ReturnType<typeof HelloResultSchema.parse>> {
+    return HelloResultSchema.parse(await this.call('hello', {
+      rcp: [RCP_VERSION],
+      app: { name: 'remora-testkit', version: clientVersion },
+    }))
   }
 
   async ping(t = Date.now()): Promise<{ t: number; hostTime: number }> {
     return this.call('ping', { t })
   }
 
-  async hostStatus(): Promise<{
-    relayConnected: boolean
-    pairedDevicesCount: number
-    uptimeMs: number
-  }> {
-    return this.call('host.status')
+  async hostStatus(): Promise<ReturnType<typeof HostStatusResultSchema.parse>> {
+    return HostStatusResultSchema.parse(await this.call('host.status'))
   }
 
   close(): void {
@@ -431,8 +426,7 @@ export class FakeDevice {
   }> {
     const qrData = parsePairingQr(qrPayload)
     const httpOrigin = relayHttpUrl ?? qrData.relayOrigin
-    const ticketId = `t_${encodeBase32(qrData.ticket.subarray(0, 16))}`
-    const pairPsk = derivePairPsk(qrData.pairingSecret, ticketId)
+    const pairPsk = derivePairPsk(qrData.pairingSecret, qrData.hostId)
 
     // Enroll at relay
     await this.enrollAtRelay(httpOrigin, encodeBase64Url(qrData.ticket))
@@ -483,7 +477,7 @@ export class FakeDevice {
     const msg2Body = await waitMsg2
     initiator.readMessage(msg2Body)
 
-    const sasCode = deriveSasCode(qrData.hostNoisePub, this.noiseKeypair.publicKey, pairPsk)
+    const sasCode = deriveSasCode(initiator.result.handshakeHash)
     const recvCipher = initiator.result.recvCipher
 
     const waitForResult = (timeoutMs = 10_000) => {

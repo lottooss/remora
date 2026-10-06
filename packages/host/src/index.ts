@@ -4,6 +4,7 @@
  * (`cordis.patch.yml`).
  */
 import os from 'node:os'
+import manifest from '../package.json' with { type: 'json' }
 import { Logger, type Context, type Exporter, type Message } from '@deepseek-ai/cordis'
 // Declaration merging: this type-only import teaches the compiler that
 // `ctx.typertGateway` (api-gateway) exists on the Cordis Context. The dsh
@@ -16,7 +17,9 @@ import { decodeBase64Url } from '@remora/crypto'
 import { ChannelManager } from './channel/index.ts'
 import { Config, resolveConfig } from './config.ts'
 import { RetryingGateway } from './adapter/gateway.ts'
-import { loadPersistentDeviceRegistry, type DeviceRecord } from './devices/index.ts'
+import { createSessionActivitySource } from './adapter/session-control.ts'
+import { createDshRuntimeProvider } from './adapter/runtime.ts'
+import { loadPersistentDeviceRegistry } from './devices/index.ts'
 import { loadOrCreateHostIdentity } from './identity/credentials.ts'
 import { PairingService } from './pairing/index.ts'
 import { RcpServer } from './rcp/index.ts'
@@ -83,7 +86,7 @@ export const name = 'remora'
  * fiber — see the P0-S1 spike). The optional web connection is NOT here:
  * the management routes register through `ctx.inject(['connection'], ...)`.
  */
-export const inject: string[] = ['typertGateway', 'credentials', 'storage']
+export const inject: string[] = ['typertGateway', 'credentials', 'storage', 'agents', 'sessions']
 
 /**
  * Plugin body: resolve configuration, load-or-create the persistent host
@@ -114,6 +117,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     },
   }
   ctx.logger.exporter(consoleBridge)
+  // Check the Cordis seam before creating credentials, listeners, or relay
+  // resources. A failed ordering check must prevent the plugin from starting.
+  if (!(await runAnswerBridgeSelfCheck(ctx))) {
+    throw new Error('remora: AnswerBridge waterfall self-check failed; host startup refused')
+  }
   // The identity persists in the dsh credentials record `remora/host-identity`
   // (crypto-v1.md §3): generated exactly once, reloaded on every restart, so
   // restarting dsh no longer breaks every pairing. `inject` above guarantees
@@ -282,13 +290,22 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     rotations: approvalRotations,
   })
 
+  const policyGuard = new DefaultPolicyGuard({
+    remoteRoots: resolved.remoteRoots,
+    approvalBiometric: resolved.approvalBiometric,
+    approvalAuth: resolved.approvalAuth,
+    allowRemoteSessionStart: resolved.allowRemoteSessionStart,
+  })
+
   const rcpServer = new RcpServer({
     hostId: identity.hostId,
     hostName,
-    statusProvider: {
-      isRelayConnected: () => relay.isConnected,
-      getPairedDevicesCount: () => registry.listDevices().filter((d: DeviceRecord) => !d.revoked).length,
-    },
+    runtimeProvider: createDshRuntimeProvider(ctx, {
+      remoraVersion: manifest.version,
+      features: ['sessions', 'interaction', 'workspaces', 'files', 'diffs.git', 'notify', 'models'],
+      policyGuard,
+      isKeepAwakeAcquired: () => keepAwakeManager.isAcquired,
+    }),
   })
 
   // Observation seam for the method-set parity test (P7-H7): the plugin
@@ -317,18 +334,12 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const disposeBridge = registerAnswerBridge(ctx, {
     registry,
     pendingRegistry,
+    policyGuard,
+    approvalTimeoutMs: resolved.approvalTimeoutMs,
+    questionTimeoutMs: resolved.approvalTimeoutMs,
   })
 
-  void runAnswerBridgeSelfCheck(ctx)
-
-  const policyGuard = new DefaultPolicyGuard({
-    remoteRoots: resolved.remoteRoots,
-    approvalBiometric: resolved.approvalBiometric,
-    approvalAuth: resolved.approvalAuth,
-    allowRemoteSessionStart: resolved.allowRemoteSessionStart,
-  })
-
-  registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard)
+  registerInteractionMethods(rcpServer, pendingRegistry, registry, policyGuard, identity.hostId)
 
   // Guaranteed by `inject` above: without it the fiber never loads, so the
   // previous silent `if (gateway)` branch (which skipped the session methods
@@ -355,6 +366,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     gateway,
     policyGuard,
     workspaceAdapter,
+    activity: createSessionActivitySource(ctx),
   })
   registerSessionMethods(rcpServer, sessionAdapter, (sessionId, deviceId) => {
     notifier.recordSessionDevice(sessionId, deviceId)
@@ -382,6 +394,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   relay.attachChannelManager(channelManager)
 
   const notifier = new HostNotifier({
+    hostId: identity.hostId,
     registry,
     prefsStore: notifyPrefsStore,
     config: resolved.notify,
@@ -402,6 +415,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const keepAwakeManager = new KeepAwakeManager({
     enabled: resolved.keepAwake === 'while-busy',
     gracePeriodMs: 120_000,
+    warn: (message) => ctx.logger.warn('%s', message),
   })
 
   // The dsh event wiring (P7-H5): the handlers are typed against the real dsh
@@ -445,12 +459,16 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       detachNotifier()
       keepAwakeManager.dispose()
       disposeBridge()
+      pairingService.dispose()
       for (const timer of pendingUnpairRevokeTimers) clearTimeout(timer)
       pendingUnpairRevokeTimers.clear()
       channelManager.closeAll()
       await connecting
-      await registry.flush()
-      await relay.stop()
+      try {
+        await registry.flush()
+      } finally {
+        await relay.stop()
+      }
     },
     'remora host',
   )
@@ -493,7 +511,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   ctx.logger.info(
     'remora: host started (id: %s, relay: %s, %d remote roots)',
-    identity.hostId,
+    identity.hostId.slice(0, 6),
     resolved.relayOrigin,
     resolved.remoteRoots.length,
   )
