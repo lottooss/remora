@@ -467,13 +467,14 @@ export class PersistentDeviceRegistry implements DeviceRegistry, NotifyPrefsStor
       })
     }
     const write = this.writeQueue.then(run)
-    this.latestWrite = write
-    this.writeQueue = write.then(
+    const settled = write.then(
       () => undefined,
       (error: unknown) => {
         backing.options.onWriteError?.(error)
       },
     )
+    this.latestWrite = settled
+    this.writeQueue = settled
   }
 
   /** File mode only (tests): the legacy JSON-array format, unchanged. */
