@@ -107,7 +107,7 @@ class TransportTest {
         // The auth message carries the full context-bound field set (Crypto/1 §4).
         val authSent = json.parseToJsonElement(ws.sentTexts[0]).jsonObject
         assertThat(authSent["t"]?.jsonPrimitive?.content).isEqualTo("auth")
-        assertThat(authSent["v"]?.jsonPrimitive?.int).isEqualTo(1)
+        assertThat(authSent["v"]?.jsonPrimitive?.content).isEqualTo("1")
         assertThat(authSent["kind"]?.jsonPrimitive?.content).isEqualTo("device")
         assertThat(authSent["id"]?.jsonPrimitive?.content).isEqualTo(deviceId)
 
