@@ -50,7 +50,9 @@ class FakeWebSocket extends EventEmitter {
 
 describe('RelayLink', () => {
   const relayPrivateKey = new Uint8Array(32).fill(0x07)
-  const endpointId = 'h_test12345678901234567890'
+  // A well-formed endpoint id (h_ + 26 base32 characters, Crypto/1 §2):
+  // signing the relay challenge asserts this shape and fails closed.
+  const endpointId = 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa'
 
   it('connects and authenticates on receiving challenge', async () => {
     let wsInstance: FakeWebSocket | null = null
