@@ -153,7 +153,12 @@ async function readJsonBody(request: Request): Promise<unknown | null> {
       bytes.set(chunk, offset)
       offset += chunk.length
     }
-    return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown
+    // The workerd TextDecoder lib has no `fatal` option: reject anything the
+    // decoder silently replaced by re-encoding and comparing bytes.
+    const text = new TextDecoder().decode(bytes)
+    const reencoded = new TextEncoder().encode(text)
+    if (reencoded.length !== bytes.length || !reencoded.every((b, i) => b === bytes[i])) return null
+    return JSON.parse(text) as unknown
   } catch {
     return null
   } finally {
