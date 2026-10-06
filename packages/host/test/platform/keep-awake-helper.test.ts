@@ -6,10 +6,13 @@ import { describe, expect, it, vi } from 'vitest'
 describe('Windows fallback dependency boundary', () => {
   it('handles a real native-loader failure without false acquisition or repeated warnings', () => {
     const output = execFileSync(process.execPath, [fileURLToPath(new URL('./fallback-probe.mjs', import.meta.url))], {
-      encoding: 'utf8', windowsHide: true, timeout: 25_000,
+      // The probe gives the helper the driver's full startup window (plus its
+      // own margin) twice — a cold PowerShell/Add-Type start on a loaded
+      // runner is slow; the assertions themselves stay unchanged.
+      encoding: 'utf8', windowsHide: true, timeout: 45_000,
     })
     expect(output).toContain('fallback lifecycle complete')
-  }, 30_000)
+  }, 50_000)
 
   if (process.platform === 'win32') {
     it('releases the real helper after its parent exits without cleanup', async () => {

@@ -12,8 +12,11 @@ const hook = registerHooks({
 })
 const warnings = []
 const driver = new Win32KeepAwakeDriver({ warn: (message) => warnings.push(message) })
+// Must exceed the driver's own 10 s helper-start timeout: the probe observes
+// the helper's full startup window on a cold, loaded runner before judging it.
+const deadlineMs = 20_000
 async function waitFor(predicate) {
-  const deadline = Date.now() + 8000
+  const deadline = Date.now() + deadlineMs
   while (!predicate() && Date.now() < deadline) await setTimeout(20)
   assert.ok(predicate(), 'Keep-awake did not reach the expected state')
 }
