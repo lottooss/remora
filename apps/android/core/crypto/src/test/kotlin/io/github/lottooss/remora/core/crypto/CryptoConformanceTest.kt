@@ -18,17 +18,31 @@ class CryptoConformanceTest {
     private fun loadVector(name: String) =
         Json.parseToJsonElement(File(conformanceDir, "vectors/crypto/$name").readText()).jsonObject
 
+    /** Fails the case unless the operation throws: error vectors are fail-closed contracts. */
+    private fun expectThrows(operation: () -> Unit) {
+        val threw = try {
+            operation()
+            false
+        } catch (_: Exception) {
+            true
+        }
+        assertThat(threw).isTrue()
+    }
+
     @Test
     fun testEndpointIdVectors() {
         val root = loadVector("endpoint-id.json")
         for (elem in root["cases"]!!.jsonArray) {
             val caseObj = elem.jsonObject
             val input = caseObj["input"]!!.jsonObject
-            val expect = caseObj["expect"]!!.jsonObject
             val prefix = input["prefix"]!!.jsonPrimitive.content
             val relayPub = decodeBase64Url(input["relayPubB64u"]!!.jsonPrimitive.content)
-            val expectedId = expect["endpointId"]!!.jsonPrimitive.content
 
+            if (caseObj["error"] != null) {
+                expectThrows { deriveEndpointId(prefix, relayPub) }
+                continue
+            }
+            val expectedId = caseObj["expect"]!!.jsonObject["endpointId"]!!.jsonPrimitive.content
             val actual = deriveEndpointId(prefix, relayPub)
             assertThat(actual).isEqualTo(expectedId)
         }
@@ -40,16 +54,23 @@ class CryptoConformanceTest {
         for (elem in root["cases"]!!.jsonArray) {
             val caseObj = elem.jsonObject
             val input = caseObj["input"]!!.jsonObject
-            val expect = caseObj["expect"]!!.jsonObject
-            val pub = decodeBase64Url(input["publicKeyB64u"]!!.jsonPrimitive.content)
             val fields = RelayAuthFields(
                 relayOrigin = input["relayOrigin"]!!.jsonPrimitive.content,
                 kind = input["kind"]!!.jsonPrimitive.content,
                 endpointId = input["endpointId"]!!.jsonPrimitive.content,
                 nonce = decodeBase64Url(input["nonceB64u"]!!.jsonPrimitive.content),
             )
+
+            // Signing vectors carry the private key and assert the canonical-origin rules.
+            val privateKeyB64u = input["privateKeyB64u"]?.jsonPrimitive?.content
+            if (privateKeyB64u != null) {
+                expectThrows { signRelayChallenge(decodeBase64Url(privateKeyB64u), fields) }
+                continue
+            }
+
+            val pub = decodeBase64Url(input["publicKeyB64u"]!!.jsonPrimitive.content)
             val sig = decodeBase64Url(input["signatureB64u"]!!.jsonPrimitive.content)
-            val expectedValid = expect["valid"]!!.jsonPrimitive.content.toBoolean()
+            val expectedValid = caseObj["expect"]!!.jsonObject["valid"]!!.jsonPrimitive.content.toBoolean()
 
             val actual = verifyRelayChallenge(pub, fields, sig)
             assertThat(actual).isEqualTo(expectedValid)
@@ -62,18 +83,24 @@ class CryptoConformanceTest {
         for (elem in root["cases"]!!.jsonArray) {
             val caseObj = elem.jsonObject
             val input = caseObj["input"]!!.jsonObject
-            val expect = caseObj["expect"]!!.jsonObject
             if (input["pairingSecretB64u"] != null) {
                 val secret = decodeBase64Url(input["pairingSecretB64u"]!!.jsonPrimitive.content)
                 val hostId = input["hostId"]!!.jsonPrimitive.content
-                val expectedHex = expect["pairPskHex"]!!.jsonPrimitive.content
 
+                if (caseObj["error"] != null) {
+                    expectThrows { derivePairPsk(secret, hostId) }
+                    continue
+                }
+                val expectedHex = caseObj["expect"]!!.jsonObject["pairPskHex"]!!.jsonPrimitive.content
                 val actual = derivePairPsk(secret, hostId)
                 assertThat(encodeHex(actual)).isEqualTo(expectedHex)
             } else {
                 val handshakeHash = decodeHex(input["handshakeHashHex"]!!.jsonPrimitive.content)
-                val expectedSas = expect["sasCode"]!!.jsonPrimitive.content
-
+                if (caseObj["error"] != null) {
+                    expectThrows { deriveSasCode(handshakeHash) }
+                    continue
+                }
+                val expectedSas = caseObj["expect"]!!.jsonObject["sasCode"]!!.jsonPrimitive.content
                 assertThat(deriveSasCode(handshakeHash)).isEqualTo(expectedSas)
             }
         }
@@ -129,15 +156,19 @@ class CryptoConformanceTest {
         for (elem in root["cases"]!!.jsonArray) {
             val caseObj = elem.jsonObject
             val input = caseObj["input"]!!.jsonObject
-            val expect = caseObj["expect"]!!.jsonObject
             val key = decodeBase64Url(input["pushKeyB64u"]!!.jsonPrimitive.content)
             val context = PushContext(
                 hostId = input["hostId"]!!.jsonPrimitive.content,
                 deviceId = input["deviceId"]!!.jsonPrimitive.content,
             )
             val sealed = decodeBase64Url(input["sealedB64u"]!!.jsonPrimitive.content)
-            val expectedValid = expect["valid"]?.jsonPrimitive?.content?.toBoolean()
-            val expectedPlaintext = expect["plaintextJson"]?.jsonPrimitive?.content
+
+            if (caseObj["error"] != null) {
+                expectThrows { openPushPayload(key, sealed, context) }
+                continue
+            }
+            val expectedValid = caseObj["expect"]!!.jsonObject["valid"]?.jsonPrimitive?.content?.toBoolean()
+            val expectedPlaintext = caseObj["expect"]!!.jsonObject["plaintextJson"]?.jsonPrimitive?.content
 
             if (expectedValid == false) {
                 val threw = try {
@@ -156,9 +187,8 @@ class CryptoConformanceTest {
         for (elem in root["cases"]!!.jsonArray) {
             val caseObj = elem.jsonObject
             val input = caseObj["input"]!!.jsonObject
-            val expect = caseObj["expect"]!!.jsonObject
             if (input["text"] != null) {
-                val expectedDigest = expect["argsDigestHex"]!!.jsonPrimitive.content
+                val expectedDigest = caseObj["expect"]!!.jsonObject["argsDigestHex"]!!.jsonPrimitive.content
                 assertThat(computeArgsDigest(input["text"]!!.jsonPrimitive.content, input["json"]!!.jsonPrimitive.content))
                     .isEqualTo(expectedDigest)
                 continue
@@ -174,7 +204,12 @@ class CryptoConformanceTest {
                 outcome = input["outcome"]!!.jsonPrimitive.content,
                 issuedAt = input["issuedAt"]!!.jsonPrimitive.content.toLong(),
             )
-            val expectedMsg = expect["canonicalMessage"]!!.jsonPrimitive.content
+
+            if (caseObj["error"] != null) {
+                expectThrows { buildCanonicalApprovalMessage(fields) }
+                continue
+            }
+            val expectedMsg = caseObj["expect"]!!.jsonObject["canonicalMessage"]!!.jsonPrimitive.content
 
             val actual = buildCanonicalApprovalMessage(fields)
             assertThat(actual).isEqualTo(expectedMsg)

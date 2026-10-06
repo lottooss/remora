@@ -73,6 +73,17 @@
       "expect": {
         "valid": false
       }
+    },
+    {
+      "name": "a non-canonical origin is rejected when signing",
+      "input": {
+        "privateKeyB64u": "AwoRGB8mLTQ7QklQV15lbHN6gYiPlp2kq7K5wMfO1dw",
+        "relayOrigin": "https://relay.example.test/path",
+        "kind": "host",
+        "endpointId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "nonceB64u": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
+      },
+      "error": "invalid_origin"
     }
   ]
 }

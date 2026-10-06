@@ -22,6 +22,31 @@
       "expect": {
         "sasCode": "764025"
       }
+    },
+    {
+      "name": "SAS derives a different code from a different transcript",
+      "input": {
+        "handshakeHashHex": "201f1e1d1c1b1a191817161514131211100f0e0d0c0b0a090807060504030201"
+      },
+      "expect": {
+        "sasCode": "262294"
+      }
+    },
+    {
+      "name": "a pairing secret that is not 32 bytes is rejected",
+      "input": {
+        "pairingSecretB64u": "oKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoA",
+        "hostId": "h_erruijsx3ey2rmxcpeh3pgxjkm"
+      },
+      "error": "invalid_key_length"
+    },
+    {
+      "name": "a malformed host id is rejected",
+      "input": {
+        "pairingSecretB64u": "oKGio6SlpqeoqaqrrK2ur7CxsrO0tba3uLm6u7y9vr8",
+        "hostId": "h_short"
+      },
+      "error": "invalid_endpoint_id"
     }
   ]
 }

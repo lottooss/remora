@@ -317,7 +317,10 @@ describe('approval signatures (Crypto/1 §7)', () => {
         argsDigest: computeArgsDigest({ text: 'bash: pnpm test', json: '{"cmd":"pnpm test"}' }),
       }),
     )
-    const spki = pointToSpki(publicKey)
+    // `p256.keygen().publicKey` is compressed (Crypto/1 §5.3 requires the
+    // stored approvalPub to be an uncompressed SEC1 point), so wrap the
+    // uncompressed encoding into the SPKI like Android Keystore does.
+    const spki = pointToSpki(p256.getPublicKey(secretKey, false))
     const signature = p256.sign(message, secretKey, { prehash: true, lowS: true, format: 'der' })
     expect(verifyApprovalSignature(spki, signature, message)).toBe(true)
 
@@ -336,7 +339,9 @@ describe('approval signatures (Crypto/1 §7)', () => {
     expect(verifyApprovalSignature(spki, new Uint8Array(70), message)).toBe(false)
     expect(verifyApprovalSignature(new Uint8Array(0), signature, message)).toBe(false)
     expect(verifyApprovalSignature(Uint8Array.of(0x30, 0x00), signature, message)).toBe(false)
-    expect(verifyApprovalSignature(pointToSpki(p256.keygen().publicKey), signature, message)).toBe(false)
+    expect(verifyApprovalSignature(pointToSpki(p256.getPublicKey(p256.keygen().secretKey, false)), signature, message)).toBe(false)
+    // A compressed-point SPKI is not the normative approvalPub shape: fail closed.
+    expect(verifyApprovalSignature(pointToSpki(publicKey), signature, message)).toBe(false)
   })
 })
 
@@ -370,8 +375,8 @@ describe('push payloads (Crypto/1 §8)', () => {
     expect(() => openPushPayload(randomBytes(32), sealed, context)).toThrow()
     expect(() => openPushPayload(key, sealed, { hostId: HOST_ID, deviceId: 'd_erruijsx3ey2rmxcpeh3pgxjki' })).toThrow()
     expect(() => openPushPayload(key, sealed, { hostId: 'h_aaaaaaaaaaaaaaaaaaaaaaaaaa', deviceId: DEVICE_ID })).toThrow()
-    expect(() => openPushPayload(key, new Uint8Array(27), context)).toThrow(/size is invalid/)
-    expect(() => openPushPayload(key, new Uint8Array(3_000), context)).toThrow(/size is invalid/)
+    expect(() => openPushPayload(key, new Uint8Array(27), context)).toThrow(/too short/)
+    expect(() => openPushPayload(key, new Uint8Array(3_000), context)).toThrow(/too large/)
     expect(() => sealPushPayload(new Uint8Array(16), { v: 1 }, context)).toThrow(/32 bytes/)
     expect(() => sealPushPayload(key, { blob: 'x'.repeat(3_000) }, context)).toThrow(/2048/)
     expect(() => sealPushPayload(key, undefined, context)).toThrow(/serializable/)

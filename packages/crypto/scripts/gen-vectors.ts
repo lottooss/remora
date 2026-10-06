@@ -33,6 +33,7 @@ function writeJson(name: string, content: unknown): void {
 const fixedRelayPub = bytes((i) => 0x42)
 const hostIdDerived = deriveEndpointId('h_', fixedRelayPub)
 const deviceIdDerived = deriveEndpointId('d_', fixedRelayPub)
+const otherRelayPub = bytes(() => 0x43)
 
 writeJson('endpoint-id.json', {
   suite: 'crypto/endpoint-id',
@@ -49,6 +50,21 @@ writeJson('endpoint-id.json', {
       name: 'device endpoint id',
       input: { prefix: 'd_', relayPubB64u: encodeBase64Url(fixedRelayPub) },
       expect: { endpointId: deviceIdDerived },
+    },
+    {
+      name: 'a different key derives a different id',
+      input: { prefix: 'h_', relayPubB64u: encodeBase64Url(otherRelayPub) },
+      expect: { endpointId: deriveEndpointId('h_', otherRelayPub) },
+    },
+    {
+      name: 'a prefix other than h_ or d_ is rejected',
+      input: { prefix: 'x_', relayPubB64u: encodeBase64Url(fixedRelayPub) },
+      error: 'invalid_prefix',
+    },
+    {
+      name: 'a relay key that is not 32 bytes is rejected',
+      input: { prefix: 'h_', relayPubB64u: encodeBase64Url(new Uint8Array(31).fill(0x42)) },
+      error: 'invalid_key_length',
     },
   ],
 })
@@ -137,6 +153,17 @@ writeJson('relay-auth.json', {
       },
       expect: { valid: false },
     },
+    {
+      name: 'a non-canonical origin is rejected when signing',
+      input: {
+        privateKeyB64u: encodeBase64Url(edPriv),
+        relayOrigin: 'https://relay.example.test/path',
+        kind: 'host',
+        endpointId: HOST_ID,
+        nonceB64u: encodeBase64Url(nonce),
+      },
+      error: 'invalid_origin',
+    },
   ],
 })
 
@@ -144,6 +171,7 @@ writeJson('relay-auth.json', {
 const pairingSecret = bytes((i) => 0xa0 + i)
 const pairPsk = derivePairPsk(pairingSecret, HOST_ID)
 const handshakeHash = bytes((i) => i + 1)
+const otherHandshakeHash = bytes((i) => 32 - i)
 
 writeJson('pairing.json', {
   suite: 'crypto/pairing',
@@ -163,6 +191,27 @@ writeJson('pairing.json', {
       name: 'SAS derives six digits from the handshake hash',
       input: { handshakeHashHex: bytesToHex(handshakeHash) },
       expect: { sasCode: deriveSasCode(handshakeHash) },
+    },
+    {
+      name: 'SAS derives a different code from a different transcript',
+      input: { handshakeHashHex: bytesToHex(otherHandshakeHash) },
+      expect: { sasCode: deriveSasCode(otherHandshakeHash) },
+    },
+    {
+      name: 'a pairing secret that is not 32 bytes is rejected',
+      input: {
+        pairingSecretB64u: encodeBase64Url(new Uint8Array(31).fill(0xa0)),
+        hostId: HOST_ID,
+      },
+      error: 'invalid_key_length',
+    },
+    {
+      name: 'a malformed host id is rejected',
+      input: {
+        pairingSecretB64u: encodeBase64Url(pairingSecret),
+        hostId: 'h_short',
+      },
+      error: 'invalid_endpoint_id',
     },
   ],
 })
@@ -201,6 +250,16 @@ writeJson('approval.json', {
       name: 'args digest over text, NUL and raw json',
       input: { text: 'bash: pnpm test', json: '{"cmd":"pnpm test"}' },
       expect: { argsDigestHex: computeArgsDigest({ text: 'bash: pnpm test', json: '{"cmd":"pnpm test"}' }) },
+    },
+    {
+      name: 'a malformed argsDigest is rejected',
+      input: { ...approvalFields, argsDigest: 'deadbeef' },
+      error: 'malformed_args_digest',
+    },
+    {
+      name: 'an unknown outcome is rejected',
+      input: { ...approvalFields, outcome: 'allowed-always' },
+      error: 'invalid_outcome',
     },
   ],
 })
@@ -253,6 +312,26 @@ writeJson('push.json', {
         sealedB64u: encodeBase64Url(pushSealed),
       },
       expect: { valid: false },
+    },
+    {
+      name: 'a sealed payload shorter than nonce and tag is rejected',
+      input: {
+        pushKeyB64u: encodeBase64Url(pushKey),
+        hostId: HOST_ID,
+        deviceId: DEVICE_ID,
+        sealedB64u: encodeBase64Url(new Uint8Array(27)),
+      },
+      error: 'payload_too_short',
+    },
+    {
+      name: 'a sealed payload beyond the 2048-byte bound is rejected',
+      input: {
+        pushKeyB64u: encodeBase64Url(pushKey),
+        hostId: HOST_ID,
+        deviceId: DEVICE_ID,
+        sealedB64u: encodeBase64Url(new Uint8Array(3_000)),
+      },
+      error: 'payload_too_large',
     },
   ],
 })

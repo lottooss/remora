@@ -46,6 +46,36 @@
       "expect": {
         "argsDigestHex": "b0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58"
       }
+    },
+    {
+      "name": "a malformed argsDigest is rejected",
+      "input": {
+        "hostId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "deviceId": "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        "approvalId": "appr_01923456789a",
+        "sessionId": "sess_01923456789a",
+        "callId": "call_01923456789a",
+        "toolName": "bash",
+        "outcome": "allowed-once",
+        "issuedAt": 1790000000000,
+        "argsDigest": "deadbeef"
+      },
+      "error": "malformed_args_digest"
+    },
+    {
+      "name": "an unknown outcome is rejected",
+      "input": {
+        "hostId": "h_erruijsx3ey2rmxcpeh3pgxjkm",
+        "deviceId": "d_erruijsx3ey2rmxcpeh3pgxjkm",
+        "approvalId": "appr_01923456789a",
+        "sessionId": "sess_01923456789a",
+        "callId": "call_01923456789a",
+        "toolName": "bash",
+        "outcome": "allowed-always",
+        "issuedAt": 1790000000000,
+        "argsDigest": "b0c88de8029c562872f9841e67deccb99be01b4e3ab35ace0242abf5fc7bac58"
+      },
+      "error": "invalid_outcome"
     }
   ]
 }
