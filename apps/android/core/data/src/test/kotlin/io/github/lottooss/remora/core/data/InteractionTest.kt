@@ -2,6 +2,7 @@ package io.github.lottooss.remora.core.data
 
 import com.google.common.truth.Truth.assertThat
 import io.github.lottooss.remora.core.crypto.computeArgsDigest
+import io.github.lottooss.remora.core.crypto.encodeBase64Url
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
@@ -71,7 +72,9 @@ class InteractionTest {
                 providerCalled = true
                 assertThat(canonicalMsg).contains("remora/1 approval")
                 assertThat(canonicalMsg).contains("appr_high_1")
-                "fake_sig_b64u"
+                // Canonical unpadded base64u (Crypto/1 §7): the service decodes
+                // and re-encodes the signature fail-closed before sending it.
+                encodeBase64Url(ByteArray(64) { 0x11.toByte() })
             },
             rpcCaller = caller::call,
         )
