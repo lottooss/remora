@@ -134,6 +134,9 @@ function createState(options: StateOptions = {}): RouteState {
     sendFrame: (bytes) => {
       hostFrames.push(bytes)
     },
+    // The relay side of the enrollment-ticket seam, faked (SWARM §3): pairing
+    // refuses to start without it (Crypto/1 §5.1 — a ticket is part of the QR).
+    requestEnrollmentTicket: async () => randomBytes(32),
   })
   const terminal = { isTTY: options.isTTY ?? true, chunks: [] as string[] }
   const stdout: TerminalQrStream = {

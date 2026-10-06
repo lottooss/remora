@@ -216,8 +216,10 @@ describe('P3-H1: AnswerBridge — Approvals and Questions', () => {
     // Generate EC P-256 approval key for fake device
     const { privateKey, publicKeySpkiDer } = generateApprovalKeypair()
 
+    // The device is looked up by the authenticated connection's device id
+    // (Crypto/1 §7: identity comes from the connection, never the answer).
     deviceRegistry.addDevice({
-      deviceId: 'd_test1',
+      deviceId: DEVICE_ID,
       name: 'Phone',
       noisePublicKey: new Uint8Array(32),
       devicePsk: new Uint8Array(32),

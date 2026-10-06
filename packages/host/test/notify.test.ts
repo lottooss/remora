@@ -489,7 +489,7 @@ describe('P5-H1: Host Notifier', () => {
 
       expect(pushes).toHaveLength(2)
       const deviceIds = pushes.map((p) => p.device.deviceId).sort()
-      expect(deviceIds).toEqual(['d_erruijsx3ey2rmxcpeh3pgxjkm', 'd_erruijsx3ey2rmxcpeh3pgxjki'])
+      expect(deviceIds).toEqual(['d_erruijsx3ey2rmxcpeh3pgxjki', 'd_erruijsx3ey2rmxcpeh3pgxjkm'])
     })
 
     it('only dispatches to devices with valid push keys', async () => {

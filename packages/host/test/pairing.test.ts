@@ -85,6 +85,8 @@ describe('P2-H1: Pairing and Device Registry', () => {
       identity: hostIdentity,
       hostName: 'TestHost',
       relayOrigin: 'https://relay.test',
+      // The relay side of the enrollment-ticket seam, faked (fail-closed pairing).
+      requestEnrollmentTicket: async () => randomBytes(32),
       registry,
       sendFrame: (bytes) => {
         hostFrames.push(bytes)
@@ -180,6 +182,8 @@ describe('P2-H1: Pairing and Device Registry', () => {
       identity: hostIdentity,
       hostName: 'TestHost',
       relayOrigin: 'https://relay.test',
+      // The relay side of the enrollment-ticket seam, faked (fail-closed pairing).
+      requestEnrollmentTicket: async () => randomBytes(32),
       registry,
       sendFrame: () => {},
     })
@@ -224,6 +228,8 @@ describe('P2-H1: Pairing and Device Registry', () => {
       identity: hostIdentity,
       hostName: 'TestHost',
       relayOrigin: 'https://relay.test',
+      // The relay side of the enrollment-ticket seam, faked (fail-closed pairing).
+      requestEnrollmentTicket: async () => randomBytes(32),
       registry,
       sendFrame: () => {},
     })
@@ -264,6 +270,8 @@ describe('P2-H1: Pairing and Device Registry', () => {
       identity: hostIdentity,
       hostName: 'TestHost',
       relayOrigin: 'https://relay.test',
+      // The relay side of the enrollment-ticket seam, faked (fail-closed pairing).
+      requestEnrollmentTicket: async () => randomBytes(32),
       registry,
       sendFrame: (frameBytes) => {
         hostSentMsg2 = frameBytes
@@ -320,6 +328,8 @@ describe('P2-H1: Pairing and Device Registry', () => {
       identity: hostIdentity,
       hostName: 'Host',
       relayOrigin: 'https://relay.test',
+      // The relay side of the enrollment-ticket seam, faked (fail-closed pairing).
+      requestEnrollmentTicket: async () => randomBytes(32),
       registry,
       sendFrame: (bytes) => {
         outFrames.push(bytes)

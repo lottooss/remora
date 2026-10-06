@@ -25,7 +25,7 @@
 import { Context, type Message } from '@deepseek-ai/cordis'
 import { ToolCallId } from '@deepseek-ai/dsh-llm/brand'
 import type { ApprovalOutcome } from '@deepseek-ai/dsh-user-approval/types'
-import { encodeBase64Url, hexToBytes } from '@remora/crypto'
+import { decodeBase64Url, deriveEndpointId, encodeBase64Url, getRelayPublicKey, hexToBytes } from '@remora/crypto'
 import { afterEach, describe, expect, it } from 'vitest'
 import * as host from '../src/index.ts'
 import type { ManagementFetchRoute } from '../src/web/routes.ts'
@@ -99,7 +99,8 @@ function logSummary(messages: Message[]): string {
 
 /**
  * The host id from the "remora: host started (id: %s, ...)" info record:
- * `args` is [format, hostId, relayOrigin, remoteRoots].
+ * `args` is [format, hostId, relayOrigin, remoteRoots]. Log records carry the
+ * id truncated to 6 characters (AGENTS.md §1.8).
  */
 function startedHostId(messages: Message[]): string {
   const started = messages.find(
@@ -107,6 +108,22 @@ function startedHostId(messages: Message[]): string {
   )
   const id = started?.args[1]
   return typeof id === 'string' ? id : ''
+}
+
+/** The credentials record holding the host identity (crypto-v1.md §3, P7-H2). */
+const HOST_IDENTITY_RECORD_KEY = 'remora/host-identity'
+
+/**
+ * The full host id, derived from the relay seed of the identity record the
+ * plugin persists. Log records only ever carry the truncated id, so the
+ * identity record seam is the test's source for the real value.
+ */
+async function persistedHostId(credentials: FakeHostCredentials): Promise<string> {
+  const record = await credentials.readRecord(HOST_IDENTITY_RECORD_KEY)
+  if (record?.kind !== 'grant') throw new Error('apply harness: no host identity record was persisted')
+  const payload = record.payload as { relaySeed?: unknown }
+  if (typeof payload.relaySeed !== 'string') throw new Error('apply harness: identity record carries no relaySeed')
+  return deriveEndpointId('h_', getRelayPublicKey(decodeBase64Url(payload.relaySeed)))
 }
 
 /**
@@ -318,8 +335,10 @@ describe('remora host plugin apply() harness', () => {
       firstLoaded.state,
       `first mount did not reach ACTIVE; log records: ${logSummary(firstMessages)}`,
     ).toBe(FIBER_STATE.ACTIVE)
-    const firstId = startedHostId(firstMessages)
+    const firstId = await persistedHostId(credentialsStore)
     expect(firstId).toMatch(/^h_[a-z2-7]{26}$/)
+    // The startup log carries the id truncated to 6 characters (AGENTS.md §1.8).
+    expect(startedHostId(firstMessages)).toBe(firstId.slice(0, 6))
     await firstLoaded.dispose()
 
     const second = new Context()
@@ -334,9 +353,10 @@ describe('remora host plugin apply() harness', () => {
       secondLoaded.state,
       `second mount did not reach ACTIVE; log records: ${logSummary(secondMessages)}`,
     ).toBe(FIBER_STATE.ACTIVE)
-    const secondId = startedHostId(secondMessages)
+    const secondId = await persistedHostId(credentialsStore)
     expect(secondId).toMatch(/^h_[a-z2-7]{26}$/)
     expect(secondId, 'host id changed across a restart; the identity is not persisted').toBe(firstId)
+    expect(startedHostId(secondMessages)).toBe(secondId.slice(0, 6))
     await secondLoaded.dispose()
   }, 15_000)
 })
@@ -351,7 +371,8 @@ describe('remora host plugin apply() harness: relay enrollment (P7-H3)', () => {
     const ready = await waitFor(() => relayReadyLog(messages) !== undefined)
     expect(ready, `no "remora: relay ready" info log; log records: ${logSummary(messages)}`).toBe(true)
 
-    const hostId = startedHostId(messages)
+    const hostId = await persistedHostId(credentials)
+    expect(startedHostId(messages)).toBe(hostId.slice(0, 6))
     expect(relayReadyLog(messages)?.args[1]).toBe(hostId.slice(0, 6))
     expect(relay.enrollRequests, 'the host never enrolled with the relay').toHaveLength(1)
     expect(relay.enrollRequests[0]?.authorization).toBe(`Bearer ${SECRET}`)
