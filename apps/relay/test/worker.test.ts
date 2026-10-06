@@ -152,7 +152,9 @@ describe('Relay Worker & AccountHub Durable Object (workerd)', () => {
         id: hostId,
         kind: 'host',
         sig: encodeBase64Url(sig),
-        app: { name: 'remora-host', version: '0.1.0' },
+        // RLY/1 §3 (issue #97 item 11): auth.app is an optional plain string,
+        // not an object — the schema rejects anything else.
+        app: 'remora-host/0.1.0',
       }),
     )
 

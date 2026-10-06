@@ -353,12 +353,12 @@ describe('Relay push dispatch + host-offline alarm (RLY/1 §8, P5-R1)', () => {
       JSON.stringify({
         t: 'push',
         rid: 'push_unlinked',
-        to: ['d_unlinked000000000000000000000'],
+        to: ['d_unlinkedzzzzzzzzzzzzzzzzzz'],
         ct: 'some-ciphertext',
       }),
     )
     const resUnlinked = await nextMessage<any>(ws)
-    expect(resUnlinked.results).toEqual([{ id: 'd_unlinked000000000000000000000', status: 'no_token' }])
+    expect(resUnlinked.results).toEqual([{ id: 'd_unlinkedzzzzzzzzzzzzzzzzzz', status: 'no_token' }])
     expect(capturedFcmRequests).toEqual([])
 
     await disconnectHost(ws, 'unlinked test done')
