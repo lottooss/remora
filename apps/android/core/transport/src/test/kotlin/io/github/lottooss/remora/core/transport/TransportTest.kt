@@ -96,29 +96,49 @@ class TransportTest {
         assertThat(ws).isNotNull()
         assertThat(client.connectionState.value).isEqualTo(ConnectionState.Connecting)
 
-        // 1. Simulate challenge
+        // 1. Simulate challenge (RLY/1 §3: version + fresh 32-byte nonce)
         // 32 zero bytes, unpadded base64url (Crypto/1 §4 nonce)
         val nonce = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        ws!!.simulateMessage("""{"t":"challenge","nonce":"$nonce","time":1000}""")
+        ws!!.simulateMessage("""{"t":"challenge","v":1,"nonce":"$nonce","time":1000}""")
 
         assertThat(client.connectionState.value).isEqualTo(ConnectionState.Authenticating)
         assertThat(ws.sentTexts).hasSize(1)
 
+        // The auth message carries the full context-bound field set (Crypto/1 §4).
         val authSent = json.parseToJsonElement(ws.sentTexts[0]).jsonObject
         assertThat(authSent["t"]?.jsonPrimitive?.content).isEqualTo("auth")
+        assertThat(authSent["v"]?.jsonPrimitive?.int).isEqualTo(1)
+        assertThat(authSent["kind"]?.jsonPrimitive?.content).isEqualTo("device")
         assertThat(authSent["id"]?.jsonPrimitive?.content).isEqualTo(deviceId)
 
         val sigB64u = authSent["sig"]?.jsonPrimitive?.content ?: ""
         val sig = decodeBase64Url(sigB64u)
+        val nonceBytes = decodeBase64Url(nonce)
         val sigValid = verifyRelayChallenge(
             relayPubKey,
-            RelayAuthFields("https://relay.example.com", "device", deviceId, decodeBase64Url(nonce)),
+            RelayAuthFields("https://relay.example.com", "device", deviceId, nonceBytes),
             sig,
         )
         assertThat(sigValid).isTrue()
+        // The signature binds the exact origin, kind, endpoint id and nonce of this
+        // connection: any other context must fail closed (Crypto/1 §4).
+        assertThat(
+            verifyRelayChallenge(
+                relayPubKey,
+                RelayAuthFields("https://other.example.com", "device", deviceId, nonceBytes),
+                sig,
+            ),
+        ).isFalse()
+        assertThat(
+            verifyRelayChallenge(
+                relayPubKey,
+                RelayAuthFields("https://relay.example.com", "host", deviceId, nonceBytes),
+                sig,
+            ),
+        ).isFalse()
 
         // 2. Simulate ready with initial peers
-        ws.simulateMessage("""{"t":"ready","id":"$deviceId","peers":[{"id":"h_test1234567890123456789012","kind":"host","online":true}]}""")
+        ws.simulateMessage("""{"t":"ready","v":1,"id":"$deviceId","peers":[{"id":"h_test1234567890123456789012","kind":"host","online":true}]}""")
         assertThat(client.connectionState.value).isEqualTo(ConnectionState.Ready)
 
         // 3. Simulate presence update
@@ -154,8 +174,8 @@ class TransportTest {
 
         client.connect()
         val ws = factory.lastCreatedSocket!!
-        ws.simulateMessage("""{"t":"challenge","nonce":"nonce_1","time":1000}""")
-        ws.simulateMessage("""{"t":"ready","id":"$deviceId","peers":[]}""")
+        ws.simulateMessage("""{"t":"challenge","v":1,"nonce":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","time":1000}""")
+        ws.simulateMessage("""{"t":"ready","v":1,"id":"$deviceId","peers":[]}""")
 
         val peerId = ByteArray(16) { 0x02 }
         val payload = "hello data frame".toByteArray()
@@ -180,6 +200,34 @@ class TransportTest {
         assertThat(receivedFrame!!.payload).isEqualTo(payload)
 
         client.disconnect()
+    }
+
+    @Test
+    fun testRelayClientRejectsNonCanonicalOrigin() {
+        // Crypto/1 §4 canonical-origin rules: path, query, fragment and
+        // credentials are rejected; plain http only for loopback hosts.
+        val rejected = listOf(
+            "https://relay.example.com/v1",
+            "https://relay.example.com?x=1",
+            "https://relay.example.com#frag",
+            "https://user:pass@relay.example.com",
+            "http://relay.example.com",
+        )
+        for (origin in rejected) {
+            val client = RelayClient(
+                relayOrigin = origin,
+                deviceId = "d_pixel123456789012345678901",
+                relayPrivateKey = ByteArray(32) { 0x01 },
+                webSocketFactory = FakeWebSocketFactory(),
+            )
+            var threw = false
+            try {
+                client.connect()
+            } catch (_: IllegalArgumentException) {
+                threw = true
+            }
+            assertThat(threw).isTrue()
+        }
     }
 
     @Test
