@@ -26,33 +26,38 @@ class PushNotificationTest {
 
     @Test
     fun testParsePushPayloadAndChannelMapping() {
+        // Deep links bind the paired host (P7-A8): a payload without a host
+        // context routes to host selection instead of acting on a host.
+        val hostId = "h_erruijsx3ey2rmxcpeh3pgxjkm"
         val approvalJson = """{"v":1,"kind":"approval","title":"Approval","body":"Needs approval","pendingId":"p_123"}"""
         val approval = parsePushPayload(approvalJson)
         assertThat(approval).isNotNull()
         assertThat(approval!!.kind).isEqualTo(PushKind.APPROVAL)
         assertThat(channelForKind(approval.kind)).isEqualTo(RemoraNotificationChannel.APPROVALS)
-        assertThat(deepLinkForPayload(approval)).isEqualTo("remora://approvals")
+        assertThat(deepLinkForPayload(approval, hostId)).isEqualTo("remora://host/$hostId/approvals")
+        assertThat(deepLinkForPayload(approval)).isEqualTo("remora://hosts")
 
         val questionJson = """{"v":1,"kind":"question","title":"Question","body":"Pick one","sessionId":"s_456"}"""
         val question = parsePushPayload(questionJson)
         assertThat(question).isNotNull()
         assertThat(question!!.kind).isEqualTo(PushKind.QUESTION)
         assertThat(channelForKind(question.kind)).isEqualTo(RemoraNotificationChannel.QUESTIONS)
-        assertThat(deepLinkForPayload(question)).isEqualTo("remora://session/s_456")
+        assertThat(deepLinkForPayload(question, hostId)).isEqualTo("remora://host/$hostId/session/s_456")
+        assertThat(deepLinkForPayload(question)).isEqualTo("remora://hosts")
 
         val turnDoneJson = """{"v":1,"kind":"turn_done","title":"Turn Done","body":"Turn complete","sessionId":"s_789"}"""
         val turnDone = parsePushPayload(turnDoneJson)
         assertThat(turnDone).isNotNull()
         assertThat(turnDone!!.kind).isEqualTo(PushKind.TURN_DONE)
         assertThat(channelForKind(turnDone.kind)).isEqualTo(RemoraNotificationChannel.TURNS)
-        assertThat(deepLinkForPayload(turnDone)).isEqualTo("remora://session/s_789")
+        assertThat(deepLinkForPayload(turnDone, hostId)).isEqualTo("remora://host/$hostId/session/s_789")
 
         val turnErrorJson = """{"v":1,"kind":"turn_error","title":"Turn Error","body":"Turn failed","sessionId":"s_012"}"""
         val turnError = parsePushPayload(turnErrorJson)
         assertThat(turnError).isNotNull()
         assertThat(turnError!!.kind).isEqualTo(PushKind.TURN_ERROR)
         assertThat(channelForKind(turnError.kind)).isEqualTo(RemoraNotificationChannel.ERRORS)
-        assertThat(deepLinkForPayload(turnError)).isEqualTo("remora://session/s_012")
+        assertThat(deepLinkForPayload(turnError, hostId)).isEqualTo("remora://host/$hostId/session/s_012")
     }
 
     @Test

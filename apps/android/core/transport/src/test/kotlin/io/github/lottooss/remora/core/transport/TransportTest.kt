@@ -9,6 +9,7 @@ import io.github.lottooss.remora.core.crypto.RelayAuthFields
 import io.github.lottooss.remora.core.crypto.verifyRelayChallenge
 import io.github.lottooss.remora.core.protocol.PeerKind
 import io.github.lottooss.remora.core.protocol.encodeDataFrame
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -143,7 +144,9 @@ class TransportTest {
 
         // 3. Simulate presence update
         var presenceReceived: RelayPeer? = null
-        val presenceJob = launch {
+        // UNDISPATCHED: the collector must be subscribed before the frame is
+        // emitted — presenceFlow has no replay guarantee for late subscribers.
+        val presenceJob = launch(start = CoroutineStart.UNDISPATCHED) {
             presenceReceived = client.presenceFlow.filter { !it.online }.first()
         }
 
@@ -187,7 +190,10 @@ class TransportTest {
 
         // Simulate incoming data frame
         var receivedFrame: io.github.lottooss.remora.core.protocol.DataFrame? = null
-        val frameJob = launch {
+        // UNDISPATCHED: incomingDataFrames carries no replay, so the collector
+        // must already be subscribed when the frame arrives — a lazily started
+        // coroutine would drop the emission and hang on join() forever.
+        val frameJob = launch(start = CoroutineStart.UNDISPATCHED) {
             receivedFrame = client.incomingDataFrames.first()
         }
 
