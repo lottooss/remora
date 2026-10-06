@@ -61,6 +61,14 @@ import io.github.lottooss.remora.core.data.Workspace
 import io.github.lottooss.remora.core.data.WorkspaceService
 import kotlinx.coroutines.launch
 
+/**
+ * The selected model for a host-supplied model list: keeps the current
+ * selection while it is still offered, otherwise takes the first host-supplied
+ * model, or none — the app never fabricates a model the host did not offer.
+ */
+fun resolveSelectedModel(current: ModelRef?, availableModels: List<ModelRef>): ModelRef? =
+    if (current != null && current in availableModels) current else availableModels.firstOrNull()
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkspaceScreen(
@@ -93,7 +101,7 @@ fun WorkspaceScreen(
     // Model and prompt
     var selectedModel by remember { mutableStateOf<ModelRef?>(null) }
     LaunchedEffect(availableModels) {
-        if (selectedModel !in availableModels) selectedModel = availableModels.firstOrNull()
+        selectedModel = resolveSelectedModel(selectedModel, availableModels)
     }
     LaunchedEffect(initialWorkspaces) {
         if (initialWorkspaces != null) registeredWorkspaces = initialWorkspaces

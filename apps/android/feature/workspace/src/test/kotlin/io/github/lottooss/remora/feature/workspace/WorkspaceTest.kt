@@ -3,6 +3,7 @@ package io.github.lottooss.remora.feature.workspace
 import com.google.common.truth.Truth.assertThat
 import io.github.lottooss.remora.core.data.FsBrowseResult
 import io.github.lottooss.remora.core.data.FsEntry
+import io.github.lottooss.remora.core.data.ModelRef
 import io.github.lottooss.remora.core.data.Workspace
 import org.junit.Test
 
@@ -32,9 +33,19 @@ class WorkspaceTest {
 
     @Test
     fun testDefaultModelsList() {
-        assertThat(DEFAULT_MODELS).isNotEmpty()
-        val providers = DEFAULT_MODELS.map { it.provider }
-        assertThat(providers).contains("deepseek")
+        // Since P7-A8 the model list is host-supplied (`availableModels`); the
+        // app never fabricates a model the host did not offer.
+        assertThat(resolveSelectedModel(current = null, availableModels = emptyList())).isNull()
+
+        val deepseek = ModelRef("deepseek", "deepseek-v4-pro")
+        val models = listOf(ModelRef("anthropic", "claude-3-7-sonnet"), deepseek)
+        // The first host-supplied model is selected initially, and a host-offered
+        // selection is kept…
+        assertThat(resolveSelectedModel(current = null, availableModels = models)).isEqualTo(models.first())
+        assertThat(resolveSelectedModel(current = deepseek, availableModels = models)).isEqualTo(deepseek)
+        // …while a selection the host no longer offers is dropped.
+        assertThat(resolveSelectedModel(current = ModelRef("openai", "gpt-4o"), availableModels = models))
+            .isEqualTo(models.first())
     }
 
     @Test
