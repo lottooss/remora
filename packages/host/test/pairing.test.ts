@@ -4,10 +4,12 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   createInitiatorHandshake,
+  decodeBase32,
+  deriveEndpointId,
   derivePairPsk,
   deriveSasCode,
-  encodeBase32,
   encodeBase64Url,
+  generateApprovalKeypair,
   generateKeypair,
   getRelayPublicKey,
   parsePairingQr,
@@ -22,11 +24,37 @@ import { PairingService } from '../src/pairing/index.ts'
 import { RcpServer } from '../src/rcp/index.ts'
 import { formatSas, generateQrSvg, renderDashboardHtml } from '../src/web/index.ts'
 
+// Fixed, obviously fake test approval key material (AGENTS.md §10): the
+// normative pairing hello carries an uncompressed P-256 SPKI (Crypto/1 §5.3).
+const DEVICE_APPROVAL_PUB_SPKI = generateApprovalKeypair().publicKeySpkiDer
+
 function createDeviceKeys() {
   const seed = randomBytes(32)
   const deviceRelayKey = { privateKey: seed, publicKey: getRelayPublicKey(seed) }
   const deviceNoiseKey = generateKeypair()
-  return { deviceRelayKey, deviceNoiseKey }
+  // Crypto/1 §2: the endpoint id derives from the relay public key, and the
+  // relay frame header carries the id's 16-byte hash prefix as the raw peer id.
+  const deviceId = deriveEndpointId('d_', deviceRelayKey.publicKey)
+  const peerRawId = decodeBase32(deviceId.slice(2))
+  return { deviceRelayKey, deviceNoiseKey, deviceId, peerRawId }
+}
+
+/** The normative pairing msg1 payload (Crypto/1 §5.3). */
+function pairingHello(
+  deviceRelayKey: { publicKey: Uint8Array },
+  deviceId: string,
+  name = 'Pixel 8',
+): string {
+  return JSON.stringify({
+    v: 1,
+    purpose: 'pair',
+    deviceId,
+    relayPub: encodeBase64Url(deviceRelayKey.publicKey),
+    name,
+    platform: 'android',
+    approvalPub: encodeBase64Url(DEVICE_APPROVAL_PUB_SPKI),
+    app: { version: '0.1.0' },
+  })
 }
 
 describe('P2-H1: Pairing and Device Registry', () => {
@@ -99,9 +127,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
     expect(parsedQr.hostId).toBe(hostIdentity.hostId)
 
     // Fake device setup
-    const { deviceRelayKey, deviceNoiseKey } = createDeviceKeys()
-    const deviceId = `d_${encodeBase32(deviceRelayKey.publicKey.subarray(0, 16))}`
-    const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
+    const { deviceRelayKey, deviceNoiseKey, deviceId, peerRawId } = createDeviceKeys()
     const channelId = 42
 
     const pairPsk = derivePairPsk(attempt.pairingSecret, hostIdentity.hostId)
@@ -114,16 +140,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
       prologue,
     })
 
-    const msg1Payload = utf8ToBytes(
-      JSON.stringify({
-        v: 1,
-        purpose: 'pair',
-        deviceId,
-        relayPub: encodeBase64Url(deviceRelayKey.publicKey),
-        name: 'Pixel 8',
-      }),
-    )
-    const msg1 = initiator.writeMessage(msg1Payload)
+    const msg1 = initiator.writeMessage(utf8ToBytes(pairingHello(deviceRelayKey, deviceId)))
 
     // Host processes msg1
     const handled = await pairingService.handlePairingHandshake(
@@ -189,9 +206,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
     })
 
     const attempt = await pairingService.beginPairing()
-    const { deviceRelayKey, deviceNoiseKey } = createDeviceKeys()
-    const deviceId = `d_${encodeBase32(deviceRelayKey.publicKey.subarray(0, 16))}`
-    const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
+    const { deviceRelayKey, deviceNoiseKey, deviceId, peerRawId } = createDeviceKeys()
 
     const pairPsk = derivePairPsk(attempt.pairingSecret, hostIdentity.hostId)
     const prologue = utf8ToBytes(`remora/1\x00pair\x00${hostIdentity.hostId}\x00${deviceId}`)
@@ -203,16 +218,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
       prologue,
     })
 
-    const msg1 = initiator.writeMessage(
-      utf8ToBytes(
-        JSON.stringify({
-          v: 1,
-          purpose: 'pair',
-          deviceId,
-          relayPub: encodeBase64Url(deviceRelayKey.publicKey),
-        }),
-      ),
-    )
+    const msg1 = initiator.writeMessage(utf8ToBytes(pairingHello(deviceRelayKey, deviceId)))
 
     await pairingService.handlePairingHandshake(deviceId, 1, peerRawId, msg1)
     const confirmed = await pairingService.confirmPairing('000000')
@@ -235,9 +241,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
     })
 
     await pairingService.beginPairing()
-    const { deviceRelayKey, deviceNoiseKey } = createDeviceKeys()
-    const deviceId = `d_${encodeBase32(deviceRelayKey.publicKey.subarray(0, 16))}`
-    const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
+    const { deviceRelayKey, deviceNoiseKey, deviceId, peerRawId } = createDeviceKeys()
 
     // Wrong PSK
     const wrongPsk = randomBytes(32)
@@ -251,15 +255,10 @@ describe('P2-H1: Pairing and Device Registry', () => {
     })
 
     // 1. Device ID mismatch
+    // Schema-valid hello bound to a DIFFERENT device id, so the host rejects
+    // the mismatch itself, not a malformed payload.
     const badMsg1 = initiator.writeMessage(
-      utf8ToBytes(
-        JSON.stringify({
-          v: 1,
-          purpose: 'pair',
-          deviceId: 'd_mismatched',
-          relayPub: encodeBase64Url(deviceRelayKey.publicKey),
-        }),
-      ),
+      utf8ToBytes(pairingHello(deviceRelayKey, 'd_mzzzzzzzzzzzzzzzzzzzzzzzzz')),
     )
     const handledMismatch = await pairingService.handlePairingHandshake(deviceId, 1, peerRawId, badMsg1)
     expect(handledMismatch).toBe(false)
@@ -286,16 +285,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
       prologue,
     })
 
-    const validMsg1 = initiator2.writeMessage(
-      utf8ToBytes(
-        JSON.stringify({
-          v: 1,
-          purpose: 'pair',
-          deviceId,
-          relayPub: encodeBase64Url(deviceRelayKey.publicKey),
-        }),
-      ),
-    )
+    const validMsg1 = initiator2.writeMessage(utf8ToBytes(pairingHello(deviceRelayKey, deviceId)))
     await pairingServiceWithFrame.handlePairingHandshake(deviceId, 1, peerRawId, validMsg1)
     expect(hostSentMsg2).not.toBeNull()
 
@@ -341,9 +331,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
     })
 
     const attempt = await pairingService.beginPairing()
-    const { deviceRelayKey, deviceNoiseKey } = createDeviceKeys()
-    const deviceId = `d_${encodeBase32(deviceRelayKey.publicKey.subarray(0, 16))}`
-    const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
+    const { deviceRelayKey, deviceNoiseKey, deviceId, peerRawId } = createDeviceKeys()
     const channelId = 100
 
     const pairPsk = derivePairPsk(attempt.pairingSecret, hostIdentity.hostId)
@@ -356,16 +344,7 @@ describe('P2-H1: Pairing and Device Registry', () => {
       prologue,
     })
 
-    const msg1 = initiator.writeMessage(
-      utf8ToBytes(
-        JSON.stringify({
-          v: 1,
-          purpose: 'pair',
-          deviceId,
-          relayPub: encodeBase64Url(deviceRelayKey.publicKey),
-        }),
-      ),
-    )
+    const msg1 = initiator.writeMessage(utf8ToBytes(pairingHello(deviceRelayKey, deviceId)))
 
     // Deliver msg1 via ChannelManager's handleDataFrame
     const dataFrameBytes = encodeDataFrame({

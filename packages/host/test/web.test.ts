@@ -3,10 +3,12 @@ import type { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import {
   createInitiatorHandshake,
+  decodeBase32,
+  deriveEndpointId,
   derivePairPsk,
   deriveSasCode,
-  encodeBase32,
   encodeBase64Url,
+  generateApprovalKeypair,
   generateKeypair,
   getRelayPublicKey,
   randomBytes,
@@ -218,8 +220,10 @@ async function driveHandshake(
   const deviceRelaySeed = randomBytes(32)
   const deviceRelayKey = { privateKey: deviceRelaySeed, publicKey: getRelayPublicKey(deviceRelaySeed) }
   const deviceNoiseKey = generateKeypair()
-  const deviceId = `d_${encodeBase32(deviceRelayKey.publicKey.subarray(0, 16))}`
-  const peerRawId = deviceRelayKey.publicKey.subarray(0, 16)
+  // Crypto/1 §2: the endpoint id derives from the relay public key; the frame
+  // header carries the id's 16-byte hash prefix as the raw peer id.
+  const deviceId = deriveEndpointId('d_', deviceRelayKey.publicKey)
+  const peerRawId = decodeBase32(deviceId.slice(2))
 
   const pairPsk = derivePairPsk(attempt.pairingSecret, identity.hostId)
   const prologue = utf8ToBytes(`remora/1\x00pair\x00${identity.hostId}\x00${deviceId}`)
@@ -229,6 +233,7 @@ async function driveHandshake(
     psk: pairPsk,
     prologue,
   })
+  // Normative pairing hello (Crypto/1 §5.3): platform, approval key, app version.
   const msg1 = initiator.writeMessage(
     utf8ToBytes(
       JSON.stringify({
@@ -237,6 +242,9 @@ async function driveHandshake(
         deviceId,
         relayPub: encodeBase64Url(deviceRelayKey.publicKey),
         name: 'Pixel 8',
+        platform: 'android',
+        approvalPub: encodeBase64Url(generateApprovalKeypair().publicKeySpkiDer),
+        app: { version: '0.1.0' },
       }),
     ),
   )
